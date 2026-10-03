@@ -1,0 +1,523 @@
+<!DOCTYPE html>
+<html>
+<head><meta charset="utf-8"></head>
+<body>
+<div id="test-status">TESTING</div>
+<div id="xlsx-b64"></div>
+<div id="copy-html"></div>
+<script src="solver.js"></script>
+<script>
+// ==========================================
+// 定数定義 & データ生成
+// ==========================================
+const NUM_STAFF = 50;
+const NUM_DAYS = 28;
+const WEEKDAYS = ['月', '火', '水', '木', '金', '土', '日'];
+
+let staffList = [];
+for (let i = 1; i <= NUM_STAFF; i++) {
+    staffList.push({
+        id: i,
+        name: `スタッフ ${String(i).padStart(2, '0')}`,
+        can8: (i <= 9),
+        noEarly: false,
+        noLate: false,
+        noEve: false,
+        prevDays: ['○', '○', '休', '○', '○'],
+        days: new Array(NUM_DAYS).fill('')
+    });
+}
+
+function getTermInfo() {
+    const dates = [];
+    const startDate = new Date(2026, 3, 29); // 2026-04-29 (水)
+    for (let i = 0; i < NUM_DAYS; i++) {
+        const d = new Date(startDate.getFullYear(), startDate.getMonth(), startDate.getDate() + i);
+        const m = d.getMonth() + 1;
+        const day = d.getDate();
+        const wIdx = (d.getDay() + 6) % 7;
+        dates.push({
+            m,
+            day,
+            weekday: WEEKDAYS[wIdx],
+            label: `${m}/${day}`,
+            wIdx,
+            dateObj: d
+        });
+    }
+    const first = dates[0];
+    const last = dates[NUM_DAYS - 1];
+    const title = `${first.m}月${first.day}日～${last.m}月${last.day}日勤務表`;
+    return { title, dates, first, last };
+}
+
+// CRC32
+const zipCrcTable = new Uint32Array(256);
+for (let n = 0; n < 256; n++) {
+    let c = n;
+    for (let k = 0; k < 8; k++) {
+        c = ((c & 1) ? (0xEDB88320 ^ (c >>> 1)) : (c >>> 1));
+    }
+    zipCrcTable[n] = c;
+}
+function calcZipCrc32(buf) {
+    let crc = 0xFFFFFFFF;
+    for (let i = 0; i < buf.length; i++) {
+        crc = (crc >>> 8) ^ zipCrcTable[(crc ^ buf[i]) & 0xFF];
+    }
+    return (crc ^ 0xFFFFFFFF) >>> 0;
+}
+
+function createZipUint8Array(files) {
+    const textEncoder = new TextEncoder();
+    const fileEntries = files.map(f => {
+        const nameBytes = textEncoder.encode(f.name);
+        const dataBytes = (typeof f.data === 'string') ? textEncoder.encode(f.data) : f.data;
+        return {
+            name: f.name,
+            nameBytes,
+            dataBytes,
+            crc: calcZipCrc32(dataBytes),
+            size: dataBytes.length
+        };
+    });
+
+    let localHeadersSize = 0;
+    fileEntries.forEach(f => {
+        f.offset = localHeadersSize;
+        localHeadersSize += 30 + f.nameBytes.length + f.size;
+    });
+
+    let centralDirSize = 0;
+    fileEntries.forEach(f => {
+        centralDirSize += 46 + f.nameBytes.length;
+    });
+
+    const totalSize = localHeadersSize + centralDirSize + 22;
+    const buf = new Uint8Array(totalSize);
+    const view = new DataView(buf.buffer);
+    let pos = 0;
+
+    fileEntries.forEach(f => {
+        view.setUint32(pos, 0x04034b50, true); pos += 4;
+        view.setUint16(pos, 20, true); pos += 2;
+        view.setUint16(pos, 0x0800, true); pos += 2;
+        view.setUint16(pos, 0, true); pos += 2;
+        view.setUint16(pos, 0x4a21, true); pos += 2;
+        view.setUint16(pos, 0x5894, true); pos += 2;
+        view.setUint32(pos, f.crc, true); pos += 4;
+        view.setUint32(pos, f.size, true); pos += 4;
+        view.setUint32(pos, f.size, true); pos += 4;
+        view.setUint16(pos, f.nameBytes.length, true); pos += 2;
+        view.setUint16(pos, 0, true); pos += 2;
+        buf.set(f.nameBytes, pos); pos += f.nameBytes.length;
+        buf.set(f.dataBytes, pos); pos += f.size;
+    });
+
+    const cdOffset = pos;
+    fileEntries.forEach(f => {
+        view.setUint32(pos, 0x02014b50, true); pos += 4;
+        view.setUint16(pos, 20, true); pos += 2;
+        view.setUint16(pos, 20, true); pos += 2;
+        view.setUint16(pos, 0x0800, true); pos += 2;
+        view.setUint16(pos, 0, true); pos += 2;
+        view.setUint16(pos, 0x4a21, true); pos += 2;
+        view.setUint16(pos, 0x5894, true); pos += 2;
+        view.setUint32(pos, f.crc, true); pos += 4;
+        view.setUint32(pos, f.size, true); pos += 4;
+        view.setUint32(pos, f.size, true); pos += 4;
+        view.setUint16(pos, f.nameBytes.length, true); pos += 2;
+        view.setUint16(pos, 0, true); pos += 2;
+        view.setUint16(pos, 0, true); pos += 2;
+        view.setUint16(pos, 0, true); pos += 2;
+        view.setUint16(pos, 0, true); pos += 2;
+        view.setUint32(pos, 0, true); pos += 4;
+        view.setUint32(pos, f.offset, true); pos += 4;
+        buf.set(f.nameBytes, pos); pos += f.nameBytes.length;
+    });
+
+    view.setUint32(pos, 0x06054b50, true); pos += 4;
+    view.setUint16(pos, 0, true); pos += 2;
+    view.setUint16(pos, 0, true); pos += 2;
+    view.setUint16(pos, fileEntries.length, true); pos += 2;
+    view.setUint16(pos, fileEntries.length, true); pos += 2;
+    view.setUint32(pos, centralDirSize, true); pos += 4;
+    view.setUint32(pos, cdOffset, true); pos += 4;
+    view.setUint16(pos, 0, true); pos += 2;
+
+    return buf;
+}
+
+function toColLetter(colIdx) {
+    let temp = colIdx;
+    let letter = '';
+    while (temp > 0) {
+        let rem = (temp - 1) % 26;
+        letter = String.fromCharCode(65 + rem) + letter;
+        temp = Math.floor((temp - 1) / 26);
+    }
+    return letter;
+}
+
+// 1. 空白テンプレートXLSXの生成
+function generateBlankXlsxBytes() {
+    const term = getTermInfo();
+    const title = `${term.first.m}月${term.first.day}日～${term.last.m}月${term.last.day}日 スタッフ希望勤務入力シート（希望勤務はプルダウンから選択してください）`;
+
+    const contentTypes = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">
+  <Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/>
+  <Default Extension="xml" ContentType="application/xml"/>
+  <Override PartName="/xl/workbook.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml"/>
+  <Override PartName="/xl/worksheets/sheet1.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/>
+  <Override PartName="/xl/styles.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.styles+xml"/>
+</Types>`;
+
+    const rels = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">
+  <Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="xl/workbook.xml"/>
+</Relationships>`;
+
+    const workbook = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships">
+  <sheets>
+    <sheet name="希望入力シート" sheetId="1" r:id="rId1"/>
+  </sheets>
+</workbook>`;
+
+    const wbRels = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">
+  <Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet1.xml"/>
+  <Relationship Id="rId2" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles" Target="styles.xml"/>
+</Relationships>`;
+
+    const styles = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<styleSheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">
+  <fonts count="5">
+    <font><sz val="10"/><color rgb="FF1E293B"/><name val="Meiryo"/></font>
+    <font><b/><sz val="11"/><color rgb="FF0F172A"/><name val="Meiryo"/></font>
+    <font><b/><sz val="10"/><color rgb="FF0284C7"/><name val="Meiryo"/></font>
+    <font><b/><sz val="10"/><color rgb="FFE11D48"/><name val="Meiryo"/></font>
+    <font><b/><sz val="12"/><color rgb="FF0F172A"/><name val="Meiryo"/></font>
+  </fonts>
+  <fills count="6">
+    <fill><patternFill patternType="none"/></fill>
+    <fill><patternFill patternType="gray125"/></fill>
+    <fill><patternFill patternType="solid"><fgColor rgb="FFF1F5F9"/></patternFill></fill>
+    <fill><patternFill patternType="solid"><fgColor rgb="FFE0F2FE"/></patternFill></fill>
+    <fill><patternFill patternType="solid"><fgColor rgb="FFFFE4E6"/></patternFill></fill>
+    <fill><patternFill patternType="solid"><fgColor rgb="FFF8FAFC"/></patternFill></fill>
+  </fills>
+  <borders count="2">
+    <border><left/><right/><top/><bottom/></border>
+    <border>
+      <left style="thin"><color rgb="FFCBD5E1"/></left>
+      <right style="thin"><color rgb="FFCBD5E1"/></right>
+      <top style="thin"><color rgb="FFCBD5E1"/></top>
+      <bottom style="thin"><color rgb="FFCBD5E1"/></bottom>
+    </border>
+  </borders>
+  <cellStyleXfs count="1"><xf numFmtId="0" fontId="0" fillId="0" borderId="0"/></cellStyleXfs>
+  <cellXfs count="9">
+    <xf numFmtId="0" fontId="0" fillId="0" borderId="0" xfId="0"/>
+    <xf numFmtId="0" fontId="4" fillId="0" borderId="0" xfId="0"/>
+    <xf numFmtId="0" fontId="1" fillId="2" borderId="1" xfId="0" applyFont="1" applyFill="1" applyBorder="1" applyAlignment="1"><alignment horizontal="center" vertical="center"/></xf>
+    <xf numFmtId="0" fontId="2" fillId="3" borderId="1" xfId="0" applyFont="1" applyFill="1" applyBorder="1" applyAlignment="1"><alignment horizontal="center" vertical="center"/></xf>
+    <xf numFmtId="0" fontId="3" fillId="4" borderId="1" xfId="0" applyFont="1" applyFill="1" applyBorder="1" applyAlignment="1"><alignment horizontal="center" vertical="center"/></xf>
+    <xf numFmtId="0" fontId="0" fillId="0" borderId="1" xfId="0" applyFont="1" applyBorder="1" applyAlignment="1"><alignment horizontal="center" vertical="center"/></xf>
+    <xf numFmtId="0" fontId="1" fillId="0" borderId="1" xfId="0" applyFont="1" applyBorder="1" applyAlignment="1"><alignment horizontal="left" vertical="center"/></xf>
+    <xf numFmtId="0" fontId="1" fillId="5" borderId="1" xfId="0" applyFont="1" applyFill="1" applyBorder="1" applyAlignment="1"><alignment horizontal="center" vertical="center"/></xf>
+    <xf numFmtId="0" fontId="0" fillId="0" borderId="1" xfId="0" applyFont="1" applyBorder="1" applyAlignment="1"><alignment horizontal="left" vertical="center"/></xf>
+  </cellXfs>
+</styleSheet>`;
+
+    let ws = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">
+  <dimension ref="A1:AG53"/>
+  <sheetViews><sheetView tabSelected="1" workbookViewId="0"/></sheetViews>
+  <sheetFormatPr defaultRowHeight="19"/>
+  <cols>
+    <col min="1" max="1" width="5.5" customWidth="1"/>
+    <col min="2" max="2" width="13" customWidth="1"/>
+    <col min="3" max="30" width="6" customWidth="1"/>
+    <col min="31" max="32" width="10" customWidth="1"/>
+    <col min="33" max="33" width="18" customWidth="1"/>
+  </cols>
+  <sheetData>
+    <row r="1" ht="25">
+      <c r="A1" s="1" t="inlineStr"><is><t>${title}</t></is></c>
+    </row>
+    <row r="2" ht="20">
+      <c r="A2" s="2" t="inlineStr"><is><t>No</t></is></c>
+      <c r="B2" s="2" t="inlineStr"><is><t>氏名</t></is></c>
+`;
+
+    for (let d = 0; d < NUM_DAYS; d++) {
+        const di = term.dates[d];
+        const colLetter = toColLetter(d + 3);
+        const styleId = di.wIdx === 5 ? 3 : (di.wIdx === 6 ? 4 : 2);
+        ws += `      <c r="${colLetter}2" s="${styleId}" t="inlineStr"><is><t>${di.m}/${di.day}</t></is></c>\n`;
+    }
+    ws += `      <c r="AE2" s="2" t="inlineStr"><is><t>希望休数</t></is></c>
+      <c r="AF2" s="2" t="inlineStr"><is><t>希望有休数</t></is></c>
+      <c r="AG2" s="2" t="inlineStr"><is><t>備考</t></is></c>
+    </row>
+    <row r="3" ht="18">
+      <c r="A3" s="2" t="inlineStr"><is><t></t></is></c>
+      <c r="B3" s="2" t="inlineStr"><is><t></t></is></c>
+`;
+
+    for (let d = 0; d < NUM_DAYS; d++) {
+        const di = term.dates[d];
+        const colLetter = toColLetter(d + 3);
+        const styleId = di.wIdx === 5 ? 3 : (di.wIdx === 6 ? 4 : 2);
+        ws += `      <c r="${colLetter}3" s="${styleId}" t="inlineStr"><is><t>${di.weekday}</t></is></c>\n`;
+    }
+    ws += `      <c r="AE3" s="2" t="inlineStr"><is><t></t></is></c>
+      <c r="AF3" s="2" t="inlineStr"><is><t></t></is></c>
+      <c r="AG3" s="2" t="inlineStr"><is><t></t></is></c>
+    </row>
+`;
+
+    for (let s = 0; s < NUM_STAFF; s++) {
+        const r = s + 4;
+        const staff = staffList[s];
+        ws += `    <row r="${r}" ht="20">
+      <c r="A${r}" s="7"><v>${staff.id}</v></c>
+      <c r="B${r}" s="6" t="inlineStr"><is><t>${staff.name}</t></is></c>
+`;
+        for (let d = 0; d < NUM_DAYS; d++) {
+            const colLetter = toColLetter(d + 3);
+            ws += `      <c r="${colLetter}${r}" s="5"/>\n`;
+        }
+
+        const fOff = `COUNTIF(C${r}:AD${r},"休")+0.5*(COUNTIF(C${r}:AD${r},"○/休")+COUNTIF(C${r}:AD${r},"休/○"))`;
+        const fPaid = `COUNTIF(C${r}:AD${r},"有")+0.5*(COUNTIF(C${r}:AD${r},"○/有")+COUNTIF(C${r}:AD${r},"有/○"))`;
+        ws += `      <c r="AE${r}" s="5"><f>${fOff}</f></c>
+      <c r="AF${r}" s="5"><f>${fPaid}</f></c>
+      <c r="AG${r}" s="8"/>
+    </row>
+`;
+    }
+
+    ws += `  </sheetData>
+  <dataValidations count="1">
+    <dataValidation type="list" allowBlank="1" showInputMessage="1" showErrorMessage="1" sqref="C4:AD53">
+      <formula1>&quot;○,休,有,早,遅,E,8時,上1,上2,上3,上4,上5,下1,下2,下3,○/休,休/○,○/有,有/○&quot;</formula1>
+    </dataValidation>
+  </dataValidations>
+</worksheet>`;
+
+    const files = [
+        { name: '[Content_Types].xml', data: contentTypes },
+        { name: '_rels/.rels', data: rels },
+        { name: 'xl/workbook.xml', data: workbook },
+        { name: 'xl/_rels/workbook.xml.rels', data: wbRels },
+        { name: 'xl/styles.xml', data: styles },
+        { name: 'xl/worksheets/sheet1.xml', data: ws }
+    ];
+
+    return createZipUint8Array(files);
+}
+
+// 2. copyForExcel の HTML 生成
+function generateCopyForExcelHtml() {
+    const term = getTermInfo();
+    const startCol = 'C';
+    const endCol = 'AD';
+    const borderThin = 'border:0.5pt solid #cbd5e1;';
+    const borderThickR = 'border-right:2pt solid #475569;';
+    const borderMediumR = 'border-right:1.5pt solid #64748b;';
+    const borderThickB = 'border-bottom:2pt solid #475569;';
+
+    // ソルバー実行
+    const scheduler = new ShiftScheduler(staffList, { standardHolidays: 8.0 });
+    const result = scheduler.solve();
+    const grid = result.grid;
+    const stats = result.stats;
+
+    let html = `<table style="border-collapse:collapse; font-family:'Meiryo',sans-serif; font-size:10pt; border:2pt solid #475569;">
+<thead>
+  <tr>
+    <th rowspan="2" style="background-color:#f1f5f9; font-weight:bold; ${borderThin} ${borderThickB}">No</th>
+    <th rowspan="2" style="background-color:#f1f5f9; font-weight:bold; ${borderThin} ${borderThickR} ${borderThickB}">氏名</th>
+    <th colspan="${NUM_DAYS}" style="background-color:#f8fafc; color:#1e293b; font-weight:bold; font-size:11pt; ${borderThin} ${borderThickR} ${borderThickB}">${term.title}（赤字太字: 事前希望枠 / 黒字: 自動配置）</th>
+    <th colspan="8" style="background-color:#e0f2fe; color:#0369a1; font-weight:bold; ${borderThin} ${borderThickB}">勤務・休暇 集計（自動計算数式）</th>
+  </tr>
+  <tr>
+`;
+
+    for (let d = 0; d < NUM_DAYS; d++) {
+        const dateInfo = term.dates[d];
+        const bg = dateInfo.wIdx === 5 ? '#e0f2fe' : (dateInfo.wIdx === 6 ? '#ffe4e6' : '#f1f5f9');
+        const col = dateInfo.wIdx === 5 ? '#0284c7' : (dateInfo.wIdx === 6 ? '#e11d48' : '#1e293b');
+        const rightBorder = ((d + 1) === NUM_DAYS) ? borderThickR : (((d + 1) % 7 === 0) ? borderMediumR : '');
+        html += `    <th style="background-color:${bg}; color:${col}; font-weight:bold; ${borderThin} ${rightBorder} ${borderThickB}">${dateInfo.label}<br><small>${dateInfo.weekday}</small></th>\n`;
+    }
+
+    html += `    <th style="background-color:#f1f5f9; font-weight:bold; ${borderThin} ${borderThickB}">出勤</th>
+    <th style="background-color:#f1f5f9; color:#2563eb; font-weight:bold; ${borderThin} ${borderThickB}">公休</th>
+    <th style="background-color:#fef3c7; color:#b45309; font-weight:bold; ${borderThin} ${borderThickB}">有休</th>
+    <th style="background-color:#f1f5f9; color:#059669; font-weight:bold; ${borderThin} ${borderThickB}">リフ</th>
+    <th style="background-color:#f1f5f9; font-weight:bold; ${borderThin} ${borderThickB}">早</th>
+    <th style="background-color:#f1f5f9; font-weight:bold; ${borderThin} ${borderThickB}">遅</th>
+    <th style="background-color:#f1f5f9; font-weight:bold; ${borderThin} ${borderThickB}">E</th>
+    <th style="background-color:#f1f5f9; font-weight:bold; ${borderThin} ${borderThickB}">8時</th>
+  </tr>
+</thead>
+<tbody>
+`;
+
+    for (let s = 0; s < NUM_STAFF; s++) {
+        const staff = staffList[s];
+        const rowNum = s + 3;
+        const isLastStaff = (s === NUM_STAFF - 1);
+        const rowBottom = isLastStaff ? borderThickB : '';
+        const rng = `${startCol}${rowNum}:${endCol}${rowNum}`;
+
+        const fWork = `=COUNTIF(${rng},"○")+COUNTIF(${rng},"出")+COUNTIF(${rng},"早")+COUNTIF(${rng},"遅")+COUNTIF(${rng},"E")+COUNTIF(${rng},"8時")+0.5*(COUNTIF(${rng},"○/休")+COUNTIF(${rng},"休/○")+COUNTIF(${rng},"○/有")+COUNTIF(${rng},"有/○"))`;
+        const fOff = `=COUNTIF(${rng},"休")+0.5*(COUNTIF(${rng},"○/休")+COUNTIF(${rng},"休/○"))`;
+        const fPaid = `=COUNTIF(${rng},"有")+0.5*(COUNTIF(${rng},"○/有")+COUNTIF(${rng},"有/○"))`;
+        const fRef = `=COUNTIF(${rng},"上1")+COUNTIF(${rng},"上2")+COUNTIF(${rng},"上3")+COUNTIF(${rng},"上4")+COUNTIF(${rng},"上5")+COUNTIF(${rng},"下1")+COUNTIF(${rng},"下2")+COUNTIF(${rng},"下3")`;
+        const fEarly = `=COUNTIF(${rng},"早")`;
+        const fLate = `=COUNTIF(${rng},"遅")`;
+        const fEve = `=COUNTIF(${rng},"E")`;
+        const fH8 = `=COUNTIF(${rng},"8時")`;
+
+        html += `  <tr>\n`;
+        html += `    <td style="font-weight:bold; ${borderThin} ${rowBottom} text-align:center;">${staff.id}</td>\n`;
+        html += `    <td style="font-weight:bold; ${borderThin} ${borderThickR} ${rowBottom} text-align:left;">${staff.name}</td>\n`;
+
+        for (let d = 0; d < NUM_DAYS; d++) {
+            const cell = grid[s][d];
+            const rightBorder = ((d + 1) === NUM_DAYS) ? borderThickR : (((d + 1) % 7 === 0) ? borderMediumR : '');
+            if (cell.isFixed) {
+                html += `    <td style="color:#DC2626 !important; font-weight:bold !important; ${borderThin} ${rightBorder} ${rowBottom} text-align:center;"><b style="color:#DC2626;">${cell.symbol}</b></td>\n`;
+            } else {
+                html += `    <td style="${borderThin} ${rightBorder} ${rowBottom} text-align:center;">${cell.symbol}</td>\n`;
+            }
+        }
+
+        const staffStat = (stats.staffStats && stats.staffStats[s]) ? stats.staffStats[s] : { workDays: 0, offDays: 0, paidDays: 0, refDays: 0, early: 0, late: 0, eve: 0, h8: 0 };
+
+        html += `    <td style="font-weight:bold; ${borderThin} ${rowBottom} text-align:center;" x:num="${staffStat.workDays}" x:f="${fWork}">${staffStat.workDays}</td>\n`;
+        html += `    <td style="font-weight:bold; color:#2563eb; ${borderThin} ${rowBottom} text-align:center;" x:num="${staffStat.offDays}" x:f="${fOff}">${staffStat.offDays}</td>\n`;
+        html += `    <td style="font-weight:bold; color:#b45309; background-color:#fef3c7; ${borderThin} ${rowBottom} text-align:center;" x:num="${staffStat.paidDays}" x:f="${fPaid}">${staffStat.paidDays}</td>\n`;
+        html += `    <td style="font-weight:bold; color:#059669; ${borderThin} ${rowBottom} text-align:center;" x:num="${staffStat.refDays}" x:f="${fRef}">${staffStat.refDays}</td>\n`;
+        html += `    <td style="${borderThin} ${rowBottom} text-align:center;" x:num="${staffStat.early}" x:f="${fEarly}">${staffStat.early}</td>\n`;
+        html += `    <td style="${borderThin} ${rowBottom} text-align:center;" x:num="${staffStat.late}" x:f="${fLate}">${staffStat.late}</td>\n`;
+        html += `    <td style="${borderThin} ${rowBottom} text-align:center;" x:num="${staffStat.eve}" x:f="${fEve}">${staffStat.eve}</td>\n`;
+        html += `    <td style="${borderThin} ${rowBottom} text-align:center;" x:num="${staffStat.h8}" x:f="${fH8}">${staffStat.h8}</td>\n`;
+        html += `  </tr>\n`;
+    }
+
+    html += `</tbody>\n<tfoot>\n`;
+    const startRow = 3;
+    const endRow = NUM_STAFF + 2;
+
+    // 1. 54行目: 出勤人数合計
+    html += `  <tr style="background-color:#f8fafc; font-weight:bold;">\n`;
+    html += `    <th colspan="2" style="${borderThin} ${borderThickR} border-bottom:1pt solid #64748b; text-align:center;">出勤人数合計（○・特殊・半日）</th>\n`;
+    for (let d = 0; d < NUM_DAYS; d++) {
+        const col = toColLetter(d + 3);
+        const colRng = `${col}${startRow}:${col}${endRow}`;
+        const rightBorder = ((d + 1) === NUM_DAYS) ? borderThickR : (((d + 1) % 7 === 0) ? borderMediumR : '');
+        const fDayWork = `=COUNTIF(${colRng},"○")+COUNTIF(${colRng},"出")+COUNTIF(${colRng},"早")+COUNTIF(${colRng},"遅")+COUNTIF(${colRng},"E")+COUNTIF(${colRng},"8時")+0.5*(COUNTIF(${colRng},"○/休")+COUNTIF(${colRng},"休/○")+COUNTIF(${colRng},"○/有")+COUNTIF(${colRng},"有/○"))`;
+        const val = stats.daily ? stats.daily[d].totalWork : '';
+        html += `    <td style="font-weight:bold; ${borderThin} ${rightBorder} border-bottom:1pt solid #64748b; text-align:center;" x:num="${val}" x:f="${fDayWork}">${val}</td>\n`;
+    }
+    const sumWork = `=SUM(AE${startRow}:AE${endRow})`;
+    const sumOff  = `=SUM(AF${startRow}:AF${endRow})`;
+    const sumPaid = `=SUM(AG${startRow}:AG${endRow})`;
+    const sumRef  = `=SUM(AH${startRow}:AH${endRow})`;
+    const sumEarly = `=SUM(AI${startRow}:AI${endRow})`;
+    const sumLate  = `=SUM(AJ${startRow}:AJ${endRow})`;
+    const sumEve   = `=SUM(AK${startRow}:AK${endRow})`;
+    const sumH8    = `=SUM(AL${startRow}:AL${endRow})`;
+
+    html += `    <td style="font-weight:bold; ${borderThin} border-bottom:1pt solid #64748b; text-align:center;" x:f="${sumWork}">${sumWork}</td>\n`;
+    html += `    <td style="font-weight:bold; color:#2563eb; ${borderThin} border-bottom:1pt solid #64748b; text-align:center;" x:f="${sumOff}">${sumOff}</td>\n`;
+    html += `    <td style="font-weight:bold; color:#b45309; background-color:#fef3c7; ${borderThin} border-bottom:1pt solid #64748b; text-align:center;" x:f="${sumPaid}">${sumPaid}</td>\n`;
+    html += `    <td style="font-weight:bold; color:#059669; ${borderThin} border-bottom:1pt solid #64748b; text-align:center;" x:f="${sumRef}">${sumRef}</td>\n`;
+    html += `    <td style="${borderThin} border-bottom:1pt solid #64748b; text-align:center;" x:f="${sumEarly}">${sumEarly}</td>\n`;
+    html += `    <td style="${borderThin} border-bottom:1pt solid #64748b; text-align:center;" x:f="${sumLate}">${sumLate}</td>\n`;
+    html += `    <td style="${borderThin} border-bottom:1pt solid #64748b; text-align:center;" x:f="${sumEve}">${sumEve}</td>\n`;
+    html += `    <td style="${borderThin} border-bottom:1pt solid #64748b; text-align:center;" x:f="${sumH8}">${sumH8}</td>\n`;
+    html += `  </tr>\n`;
+
+    // 2. 55行目: 早番
+    html += `  <tr style="background-color:#fff7ed; font-weight:bold; font-size:9pt;">\n`;
+    html += `    <th colspan="2" style="color:#c2410c; ${borderThin} ${borderThickR} border-bottom:0.5pt solid #cbd5e1; text-align:center;">早番</th>\n`;
+    for (let d = 0; d < NUM_DAYS; d++) {
+        const col = toColLetter(d + 3);
+        const colRng = `${col}${startRow}:${col}${endRow}`;
+        const rightBorder = ((d + 1) === NUM_DAYS) ? borderThickR : (((d + 1) % 7 === 0) ? borderMediumR : '');
+        const fDayEarly = `=COUNTIF(${colRng},"早")`;
+        const val = stats.daily ? stats.daily[d].early : '';
+        html += `    <td style="color:#c2410c; ${borderThin} ${rightBorder} border-bottom:0.5pt solid #cbd5e1; text-align:center;" x:num="${val}" x:f="${fDayEarly}">${val}</td>\n`;
+    }
+    html += `    <td colspan="8" style="${borderThin} border-bottom:0.5pt solid #cbd5e1; text-align:center; color:#94a3b8;">-</td>\n  </tr>\n`;
+
+    // 3. 56行目: 遅番
+    html += `  <tr style="background-color:#f0f9ff; font-weight:bold; font-size:9pt;">\n`;
+    html += `    <th colspan="2" style="color:#0369a1; ${borderThin} ${borderThickR} border-bottom:0.5pt solid #cbd5e1; text-align:center;">遅番</th>\n`;
+    for (let d = 0; d < NUM_DAYS; d++) {
+        const col = toColLetter(d + 3);
+        const colRng = `${col}${startRow}:${col}${endRow}`;
+        const rightBorder = ((d + 1) === NUM_DAYS) ? borderThickR : (((d + 1) % 7 === 0) ? borderMediumR : '');
+        const fDayLate = `=COUNTIF(${colRng},"遅")`;
+        const val = stats.daily ? stats.daily[d].late : '';
+        html += `    <td style="color:#0369a1; ${borderThin} ${rightBorder} border-bottom:0.5pt solid #cbd5e1; text-align:center;" x:num="${val}" x:f="${fDayLate}">${val}</td>\n`;
+    }
+    html += `    <td colspan="8" style="${borderThin} border-bottom:0.5pt solid #cbd5e1; text-align:center; color:#94a3b8;">-</td>\n  </tr>\n`;
+
+    // 4. 57行目: E
+    html += `  <tr style="background-color:#faf5ff; font-weight:bold; font-size:9pt;">\n`;
+    html += `    <th colspan="2" style="color:#7e22ce; ${borderThin} ${borderThickR} border-bottom:0.5pt solid #cbd5e1; text-align:center;">E</th>\n`;
+    for (let d = 0; d < NUM_DAYS; d++) {
+        const col = toColLetter(d + 3);
+        const colRng = `${col}${startRow}:${col}${endRow}`;
+        const rightBorder = ((d + 1) === NUM_DAYS) ? borderThickR : (((d + 1) % 7 === 0) ? borderMediumR : '');
+        const fDayEve = `=COUNTIF(${colRng},"E")`;
+        const val = stats.daily ? stats.daily[d].eve : '';
+        html += `    <td style="color:#7e22ce; ${borderThin} ${rightBorder} border-bottom:0.5pt solid #cbd5e1; text-align:center;" x:num="${val}" x:f="${fDayEve}">${val}</td>\n`;
+    }
+    html += `    <td colspan="8" style="${borderThin} border-bottom:0.5pt solid #cbd5e1; text-align:center; color:#94a3b8;">-</td>\n  </tr>\n`;
+
+    // 5. 58行目: 8時
+    html += `  <tr style="background-color:#f0fdfa; font-weight:bold; font-size:9pt;">\n`;
+    html += `    <th colspan="2" style="color:#0f766e; ${borderThin} ${borderThickR} ${borderThickB} text-align:center;">8時</th>\n`;
+    for (let d = 0; d < NUM_DAYS; d++) {
+        const col = toColLetter(d + 3);
+        const colRng = `${col}${startRow}:${col}${endRow}`;
+        const rightBorder = ((d + 1) === NUM_DAYS) ? borderThickR : (((d + 1) % 7 === 0) ? borderMediumR : '');
+        const fDayH8 = `=COUNTIF(${colRng},"8時")`;
+        const val = stats.daily ? stats.daily[d].h8 : '';
+        html += `    <td style="color:#0f766e; ${borderThin} ${rightBorder} ${borderThickB} text-align:center;" x:num="${val}" x:f="${fDayH8}">${val}</td>\n`;
+    }
+    html += `    <td colspan="8" style="${borderThin} ${borderThickB} text-align:center; color:#94a3b8;">-</td>\n  </tr>\n</tfoot>\n</table>`;
+
+    return html;
+}
+
+// 実行と出力
+try {
+    const xlsxBytes = generateBlankXlsxBytes();
+    let binary = '';
+    const len = xlsxBytes.byteLength;
+    for (let i = 0; i < len; i++) {
+        binary += String.fromCharCode(xlsxBytes[i]);
+    }
+    const xlsxB64 = btoa(binary);
+    document.getElementById('xlsx-b64').innerText = xlsxB64;
+
+    const copyHtml = generateCopyForExcelHtml();
+    document.getElementById('copy-html').innerText = copyHtml;
+
+    document.getElementById('test-status').innerText = 'SUCCESS_GENERATE';
+} catch (e) {
+    document.getElementById('test-status').innerText = 'ERROR: ' + e.message;
+}
+</script>
+</body>
+</html>

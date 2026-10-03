@@ -1,0 +1,43 @@
+﻿<!DOCTYPE html>
+<html>
+<head><meta charset="utf-8"></head>
+<body>
+<div id="res">WORKING</div>
+<script src="solver.js"></script>
+<script src="app.js"></script>
+<script>
+window.addEventListener('DOMContentLoaded', () => {
+    setTimeout(() => {
+        // 閾ｪ蜍穂ｽ懈・螳溯｡・        const autoBtn = document.getElementById('autoGenerateBtn');
+        if (autoBtn) autoBtn.click();
+
+        setTimeout(() => {
+            // copyForExcel繧貞ｮ溯｡・            const copyBtn = document.getElementById('copyForExcelBtn');
+            if (copyBtn) copyBtn.click();
+
+            // copyForExcel縺ｮHTML逕滓・驛ｨ蛻・ｒ蜀咲樟縺励※蜿門ｾ・            // app.js縺ｮcopyForExcel縺ｨ蜷後§蜃ｦ逅・            const term = getTermInfo();
+            const startCol = 'C';
+            const endCol = 'AD';
+
+            // 繧ｹ繧ｿ繝・ヵ2 (s=1, rowNum=4)
+            const staff = staffList[1];
+            const rowNum = 4;
+            const rng = ${startCol}:;
+
+            const fWork = =COUNTIF(,"笳・)+COUNTIF(,"蜃ｺ")+COUNTIF(,"譌ｩ")+COUNTIF(,"驕・)+COUNTIF(,"E")+COUNTIF(,"8譎・)+0.5*(COUNTIF(,"笳・莨・)+COUNTIF(,"莨・笳・)+COUNTIF(,"笳・譛・)+COUNTIF(,"譛・笳・));
+            const fOff = =COUNTIF(,"莨・)+0.5*(COUNTIF(,"笳・莨・)+COUNTIF(,"莨・笳・));
+            const fPaid = =COUNTIF(,"譛・)+0.5*(COUNTIF(,"笳・譛・)+COUNTIF(,"譛・笳・));
+
+            document.getElementById('res').innerText = JSON.stringify({
+                rng: rng,
+                fWork: fWork,
+                fOff: fOff,
+                fPaid: fPaid,
+                staff2_days: staff.days.slice(0, 5)
+            });
+        }, 500);
+    }, 200);
+});
+</script>
+</body>
+</html>

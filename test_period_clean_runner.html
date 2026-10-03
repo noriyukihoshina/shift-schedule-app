@@ -1,0 +1,112 @@
+﻿<!DOCTYPE html>
+<html>
+<head><meta charset="utf-8"></head>
+<body>
+<input type="date" id="termStartDate" value="2026-04-01">
+<span id="termEndDateDisplay"></span>
+<span id="termTitleBadge"></span>
+<span id="outputTitleDisplay"></span>
+<table><thead id="inputTableHead"></thead><tbody id="inputTableBody"></tbody></table>
+
+<div id="test-log">RUNNING</div>
+
+<script src="solver.js"></script>
+<script src="app.js"></script>
+<script>
+window.addEventListener('DOMContentLoaded', async () => {
+    const logs = [];
+    function log(msg) { logs.push(msg); console.log(msg); }
+
+    try {
+        log("1. Initial state checked.");
+        if (document.getElementById('termStartDate').value !== '2026-04-01') {
+            throw new Error("Initial date is not 2026-04-01");
+        }
+
+        // 蛻晄悄迥ｶ諷九〒繧ｵ繝ｳ繝励Ν繝・・繧ｿ謚募・
+        loadSampleData();
+        renderInputTable();
+
+        // 驤ｴ譛ｨ鄒主調(sIdx=1)縺ｮ蛻晄悄繧ｵ繝ｳ繝励Ν繝・・繧ｿ遒ｺ隱・(5譌･逶ｮ縺ｫ譛峨・0譌･逶ｮ縺ｫ莨・
+        if (staffList[1].days[4] !== '譛・ || staffList[1].days[9] !== '莨・) {
+            throw new Error("Initial sample data for staff 2 not loaded properly");
+        }
+        log("2. Sample data confirmed present before import.");
+
+        // 蝓九ａ霎ｼ縺ｾ繧後◆Base64縺九ｉ 4/29縲・/26 縺ｮ XLSX 繝舌う繝亥・繧貞ｾｩ蜈・        const b64 = "";
+        const binStr = atob(b64);
+        const len = binStr.length;
+        const bytes = new Uint8Array(len);
+        for (let i = 0; i < len; i++) {
+            bytes[i] = binStr.charCodeAt(i);
+        }
+        const buf = bytes.buffer;
+
+        log("3. 4/29-5/26 XLSX buffer created. Simulating file import...");
+
+        // parseXlsxBuffer 螳溯｡・        const parseResult = await parseXlsxBuffer(buf);
+        log("4. parseXlsxBuffer completed. detected startDate=" + parseResult.startDate + ", items count=" + parseResult.items.length);
+
+        if (parseResult.startDate !== '2026-04-29') {
+            throw new Error("Expected startDate 2026-04-29, got " + parseResult.startDate);
+        }
+
+        // importScheduleFileInput 縺ｮ蜃ｦ逅・す繝溘Η繝ｬ繝ｼ繝・        if (parseResult.startDate) {
+            document.getElementById('termStartDate').value = parseResult.startDate;
+            getTermInfo();
+        }
+
+        // 繝・せ繝育畑繝・・繧ｿ霑ｽ蜉: 菴占陸蛛･荳(0) 縺ｮ 2譌･逶ｮ縺ｫ '莨・, 3譌･逶ｮ縺ｫ '譛・
+        parseResult.items.push({ staffIdx: 0, dayIdx: 2, symbol: '莨・ });
+        parseResult.items.push({ staffIdx: 0, dayIdx: 3, symbol: '譛・ });
+
+        // replace 繝｢繝ｼ繝峨〒蜿肴丐
+        applyScheduleImport(parseResult.items, 'replace');
+
+        // 讀懆ｨｼ1: 譛滄俣縺・2026-04-29 縲・2026-05-26 縺ｫ閾ｪ蜍墓峩譁ｰ縺輔ｌ縺溘°
+        const curStart = document.getElementById('termStartDate').value;
+        const curEnd = document.getElementById('termEndDateDisplay').textContent;
+        const curBadge = document.getElementById('termTitleBadge').textContent;
+
+        log("5. Verified dates: Start=" + curStart + ", End=" + curEnd + ", Badge=" + curBadge);
+        if (curStart !== '2026-04-29') throw new Error("termStartDate was not updated to 2026-04-29!");
+        if (curEnd !== '2026-05-26') throw new Error("termEndDateDisplay was not updated to 2026-05-26!");
+        if (!curBadge.includes('4/29・・/26')) throw new Error("Badge does not show 4/29・・/26!");
+
+        // 讀懆ｨｼ2: 繝・・繝悶Ν繝倥ャ繝繝ｼ縺・4/29(豌ｴ) 縲・5/26(轣ｫ) 縺ｫ縺ｪ縺｣縺ｦ縺・ｋ縺・(1譛・2轣ｫ 縺ｧ縺ｯ縺ｪ縺・ｼ・
+        const ths = document.querySelectorAll('#inputTableHead tr:nth-child(2) th');
+        // ths[0]縲徼hs[4] 縺ｯ 蜑・縲懷燕1縲》hs[5] 縺・1譌･逶ｮ(4/29 豌ｴ)
+        const firstDayTh = ths[5];
+        const lastDayTh = ths[ths.length - 1];
+
+        log("6. Header cells: FirstDay=" + firstDayTh.innerText.replace(/\n/g, ' ') + ", LastDay=" + lastDayTh.innerText.replace(/\n/g, ' '));
+        if (!firstDayTh.innerText.includes('4/29') || !firstDayTh.innerText.includes('豌ｴ')) {
+            throw new Error("First day header is wrong: " + firstDayTh.innerText);
+        }
+        if (!lastDayTh.innerText.includes('5/26') || !lastDayTh.innerText.includes('轣ｫ')) {
+            throw new Error("Last day header is wrong: " + lastDayTh.innerText);
+        }
+
+        // 讀懆ｨｼ3: 譌｢蟄倥・繧ｵ繝ｳ繝励Ν繝・・繧ｿ・磯斡譛ｨ鄒主調縺ｮ5譌･逶ｮ譛峨・0譌･逶ｮ莨醍ｭ会ｼ峨′螳悟・縺ｫ繧ｯ繝ｪ繧｢縺輔ｌ縺溘°・・        const st2_d5 = staffList[1].days[4];
+        const st2_d10 = staffList[1].days[9];
+        log("7. Old sample check: Staff 2 day 5='" + st2_d5 + "', day 10='" + st2_d10 + "'");
+        if (st2_d5 !== '' || st2_d10 !== '') {
+            throw new Error("Old sample data was NOT cleared! Day5=" + st2_d5 + ", Day10=" + st2_d10);
+        }
+
+        // 讀懆ｨｼ4: 蜿悶ｊ霎ｼ繧薙□繝・・繧ｿ・井ｽ占陸蛛･荳縺ｮ莨代・譛会ｼ峨□縺代′豁｣縺励￥蜿肴丐縺輔ｌ縺ｦ縺・ｋ縺・        const st1_d3 = staffList[0].days[2];
+        const st1_d4 = staffList[0].days[3];
+        log("8. Imported data check: Staff 1 day 3='" + st1_d3 + "', day 4='" + st1_d4 + "'");
+        if (st1_d3 !== '莨・ || st1_d4 !== '譛・) {
+            throw new Error("Imported data not applied!");
+        }
+
+        document.getElementById('test-log').innerText = "SUCCESS_ALL_TESTS_PASSED\n" + logs.join("\n");
+
+    } catch (e) {
+        document.getElementById('test-log').innerText = "ERROR: " + e.message + "\n" + logs.join("\n");
+    }
+});
+</script>
+</body>
+</html>

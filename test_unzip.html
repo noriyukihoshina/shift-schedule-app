@@ -1,0 +1,68 @@
+<!DOCTYPE html>
+<html>
+<head><meta charset="utf-8"></head>
+<body>
+<div id="res">INIT</div>
+<script>
+async function testReadXlsx(b64) {
+    const binary = atob(b64);
+    const bytes = new Uint8Array(binary.length);
+    for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+
+    const view = new DataView(bytes.buffer);
+    const textDecoder = new TextDecoder();
+    const entries = {};
+
+    let pos = 0;
+    while (pos < bytes.length - 4) {
+        const sig = view.getUint32(pos, true);
+        if (sig === 0x04034b50) {
+            const method = view.getUint16(pos + 8, true);
+            const compSize = view.getUint32(pos + 18, true);
+            const nameLen = view.getUint16(pos + 26, true);
+            const extraLen = view.getUint16(pos + 28, true);
+            const name = textDecoder.decode(bytes.subarray(pos + 30, pos + 30 + nameLen));
+            const dataStart = pos + 30 + nameLen + extraLen;
+            const compData = bytes.subarray(dataStart, dataStart + compSize);
+
+            let decompData;
+            if (method === 0) {
+                decompData = compData;
+            } else if (method === 8) {
+                if (typeof DecompressionStream !== 'undefined') {
+                    const ds = new DecompressionStream('deflate-raw');
+                    const writer = ds.writable.getWriter();
+                    writer.write(compData);
+                    writer.close();
+                    const reader = ds.readable.getReader();
+                    const chunks = [];
+                    while (true) {
+                        const { done, value } = await reader.read();
+                        if (done) break;
+                        chunks.push(value);
+                    }
+                    const totalLen = chunks.reduce((acc, c) => acc + c.length, 0);
+                    decompData = new Uint8Array(totalLen);
+                    let off = 0;
+                    for (const c of chunks) {
+                        decompData.set(c, off);
+                        off += c.length;
+                    }
+                }
+            }
+
+            if (decompData) {
+                entries[name] = textDecoder.decode(decompData);
+            }
+            pos = dataStart + compSize;
+        } else {
+            pos++;
+        }
+    }
+
+    const sheetXml = entries['xl/worksheets/sheet1.xml'];
+    return sheetXml ? 'OK: sheet1 found length ' + sheetXml.length : 'ERR: sheet1 not found';
+}
+</script>
+</body>
+</html>

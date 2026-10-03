@@ -1,0 +1,641 @@
+/* 勤務表作成システム - スタイルシート */
+
+:root {
+    --primary: #2563eb;
+    --primary-hover: #1d4ed8;
+    --primary-light: #eff6ff;
+    --secondary: #475569;
+    --danger: #dc2626;
+    --danger-light: #fef2f2;
+    --success: #16a34a;
+    --warning: #d97706;
+    --gray-50: #f8fafc;
+    --gray-100: #f1f5f9;
+    --gray-200: #e2e8f0;
+    --gray-300: #cbd5e1;
+    --gray-600: #475569;
+    --gray-700: #334155;
+    --gray-800: #1e293b;
+    --border-color: #cbd5e1;
+}
+
+* {
+    box-sizing: border-box;
+    margin: 0;
+    padding: 0;
+}
+
+body {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, "Hiragino Kaku Gothic ProN", "Meiryo", sans-serif;
+    color: var(--gray-800);
+    background-color: #f8fafc;
+    line-height: 1.4;
+    overflow-x: hidden;
+}
+
+/* ヘッダー */
+.app-header {
+    background: linear-gradient(135deg, #1e293b 0%, #0f172a 100%);
+    color: white;
+    padding: 1rem 1.5rem;
+    box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    position: sticky;
+    top: 0;
+    z-index: 100;
+}
+
+.header-title {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+}
+
+.header-title h1 {
+    font-size: 1.25rem;
+    font-weight: 700;
+    letter-spacing: -0.02em;
+}
+
+.badge {
+    font-size: 0.75rem;
+    padding: 0.2rem 0.6rem;
+    border-radius: 9999px;
+    font-weight: 600;
+    background: #3b82f6;
+    color: white;
+}
+
+.header-actions {
+    display: flex;
+    gap: 0.5rem;
+    align-items: center;
+}
+
+/* ナビゲーション・タブ */
+.tab-container {
+    background: white;
+    border-bottom: 1px solid var(--gray-200);
+    padding: 0 1.5rem;
+    display: flex;
+    gap: 1rem;
+    position: sticky;
+    top: 61px;
+    z-index: 90;
+    box-shadow: 0 1px 2px 0 rgba(0, 0, 0, 0.05);
+}
+
+.tab-btn {
+    padding: 0.85rem 1.25rem;
+    border: none;
+    background: none;
+    font-size: 0.95rem;
+    font-weight: 600;
+    color: var(--gray-600);
+    cursor: pointer;
+    border-bottom: 3px solid transparent;
+    transition: all 0.2s;
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+}
+
+.tab-btn:hover {
+    color: var(--primary);
+    background: var(--gray-50);
+}
+
+.tab-btn.active {
+    color: var(--primary);
+    border-bottom-color: var(--primary);
+}
+
+/* メインコンテンツ */
+.main-content {
+    padding: 1.25rem 1.5rem;
+    max-width: 100%;
+}
+
+.tab-panel {
+    display: none;
+}
+
+.tab-panel.active {
+    display: block;
+}
+
+/* ツールバー */
+.toolbar-card {
+    background: white;
+    border-radius: 0.5rem;
+    padding: 0.85rem 1.25rem;
+    margin-bottom: 1rem;
+    border: 1px solid var(--gray-200);
+    box-shadow: 0 1px 3px rgba(0,0,0,0.05);
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: space-between;
+    gap: 1rem;
+}
+
+.palette-group {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    flex-wrap: wrap;
+}
+
+.palette-label {
+    font-size: 0.85rem;
+    font-weight: 700;
+    color: var(--gray-700);
+    margin-right: 0.25rem;
+}
+
+.palette-btn {
+    padding: 0.35rem 0.65rem;
+    border: 1px solid var(--gray-300);
+    border-radius: 0.375rem;
+    background: white;
+    font-size: 0.85rem;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.15s;
+    min-width: 2.2rem;
+    text-align: center;
+}
+
+.palette-btn:hover {
+    background: var(--gray-100);
+    border-color: var(--primary);
+}
+
+.palette-btn.selected {
+    background: var(--primary);
+    color: white;
+    border-color: var(--primary);
+    box-shadow: 0 0 0 2px rgba(37, 99, 235, 0.3);
+}
+
+.action-group {
+    display: flex;
+    gap: 0.5rem;
+    align-items: center;
+    flex-wrap: wrap;
+}
+
+/* ボタン */
+.btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.4rem;
+    padding: 0.5rem 1rem;
+    border-radius: 0.375rem;
+    font-size: 0.875rem;
+    font-weight: 600;
+    border: 1px solid transparent;
+    cursor: pointer;
+    transition: all 0.15s;
+}
+
+.btn-primary {
+    background: var(--primary);
+    color: white;
+}
+.btn-primary:hover {
+    background: var(--primary-hover);
+}
+
+.btn-success {
+    background: var(--success);
+    color: white;
+}
+.btn-success:hover {
+    background: #15803d;
+}
+
+.btn-outline {
+    background: white;
+    border-color: var(--gray-300);
+    color: var(--gray-700);
+}
+.btn-outline:hover {
+    background: var(--gray-100);
+    border-color: var(--gray-400);
+}
+
+.btn-danger {
+    background: var(--danger-light);
+    border-color: #fca5a5;
+    color: var(--danger);
+}
+.btn-danger:hover {
+    background: #fee2e2;
+}
+
+.btn-lg {
+    padding: 0.65rem 1.4rem;
+    font-size: 1rem;
+}
+
+/* スプレッドシートテーブルコンテナ */
+.sheet-wrapper {
+    background: white;
+    border-radius: 0.5rem;
+    border: 1px solid var(--gray-200);
+    box-shadow: 0 1px 3px rgba(0,0,0,0.05);
+    overflow: auto;
+    max-height: calc(100vh - 230px);
+    position: relative;
+}
+
+.sheet-table {
+    border-collapse: separate;
+    border-spacing: 0;
+    width: max-content;
+    font-size: 0.82rem;
+}
+
+.sheet-table th,
+.sheet-table td {
+    border-right: 1px solid var(--border-color);
+    border-bottom: 1px solid var(--border-color);
+    padding: 0.35rem 0.45rem;
+    text-align: center;
+    vertical-align: middle;
+    white-space: nowrap;
+}
+
+/* ★ 太線罫線クラス（画像3の見やすい区切りデザイン） */
+.border-thick-right {
+    border-right: 2px solid #475569 !important;
+}
+.border-thick-left {
+    border-left: 2px solid #475569 !important;
+}
+.border-thick-bottom {
+    border-bottom: 2px solid #475569 !important;
+}
+
+/* ヘッダーの固定 */
+.sheet-table thead th {
+    position: sticky;
+    top: 0;
+    background: #f1f5f9;
+    color: var(--gray-700);
+    font-weight: 700;
+    z-index: 10;
+}
+
+/* 左端スタッフ列の固定 */
+.sticky-col-1 {
+    position: sticky;
+    left: 0;
+    background: #f8fafc;
+    z-index: 5;
+    width: 45px;
+    min-width: 45px;
+}
+.sticky-col-2 {
+    position: sticky;
+    left: 45px;
+    background: #f8fafc;
+    z-index: 5;
+    width: 100px;
+    min-width: 100px;
+    text-align: left !important;
+    font-weight: 600;
+}
+thead th.sticky-col-1,
+thead th.sticky-col-2 {
+    z-index: 25 !important;
+    background: #e2e8f0 !important;
+}
+
+/* 前ターム列の背景 */
+.prev-col-header {
+    background: #ede9fe !important;
+    color: #5b21b6 !important;
+}
+.prev-col-cell {
+    background: #faf5ff;
+}
+
+/* フラグ列 */
+.flag-col {
+    width: 42px;
+    min-width: 42px;
+}
+
+/* セルスタイル */
+.day-cell {
+    width: 34px;
+    min-width: 34px;
+    max-width: 34px;
+    height: 30px;
+    cursor: pointer;
+    font-family: monospace;
+    font-weight: 600;
+    font-size: 0.85rem;
+    user-select: none;
+    transition: background 0.1s;
+}
+
+.day-cell:hover {
+    background: #e0f2fe !important;
+}
+
+.day-cell.selected {
+    outline: 2px solid var(--primary);
+    outline-offset: -2px;
+    background: #bae6fd !important;
+}
+
+/* 事前入力枠の強調：文字のみ赤字・太字（ご要望により網掛け・背景色は完全除去） */
+.fixed-cell {
+    color: #dc2626 !important;
+    font-weight: 800 !important;
+    background-color: transparent !important;
+}
+
+/* ★ 障壁・エラー原因セルの薄いブルー網掛け（斜めストライプ + ブルー枠線） */
+.conflict-highlight {
+    background-color: #bfdbfe !important; /* 薄いブルー */
+    background-image: repeating-linear-gradient(45deg, rgba(37, 99, 235, 0.18), rgba(37, 99, 235, 0.18) 5px, transparent 5px, transparent 10px) !important;
+    box-shadow: inset 0 0 0 2px #2563eb !important; /* 明瞭なブルー枠線 */
+    color: #1e3a8a !important; /* 濃いブルー文字 */
+    font-weight: 900 !important;
+    position: relative;
+    z-index: 2;
+    animation: conflictPulse 1.8s infinite ease-in-out;
+}
+
+@keyframes conflictPulse {
+    0%, 100% {
+        box-shadow: inset 0 0 0 2px #2563eb, 0 0 6px rgba(37, 99, 235, 0.4);
+    }
+    50% {
+        box-shadow: inset 0 0 0 2px #60a5fa, 0 0 2px rgba(37, 99, 235, 0.2);
+    }
+}
+
+/* 自動生成枠：黒文字 */
+.auto-cell {
+    color: #1e293b;
+    font-weight: 600;
+}
+
+/* フッター集計行 */
+.sheet-table tfoot th,
+.sheet-table tfoot td {
+    position: sticky;
+    bottom: 0;
+    background: #f8fafc;
+    font-weight: 700;
+    border-top: 2px solid #94a3b8;
+    z-index: 15;
+}
+
+/* 土日ヘッダー色 */
+.header-sat {
+    color: #0284c7 !important;
+}
+.header-sun {
+    color: #e11d48 !important;
+}
+
+/* ミニトグルスイッチ */
+.toggle-switch {
+    position: relative;
+    display: inline-block;
+    width: 28px;
+    height: 16px;
+    margin: 0 auto;
+}
+
+.toggle-switch input {
+    opacity: 0;
+    width: 0;
+    height: 0;
+}
+
+.toggle-slider {
+    position: absolute;
+    cursor: pointer;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background-color: #cbd5e1;
+    transition: .2s;
+    border-radius: 16px;
+}
+
+.toggle-slider:before {
+    position: absolute;
+    content: "";
+    height: 12px;
+    width: 12px;
+    left: 2px;
+    bottom: 2px;
+    background-color: white;
+    transition: .2s;
+    border-radius: 50%;
+}
+
+input:checked + .toggle-slider {
+    background-color: var(--primary);
+}
+
+input:checked + .toggle-slider.danger-slider {
+    background-color: var(--danger);
+}
+
+input:checked + .toggle-slider:before {
+    transform: translateX(12px);
+}
+
+/* モーダル */
+.modal-overlay {
+    display: none;
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: rgba(0, 0, 0, 0.5);
+    z-index: 200;
+    justify-content: center;
+    align-items: center;
+    padding: 1.5rem;
+}
+
+.modal-overlay.open {
+    display: flex;
+}
+
+.modal-card {
+    background: white;
+    border-radius: 0.75rem;
+    max-width: 650px;
+    width: 100%;
+    max-height: 85vh;
+    overflow-y: auto;
+    box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04);
+}
+
+.modal-header {
+    padding: 1.25rem 1.5rem;
+    border-bottom: 1px solid var(--gray-200);
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+
+.modal-header.error {
+    background: #fef2f2;
+    border-bottom-color: #fecaca;
+    color: #991b1b;
+}
+
+.modal-body {
+    padding: 1.5rem;
+    line-height: 1.6;
+}
+
+.modal-footer {
+    padding: 1rem 1.5rem;
+    background: var(--gray-50);
+    border-top: 1px solid var(--gray-200);
+    display: flex;
+    justify-content: flex-end;
+    gap: 0.75rem;
+}
+
+.error-list {
+    list-style: none;
+    margin-top: 0.75rem;
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+}
+
+.error-item {
+    background: #fff1f2;
+    border-left: 4px solid #f43f5e;
+    padding: 0.6rem 0.8rem;
+    border-radius: 0.25rem;
+    font-size: 0.85rem;
+    color: #881337;
+}
+
+/* 統計ダッシュボードカード */
+.stats-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+    gap: 1rem;
+    margin-bottom: 1.5rem;
+}
+
+.stat-card {
+    background: white;
+    padding: 1.25rem;
+    border-radius: 0.5rem;
+    border: 1px solid var(--gray-200);
+    box-shadow: 0 1px 3px rgba(0,0,0,0.05);
+}
+
+.stat-card-title {
+    font-size: 0.85rem;
+    color: var(--gray-600);
+    font-weight: 600;
+    margin-bottom: 0.35rem;
+}
+
+/* エラー通知バー（入力シート上部） */
+.conflict-alert-banner {
+    display: none;
+    background: #eff6ff;
+    border: 1px solid #93c5fd;
+    border-left: 5px solid #2563eb;
+    border-radius: 0.5rem;
+    padding: 0.85rem 1.25rem;
+    margin-bottom: 1rem;
+    color: #1e40af;
+    font-size: 0.9rem;
+    font-weight: 600;
+    align-items: center;
+    justify-content: space-between;
+    box-shadow: 0 1px 3px rgba(37, 99, 235, 0.1);
+}
+.conflict-alert-banner.show {
+    display: flex;
+}
+
+/* 印刷用スタイル */
+@media print {
+    .app-header,
+    .tab-container,
+    .toolbar-card,
+    .btn,
+    .modal-overlay {
+        display: none !important;
+    }
+
+    body {
+        background: white;
+    }
+
+    .main-content {
+        padding: 0;
+    }
+
+    .sheet-wrapper {
+        max-height: none;
+        overflow: visible;
+        border: none;
+        box-shadow: none;
+    }
+
+    .sheet-table {
+        font-size: 0.65rem;
+    }
+
+    .fixed-cell {
+        color: #dc2626 !important;
+    }
+}
+
+/* トースト通知 */
+.app-toast {
+    position: fixed;
+    top: 20px;
+    left: 50%;
+    transform: translateX(-50%) translateY(-100px);
+    background: #1e293b;
+    color: white;
+    padding: 12px 24px;
+    border-radius: 8px;
+    font-size: 0.9rem;
+    font-weight: 600;
+    box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.3);
+    z-index: 9999;
+    transition: transform 0.3s cubic-bezier(0.16, 1, 0.3, 1), opacity 0.3s;
+    opacity: 0;
+    pointer-events: none;
+    max-width: 90%;
+    text-align: center;
+}
+
+.app-toast.show {
+    transform: translateX(-50%) translateY(0);
+    opacity: 1;
+}
+
+.app-toast.success {
+    background: #065f46;
+    border: 1px solid #10b981;
+}

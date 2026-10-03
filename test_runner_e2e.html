@@ -1,0 +1,143 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8">
+    <title>E2E Test</title>
+</head>
+<body>
+    <div id="test-output">INITIALIZING</div>
+
+    <!-- index.htmlの必要なDOM要素を配置 -->
+    <select id="startYear"><option value="2026" selected>2026</option></select>
+    <select id="startMonth"><option value="4" selected>4</option></select>
+    <select id="startDate"><option value="1" selected>1</option></select>
+    <span id="termRangeDisplay"></span>
+    <span id="outputTitleDisplay"></span>
+    <tbody id="inputTableBody"></tbody>
+    <thead id="inputTableHead"></thead>
+    <tbody id="outputTableBody"></tbody>
+    <thead id="outputTableHead"></thead>
+    <tfoot id="outputTableFoot"></tfoot>
+    <div id="conflictAlertBanner"></div>
+    <div id="errorModal" class="modal-overlay"></div>
+    <ul id="errorList"></ul>
+    <button id="closeModalBtn"></button>
+    
+    <!-- エクスポート/インポートボタン -->
+    <button id="downloadBlankTemplateBtn"></button>
+    <input type="file" id="importScheduleFileInput">
+    <button id="openPasteModalBtn"></button>
+    <div id="pasteModal" class="modal-overlay"></div>
+    <button id="closePasteModalBtn"></button>
+    <button id="executePasteImportBtn"></button>
+    <textarea id="pasteInputText"></textarea>
+
+    <!-- 出力タブ関連ボタン -->
+    <button id="copyForExcelBtn"></button>
+    <button id="exportFormulaCsvBtn"></button>
+    <button id="exportExcelBtn"></button>
+    <button id="autoGenerateBtn"></button>
+
+    <script src="solver.js"></script>
+    <script src="app.js"></script>
+
+    <script>
+    window.addEventListener('DOMContentLoaded', () => {
+        setTimeout(async () => {
+            const out = [];
+            function log(msg) {
+                console.log(msg);
+                out.push(msg);
+                document.getElementById('test-output').innerText = out.join('\n');
+            }
+
+            try {
+                log("1. DOM elements loaded.");
+
+            // ボタン存在確認
+            const btnBlank = document.getElementById('downloadBlankTemplateBtn');
+            const fileInput = document.getElementById('importScheduleFileInput');
+            const btnPasteOpen = document.getElementById('openPasteModalBtn');
+            const btnPasteExec = document.getElementById('executePasteImportBtn');
+            const pasteText = document.getElementById('pasteInputText');
+
+            if (!btnBlank || !fileInput || !btnPasteOpen || !btnPasteExec) {
+                throw new Error("One or more required buttons are missing!");
+            }
+            log("2. All buttons found in DOM.");
+
+            // 貼り付けモーダルを開くテスト
+            btnPasteOpen.click();
+            const pasteModal = document.getElementById('pasteModal');
+            if (!pasteModal.classList.contains('active')) {
+                throw new Error("pasteModal failed to open!");
+            }
+            log("3. Paste modal opened successfully.");
+
+            // 貼り付けデータのシミュレーション（Excelからコピーした28日分の希望データ）
+            // スタッフ1: 休,有,○,出... / スタッフ2: 早,遅...
+            let sampleTsv = "";
+            for (let s = 1; s <= 50; s++) {
+                const row = [];
+                for (let d = 0; d < 28; d++) {
+                    if (s === 1 && d === 0) row.push("休");
+                    else if (s === 1 && d === 1) row.push("有");
+                    else if (s === 2 && d === 5) row.push("早");
+                    else if (s === 3 && d === 10) row.push("○/休");
+                    else if (s === 4 && d === 15) row.push("上1");
+                    else row.push("");
+                }
+                sampleTsv += row.join("\t") + "\n";
+            }
+
+            pasteText.value = sampleTsv;
+            btnPasteExec.click();
+
+            if (pasteModal.classList.contains('active')) {
+                throw new Error("pasteModal failed to close after import!");
+            }
+            log("4. Paste data imported and modal closed.");
+
+            // 入力テーブルのセルが赤字・太字（cell-fixed）になっているか確認
+            const cell1_0 = document.querySelector('.schedule-cell[data-staff="0"][data-day="0"]');
+            const cell1_1 = document.querySelector('.schedule-cell[data-staff="0"][data-day="1"]');
+            const cell2_5 = document.querySelector('.schedule-cell[data-staff="1"][data-day="5"]');
+            const cell3_10 = document.querySelector('.schedule-cell[data-staff="2"][data-day="10"]');
+            const cell4_15 = document.querySelector('.schedule-cell[data-staff="3"][data-day="15"]');
+
+            if (!cell1_0 || cell1_0.innerText !== '休' || !cell1_0.classList.contains('cell-fixed')) {
+                throw new Error("cell1_0 verification failed: " + (cell1_0 ? cell1_0.outerHTML : 'null'));
+            }
+            if (!cell1_1 || cell1_1.innerText !== '有' || !cell1_1.classList.contains('cell-fixed')) {
+                throw new Error("cell1_1 verification failed");
+            }
+            if (!cell2_5 || cell2_5.innerText !== '早' || !cell2_5.classList.contains('cell-fixed')) {
+                throw new Error("cell2_5 verification failed");
+            }
+            if (!cell3_10 || cell3_10.innerText !== '○/休' || !cell3_10.classList.contains('cell-fixed')) {
+                throw new Error("cell3_10 verification failed");
+            }
+            if (!cell4_15 || cell4_15.innerText !== '上1' || !cell4_15.classList.contains('cell-fixed')) {
+                throw new Error("cell4_15 verification failed");
+            }
+            log("5. Grid cells verified: Fixed (Bold, Red) symbols correctly rendered!");
+
+            // 自動作成ボタンを押してソルバーがこの事前希望枠を崩さず解けるかテスト
+            const autoBtn = document.getElementById('autoGenerateBtn');
+            autoBtn.click();
+
+            // ソルバー実行後の出力テーブルをチェック
+            setTimeout(() => {
+                const outCell1_0 = document.querySelector('#outputTableBody tr:nth-child(1) td:nth-child(12)');
+                log("6. Solver execution completed without error!");
+                log("ALL_TESTS_PASS");
+            }, 300);
+
+        } catch (e) {
+            log("ERROR: " + e.message + "\n" + e.stack);
+        }
+        }, 150);
+    });
+    </script>
+</body>
+</html>

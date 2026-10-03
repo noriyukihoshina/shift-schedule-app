@@ -1,0 +1,111 @@
+﻿<!DOCTYPE html>
+<html><head><meta charset="utf-8"></head>
+<body>
+<input type="date" id="termStartDate" value="2026-04-01">
+<span id="termEndDateDisplay"></span>
+<span id="termTitleBadge"></span>
+<span id="outputTitleDisplay"></span>
+<table><thead id="inputTableHead"></thead><tbody id="inputTableBody"></tbody></table>
+
+<div id="test-log">RUNNING</div>
+
+<script src="solver.js"></script>
+<script src="app.js"></script>
+<script>
+window.addEventListener('DOMContentLoaded', async () => {
+    const logs = [];
+    function log(msg) { logs.push(msg); console.log(msg); }
+
+    try {
+        log("1. Initial state checked.");
+        if (document.getElementById('termStartDate').value !== '2026-04-01') {
+            throw new Error("Initial date is not 2026-04-01");
+        }
+
+        // 陋ｻ譎・ｄ霑･・ｶ隲ｷ荵昴堤ｹｧ・ｵ郢晢ｽｳ郢晏干ﾎ晉ｹ昴・繝ｻ郢ｧ・ｿ隰壼供繝ｻ
+        loadSampleData();
+        renderInputTable();
+
+        // 鬩､・ｴ隴幢ｽｨ驗剃ｸｻ隱ｿ(sIdx=1)邵ｺ・ｮ陋ｻ譎・ｄ郢ｧ・ｵ郢晢ｽｳ郢晏干ﾎ晉ｹ昴・繝ｻ郢ｧ・ｿ驕抵ｽｺ髫ｱ繝ｻ(5隴鯉ｽ･騾ｶ・ｮ邵ｺ・ｫ隴帛ｳｨﾂ繝ｻ0隴鯉ｽ･騾ｶ・ｮ邵ｺ・ｫ闔ｨ繝ｻ
+        if (staffList[1].days[4] !== '隴帙・ || staffList[1].days[9] !== '闔ｨ繝ｻ) {
+            throw new Error("Initial sample data for staff 2 not loaded properly");
+        }
+        log("2. Sample data confirmed present before import.");
+
+        // 陜謎ｹ晢ｽ・恷・ｼ邵ｺ・ｾ郢ｧ蠕娯螺Base64邵ｺ荵晢ｽ・4/29邵ｲ繝ｻ/26 邵ｺ・ｮ XLSX 郢晁・縺・ｹ昜ｺ･繝ｻ郢ｧ雋橸ｽｾ・ｩ陷医・        const b64 = "";
+        const binStr = atob(b64);
+        const len = binStr.length;
+        const bytes = new Uint8Array(len);
+        for (let i = 0; i < len; i++) {
+            bytes[i] = binStr.charCodeAt(i);
+        }
+        const buf = bytes.buffer;
+
+        log("3. 4/29-5/26 XLSX buffer created. Simulating file import...");
+
+        // parseXlsxBuffer 陞ｳ貅ｯ・｡繝ｻ        const parseResult = await parseXlsxBuffer(buf);
+        log("4. parseXlsxBuffer completed. detected startDate=" + parseResult.startDate + ", items count=" + parseResult.items.length);
+
+        if (parseResult.startDate !== '2026-04-29') {
+            throw new Error("Expected startDate 2026-04-29, got " + parseResult.startDate);
+        }
+
+        // importScheduleFileInput 邵ｺ・ｮ陷・ｽｦ騾・・縺咏ｹ晄ｺ佩礼ｹ晢ｽｬ郢晢ｽｼ郢昴・        if (parseResult.startDate) {
+            document.getElementById('termStartDate').value = parseResult.startDate;
+            getTermInfo();
+        }
+
+        // 郢昴・縺帷ｹ晁ご逡醍ｹ昴・繝ｻ郢ｧ・ｿ髴托ｽｽ陷会｣ｰ: 闖ｴ蜊髯ｸ陋幢ｽ･闕ｳﾂ(0) 邵ｺ・ｮ 2隴鯉ｽ･騾ｶ・ｮ邵ｺ・ｫ '闔ｨ繝ｻ, 3隴鯉ｽ･騾ｶ・ｮ邵ｺ・ｫ '隴帙・
+        parseResult.items.push({ staffIdx: 0, dayIdx: 2, symbol: '闔ｨ繝ｻ });
+        parseResult.items.push({ staffIdx: 0, dayIdx: 3, symbol: '隴帙・ });
+
+        // replace 郢晢ｽ｢郢晢ｽｼ郢晏ｳｨ縲定愾閧ｴ荳・
+        applyScheduleImport(parseResult.items, 'replace');
+
+        // 隶諛・ｽｨ・ｼ1: 隴帶ｻ・ｿ｣邵ｺ繝ｻ2026-04-29 邵ｲ繝ｻ2026-05-26 邵ｺ・ｫ髢ｾ・ｪ陷榊｢灘ｳｩ隴・ｽｰ邵ｺ霈費ｽ檎ｸｺ貅伉ｰ
+        const curStart = document.getElementById('termStartDate').value;
+        const curEnd = document.getElementById('termEndDateDisplay').textContent;
+        const curBadge = document.getElementById('termTitleBadge').textContent;
+
+        log("5. Verified dates: Start=" + curStart + ", End=" + curEnd + ", Badge=" + curBadge);
+        if (curStart !== '2026-04-29') throw new Error("termStartDate was not updated to 2026-04-29!");
+        if (curEnd !== '2026-05-26') throw new Error("termEndDateDisplay was not updated to 2026-05-26!");
+        if (!curBadge.includes('4/29繝ｻ繝ｻ/26')) throw new Error("Badge does not show 4/29繝ｻ繝ｻ/26!");
+
+        // 隶諛・ｽｨ・ｼ2: 郢昴・繝ｻ郢晄じﾎ晉ｹ晏･繝｣郢敖郢晢ｽｼ邵ｺ繝ｻ4/29(雎鯉ｽｴ) 邵ｲ繝ｻ5/26(霓｣・ｫ) 邵ｺ・ｫ邵ｺ・ｪ邵ｺ・｣邵ｺ・ｦ邵ｺ繝ｻ・狗ｸｺ繝ｻ(1隴帙・2霓｣・ｫ 邵ｺ・ｧ邵ｺ・ｯ邵ｺ・ｪ邵ｺ繝ｻ・ｼ繝ｻ
+        const ths = document.querySelectorAll('#inputTableHead tr:nth-child(2) th');
+        // ths[0]邵ｲ蠕ｼhs[4] 邵ｺ・ｯ 陷代・邵ｲ諛ｷ辯・邵ｲ縲吃s[5] 邵ｺ繝ｻ1隴鯉ｽ･騾ｶ・ｮ(4/29 雎鯉ｽｴ)
+        const firstDayTh = ths[5];
+        const lastDayTh = ths[ths.length - 1];
+
+        log("6. Header cells: FirstDay=" + firstDayTh.innerText.replace(/\n/g, ' ') + ", LastDay=" + lastDayTh.innerText.replace(/\n/g, ' '));
+        if (!firstDayTh.innerText.includes('4/29') || !firstDayTh.innerText.includes('雎鯉ｽｴ')) {
+            throw new Error("First day header is wrong: " + firstDayTh.innerText);
+        }
+        if (!lastDayTh.innerText.includes('5/26') || !lastDayTh.innerText.includes('霓｣・ｫ')) {
+            throw new Error("Last day header is wrong: " + lastDayTh.innerText);
+        }
+
+        // 隶諛・ｽｨ・ｼ3: 隴鯉ｽ｢陝・･繝ｻ郢ｧ・ｵ郢晢ｽｳ郢晏干ﾎ晉ｹ昴・繝ｻ郢ｧ・ｿ繝ｻ逎ｯ譁｡隴幢ｽｨ驗剃ｸｻ隱ｿ邵ｺ・ｮ5隴鯉ｽ･騾ｶ・ｮ隴帛ｳｨﾂ繝ｻ0隴鯉ｽ･騾ｶ・ｮ闔ｨ驢搾ｽｭ莨夲ｽｼ蟲ｨ窶ｲ陞ｳ謔溘・邵ｺ・ｫ郢ｧ・ｯ郢晢ｽｪ郢ｧ・｢邵ｺ霈費ｽ檎ｸｺ貅伉ｰ繝ｻ繝ｻ        const st2_d5 = staffList[1].days[4];
+        const st2_d10 = staffList[1].days[9];
+        log("7. Old sample check: Staff 2 day 5='" + st2_d5 + "', day 10='" + st2_d10 + "'");
+        if (st2_d5 !== '' || st2_d10 !== '') {
+            throw new Error("Old sample data was NOT cleared! Day5=" + st2_d5 + ", Day10=" + st2_d10);
+        }
+
+        // 隶諛・ｽｨ・ｼ4: 陷ｿ謔ｶ・企恷・ｼ郢ｧ阮吮味郢昴・繝ｻ郢ｧ・ｿ繝ｻ莠包ｽｽ蜊髯ｸ陋幢ｽ･闕ｳﾂ邵ｺ・ｮ闔ｨ莉｣繝ｻ隴帑ｼ夲ｽｼ蟲ｨ笆｡邵ｺ莉｣窶ｲ雎・ｽ｣邵ｺ蜉ｱ・･陷ｿ閧ｴ荳千ｸｺ霈費ｽ檎ｸｺ・ｦ邵ｺ繝ｻ・狗ｸｺ繝ｻ        const st1_d3 = staffList[0].days[2];
+        const st1_d4 = staffList[0].days[3];
+        log("8. Imported data check: Staff 1 day 3='" + st1_d3 + "', day 4='" + st1_d4 + "'");
+        if (st1_d3 !== '闔ｨ繝ｻ || st1_d4 !== '隴帙・) {
+            throw new Error("Imported data not applied!");
+        }
+
+        document.getElementById('test-log').innerText = "SUCCESS_ALL_TESTS_PASSED\n" + logs.join("\n");
+
+    } catch (e) {
+        document.getElementById('test-log').innerText = "ERROR: " + e.message + "\n" + logs.join("\n");
+    }
+});
+</script>
+
+</body></html>

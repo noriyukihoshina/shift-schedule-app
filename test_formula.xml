@@ -1,0 +1,98 @@
+﻿<?xml version=1.0 encoding=UTF-8?>
+<?mso-application progid=Excel.Sheet?>
+<Workbook xmlns=urn:schemas-microsoft-com:office:spreadsheet
+ xmlns:o=urn:schemas-microsoft-com:office:office
+ xmlns:x=urn:schemas-microsoft-com:office:excel
+ xmlns:ss=urn:schemas-microsoft-com:office:spreadsheet
+ xmlns:html=http://www.w3.org/TR/REC-html40>
+ <DocumentProperties xmlns=urn:schemas-microsoft-com:office:office>
+  <Author>勤務予定表作成システム</Author>
+ </DocumentProperties>
+ <Styles>
+  <Style ss:ID=Default ss:Name=Normal>
+   <Alignment ss:Vertical=Center ss:Horizontal=Center/>
+   <Font ss:FontName=Meiryo ss:Size=10/>
+  </Style>
+  <Style ss:ID=Header>
+   <Alignment ss:Vertical=Center ss:Horizontal=Center/>
+   <Font ss:FontName=Meiryo ss:Size=10 ss:Bold=1/>
+   <Interior ss:Color=#F1F5F9 ss:Pattern=Solid/>
+   <Borders>
+    <Border ss:Position=Bottom ss:LineStyle=Continuous ss:Weight=1 ss:Color=#CBD5E1/>
+    <Border ss:Position=Left ss:LineStyle=Continuous ss:Weight=1 ss:Color=#CBD5E1/>
+    <Border ss:Position=Right ss:LineStyle=Continuous ss:Weight=1 ss:Color=#CBD5E1/>
+    <Border ss:Position=Top ss:LineStyle=Continuous ss:Weight=1 ss:Color=#CBD5E1/>
+   </Borders>
+  </Style>
+  <Style ss:ID=FixedCell>
+   <Alignment ss:Vertical=Center ss:Horizontal=Center/>
+   <Font ss:FontName=Meiryo ss:Size=10 ss:Bold=1 ss:Color=#DC2626/>
+   <Interior ss:Color=#FEF2F2 ss:Pattern=Solid/>
+   <Borders>
+    <Border ss:Position=Bottom ss:LineStyle=Continuous ss:Weight=1 ss:Color=#CBD5E1/>
+    <Border ss:Position=Left ss:LineStyle=Continuous ss:Weight=1 ss:Color=#CBD5E1/>
+    <Border ss:Position=Right ss:LineStyle=Continuous ss:Weight=1 ss:Color=#CBD5E1/>
+    <Border ss:Position=Top ss:LineStyle=Continuous ss:Weight=1 ss:Color=#CBD5E1/>
+   </Borders>
+  </Style>
+  <Style ss:ID=NormalCell>
+   <Alignment ss:Vertical=Center ss:Horizontal=Center/>
+   <Font ss:FontName=Meiryo ss:Size=10/>
+   <Borders>
+    <Border ss:Position=Bottom ss:LineStyle=Continuous ss:Weight=1 ss:Color=#CBD5E1/>
+    <Border ss:Position=Left ss:LineStyle=Continuous ss:Weight=1 ss:Color=#CBD5E1/>
+    <Border ss:Position=Right ss:LineStyle=Continuous ss:Weight=1 ss:Color=#CBD5E1/>
+    <Border ss:Position=Top ss:LineStyle=Continuous ss:Weight=1 ss:Color=#CBD5E1/>
+   </Borders>
+  </Style>
+  <Style ss:ID=StatFormula>
+   <Alignment ss:Vertical=Center ss:Horizontal=Center/>
+   <Font ss:FontName=Meiryo ss:Size=10 ss:Bold=1/>
+   <Interior ss:Color=#F8FAFC ss:Pattern=Solid/>
+   <Borders>
+    <Border ss:Position=Bottom ss:LineStyle=Continuous ss:Weight=1 ss:Color=#CBD5E1/>
+    <Border ss:Position=Left ss:LineStyle=Continuous ss:Weight=1 ss:Color=#CBD5E1/>
+    <Border ss:Position=Right ss:LineStyle=Continuous ss:Weight=1 ss:Color=#CBD5E1/>
+    <Border ss:Position=Top ss:LineStyle=Continuous ss:Weight=1 ss:Color=#CBD5E1/>
+   </Borders>
+  </Style>
+ </Styles>
+ <Worksheet ss:Name=確定勤務表>
+  <Table>
+   <Column ss:Width=30/>
+   <Column ss:Width=80/>
+   <Column ss:Width=30/>
+   <Column ss:Width=30/>
+   <Column ss:Width=30/>
+   <Column ss:Width=45/>
+   <Column ss:Width=45/>
+   <Row>
+    <Cell ss:StyleID=Header><Data ss:Type=String>No</Data></Cell>
+    <Cell ss:StyleID=Header><Data ss:Type=String>氏名</Data></Cell>
+    <Cell ss:StyleID=Header><Data ss:Type=String>1日</Data></Cell>
+    <Cell ss:StyleID=Header><Data ss:Type=String>2日</Data></Cell>
+    <Cell ss:StyleID=Header><Data ss:Type=String>3日</Data></Cell>
+    <Cell ss:StyleID=Header><Data ss:Type=String>出勤数</Data></Cell>
+    <Cell ss:StyleID=Header><Data ss:Type=String>公休数</Data></Cell>
+   </Row>
+   <Row>
+    <Cell ss:StyleID=NormalCell><Data ss:Type=Number>1</Data></Cell>
+    <Cell ss:StyleID=NormalCell><Data ss:Type=String>佐藤 健一</Data></Cell>
+    <Cell ss:StyleID=FixedCell><Data ss:Type=String>休</Data></Cell>
+    <Cell ss:StyleID=NormalCell><Data ss:Type=String>○</Data></Cell>
+    <Cell ss:StyleID=FixedCell><Data ss:Type=String>○/休</Data></Cell>
+    <!-- 出勤数数式: ○なら1、○/休なら0.5 -->
+    <Cell ss:StyleID=StatFormula ss:Formula==COUNTIF(RC[-3]:RC[-1], &quot;○&quot;) + 0.5 * COUNTIF(RC[-3]:RC[-1], &quot;○/休&quot;)><Data ss:Type=Number>1.5</Data></Cell>
+    <!-- 公休数数式: 休なら1、○/休なら0.5 -->
+    <Cell ss:StyleID=StatFormula ss:Formula==COUNTIF(RC[-4]:RC[-2], &quot;休&quot;) + 0.5 * COUNTIF(RC[-4]:RC[-2], &quot;○/休&quot;)><Data ss:Type=Number>1.5</Data></Cell>
+   </Row>
+   <Row>
+    <Cell ss:StyleID=Header ss:MergeAcross=1><Data ss:Type=String>出勤人数合計</Data></Cell>
+    <Cell ss:StyleID=StatFormula ss:Formula==COUNTIF(R[-1]C, &quot;○&quot;) + 0.5 * COUNTIF(R[-1]C, &quot;○/休&quot;)><Data ss:Type=Number>0</Data></Cell>
+    <Cell ss:StyleID=StatFormula ss:Formula==COUNTIF(R[-1]C, &quot;○&quot;) + 0.5 * COUNTIF(R[-1]C, &quot;○/休&quot;)><Data ss:Type=Number>1</Data></Cell>
+    <Cell ss:StyleID=StatFormula ss:Formula==COUNTIF(R[-1]C, &quot;○&quot;) + 0.5 * COUNTIF(R[-1]C, &quot;○/休&quot;)><Data ss:Type=Number>0.5</Data></Cell>
+    <Cell ss:StyleID=Header ss:MergeAcross=1><Data ss:Type=String>-</Data></Cell>
+   </Row>
+  </Table>
+ </Worksheet>
+</Workbook>

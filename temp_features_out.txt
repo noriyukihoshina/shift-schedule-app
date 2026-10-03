@@ -1,0 +1,380 @@
+﻿<!DOCTYPE html>
+<html><head><meta charset="utf-8"></head>
+<body>
+<div id="test-result">ERROR: ShiftScheduleSolver is not defined<br>ReferenceError: ShiftScheduleSolver is not defined<br>    at runAllTests (file:///C:/Users/coffe/OneDrive/%E3%83%87%E3%82%B9%E3%82%AF%E3%83%88%E3%83%83%E3%83%97/Antigravity/%E5%8B%A4%E5%8B%99%E8%A1%A8%E4%BD%9C%E6%88%90/test_all_features.html:358:24)<br>    at file:///C:/Users/coffe/OneDrive/%E3%83%87%E3%82%B9%E3%82%AF%E3%83%88%E3%83%83%E3%83%97/Antigravity/%E5%8B%A4%E5%8B%99%E8%A1%A8%E4%BD%9C%E6%88%90/test_all_features.html:377:1</div>
+<script src="solver.js"></script>
+<script>
+// ==========================================
+// 繝・せ繝育畑繝・・繧ｿ螳夂ｾｩ繝ｻ繝倥Ν繝代・
+// ==========================================
+const NUM_STAFF = 50;
+const NUM_DAYS = 28;
+const WEEKDAYS = ['譛・, '轣ｫ', '豌ｴ', '譛ｨ', '驥・, '蝨・, '譌･'];
+
+let staffList = [];
+for (let i = 1; i <= NUM_STAFF; i++) {
+    staffList.push({
+        id: i,
+        name: `繧ｹ繧ｿ繝・ヵ ${String(i).padStart(2, '0')}`,
+        can8: (i <= 9),
+        noEarly: false,
+        noLate: false,
+        noEve: false,
+        prevDays: ['笳・, '笳・, '莨・, '笳・, '笳・],
+        days: new Array(NUM_DAYS).fill('')
+    });
+}
+
+function getTermInfo() {
+    const dates = [];
+    const startDate = new Date(2026, 3, 1); // 2026-04-01
+    for (let i = 0; i < NUM_DAYS; i++) {
+        const d = new Date(startDate.getFullYear(), startDate.getMonth(), startDate.getDate() + i);
+        const m = d.getMonth() + 1;
+        const day = d.getDate();
+        const wIdx = (d.getDay() + 6) % 7;
+        dates.push({
+            m,
+            day,
+            weekday: WEEKDAYS[wIdx],
+            label: `${m}/${day}`,
+            wIdx,
+            dateObj: d
+        });
+    }
+    const first = dates[0];
+    const last = dates[NUM_DAYS - 1];
+    const title = `${first.m}/${first.day}・・{last.m}/${last.day}蜍､蜍呵｡ｨ`;
+    return { title, dates, first, last };
+}
+
+// CRC32
+const zipCrcTable = new Uint32Array(256);
+for (let n = 0; n < 256; n++) {
+    let c = n;
+    for (let k = 0; k < 8; k++) {
+        c = ((c & 1) ? (0xEDB88320 ^ (c >>> 1)) : (c >>> 1));
+    }
+    zipCrcTable[n] = c;
+}
+function calcZipCrc32(buf) {
+    let crc = 0xFFFFFFFF;
+    for (let i = 0; i < buf.length; i++) {
+        crc = (crc >>> 8) ^ zipCrcTable[(crc ^ buf[i]) & 0xFF];
+    }
+    return (crc ^ 0xFFFFFFFF) >>> 0;
+}
+
+function createZipUint8Array(files) {
+    const textEncoder = new TextEncoder();
+    const fileEntries = files.map(f => {
+        const nameBytes = textEncoder.encode(f.name);
+        const dataBytes = (typeof f.data === 'string') ? textEncoder.encode(f.data) : f.data;
+        return {
+            name: f.name,
+            nameBytes,
+            dataBytes,
+            crc: calcZipCrc32(dataBytes),
+            size: dataBytes.length
+        };
+    });
+
+    let localHeadersSize = 0;
+    fileEntries.forEach(f => {
+        f.offset = localHeadersSize;
+        localHeadersSize += 30 + f.nameBytes.length + f.size;
+    });
+
+    let centralDirSize = 0;
+    fileEntries.forEach(f => {
+        centralDirSize += 46 + f.nameBytes.length;
+    });
+
+    const totalSize = localHeadersSize + centralDirSize + 22;
+    const buf = new Uint8Array(totalSize);
+    const view = new DataView(buf.buffer);
+    let pos = 0;
+
+    fileEntries.forEach(f => {
+        view.setUint32(pos, 0x04034b50, true); pos += 4;
+        view.setUint16(pos, 20, true); pos += 2;
+        view.setUint16(pos, 0x0800, true); pos += 2;
+        view.setUint16(pos, 0, true); pos += 2;
+        view.setUint16(pos, 0x4a21, true); pos += 2;
+        view.setUint16(pos, 0x5894, true); pos += 2;
+        view.setUint32(pos, f.crc, true); pos += 4;
+        view.setUint32(pos, f.size, true); pos += 4;
+        view.setUint32(pos, f.size, true); pos += 4;
+        view.setUint16(pos, f.nameBytes.length, true); pos += 2;
+        view.setUint16(pos, 0, true); pos += 2;
+        buf.set(f.nameBytes, pos); pos += f.nameBytes.length;
+        buf.set(f.dataBytes, pos); pos += f.size;
+    });
+
+    const cdOffset = pos;
+    fileEntries.forEach(f => {
+        view.setUint32(pos, 0x02014b50, true); pos += 4;
+        view.setUint16(pos, 20, true); pos += 2;
+        view.setUint16(pos, 20, true); pos += 2;
+        view.setUint16(pos, 0x0800, true); pos += 2;
+        view.setUint16(pos, 0, true); pos += 2;
+        view.setUint16(pos, 0x4a21, true); pos += 2;
+        view.setUint16(pos, 0x5894, true); pos += 2;
+        view.setUint32(pos, f.crc, true); pos += 4;
+        view.setUint32(pos, f.size, true); pos += 4;
+        view.setUint32(pos, f.size, true); pos += 4;
+        view.setUint16(pos, f.nameBytes.length, true); pos += 2;
+        view.setUint16(pos, 0, true); pos += 2;
+        view.setUint16(pos, 0, true); pos += 2;
+        view.setUint16(pos, 0, true); pos += 2;
+        view.setUint16(pos, 0, true); pos += 2;
+        view.setUint32(pos, 0, true); pos += 4;
+        view.setUint32(pos, f.offset, true); pos += 4;
+        buf.set(f.nameBytes, pos); pos += f.nameBytes.length;
+    });
+
+    view.setUint32(pos, 0x06054b50, true); pos += 4;
+    view.setUint16(pos, 0, true); pos += 2;
+    view.setUint16(pos, 0, true); pos += 2;
+    view.setUint16(pos, fileEntries.length, true); pos += 2;
+    view.setUint16(pos, fileEntries.length, true); pos += 2;
+    view.setUint32(pos, centralDirSize, true); pos += 4;
+    view.setUint32(pos, cdOffset, true); pos += 4;
+    view.setUint16(pos, 0, true); pos += 2;
+
+    return buf;
+}
+
+function toColLetter(colIdx) {
+    let temp = colIdx;
+    let letter = '';
+    while (temp > 0) {
+        let rem = (temp - 1) % 26;
+        letter = String.fromCharCode(65 + rem) + letter;
+        temp = Math.floor((temp - 1) / 26);
+    }
+    return letter;
+}
+
+function generateBlankXlsxBytes() {
+    const term = getTermInfo();
+    const title = `${term.first.m}譛・{term.first.day}譌･・・{term.last.m}譛・{term.last.day}譌･ 繧ｹ繧ｿ繝・ヵ蟶梧悍蜍､蜍吝・蜉帙す繝ｼ繝茨ｼ亥ｸ梧悍蜍､蜍吶・繝励Ν繝繧ｦ繝ｳ縺九ｉ驕ｸ謚槭＠縺ｦ縺上□縺輔＞・荏;
+
+    const contentTypes = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">
+  <Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/>
+  <Default Extension="xml" ContentType="application/xml"/>
+  <Override PartName="/xl/workbook.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml"/>
+  <Override PartName="/xl/worksheets/sheet1.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/>
+  <Override PartName="/xl/styles.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.styles+xml"/>
+</Types>`;
+
+    const rels = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">
+  <Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="xl/workbook.xml"/>
+</Relationships>`;
+
+    const workbook = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships">
+  <sheets>
+    <sheet name="蟶梧悍蜈･蜉帙す繝ｼ繝・ sheetId="1" r:id="rId1"/>
+  </sheets>
+</workbook>`;
+
+    const wbRels = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">
+  <Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet1.xml"/>
+  <Relationship Id="rId2" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles" Target="styles.xml"/>
+</Relationships>`;
+
+    const styles = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<styleSheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">
+  <fonts count="4">
+    <font><sz val="11"/><name val="貂ｸ繧ｴ繧ｷ繝・け"/></font>
+    <font><b/><sz val="11"/><name val="貂ｸ繧ｴ繧ｷ繝・け"/></font>
+    <font><b/><sz val="12"/><name val="貂ｸ繧ｴ繧ｷ繝・け"/><color rgb="1E293B"/></font>
+    <font><b/><sz val="11"/><name val="貂ｸ繧ｴ繧ｷ繝・け"/><color rgb="DC2626"/></font>
+  </fonts>
+  <fills count="6">
+    <fill><patternFill patternType="none"/></fill>
+    <fill><patternFill patternType="gray125"/></fill>
+    <fill><patternFill patternType="solid"><fgColor rgb="F1F5F9"/></patternFill></fill>
+    <fill><patternFill patternType="solid"><fgColor rgb="EFF6FF"/></patternFill></fill>
+    <fill><patternFill patternType="solid"><fgColor rgb="FEF2F2"/></patternFill></fill>
+    <fill><patternFill patternType="solid"><fgColor rgb="F0FDF4"/></patternFill></fill>
+  </fills>
+  <borders count="2">
+    <border><left/><right/><top/><bottom/></border>
+    <border>
+      <left style="thin"><color rgb="CBD5E1"/></left>
+      <right style="thin"><color rgb="CBD5E1"/></right>
+      <top style="thin"><color rgb="CBD5E1"/></top>
+      <bottom style="thin"><color rgb="CBD5E1"/></bottom>
+    </border>
+  </borders>
+  <cellStyleXfs count="1">
+    <xf numFmtId="0" fontId="0" fillId="0" borderId="0"/>
+  </cellStyleXfs>
+  <cellXfs count="8">
+    <xf numFmtId="0" fontId="0" fillId="0" borderId="0" xfId="0"/>
+    <xf numFmtId="0" fontId="2" fillId="0" borderId="0" xfId="0"><alignment horizontal="left" vertical="center"/></xf>
+    <xf numFmtId="0" fontId="1" fillId="2" borderId="1" xfId="0"><alignment horizontal="center" vertical="center"/></xf>
+    <xf numFmtId="0" fontId="1" fillId="3" borderId="1" xfId="0"><alignment horizontal="center" vertical="center"/></xf>
+    <xf numFmtId="0" fontId="1" fillId="4" borderId="1" xfId="0"><alignment horizontal="center" vertical="center"/></xf>
+    <xf numFmtId="0" fontId="0" fillId="0" borderId="1" xfId="0"><alignment horizontal="center" vertical="center"/></xf>
+    <xf numFmtId="0" fontId="0" fillId="0" borderId="1" xfId="0"><alignment horizontal="left" vertical="center"/></xf>
+    <xf numFmtId="0" fontId="1" fillId="5" borderId="1" xfId="0"><alignment horizontal="center" vertical="center"/></xf>
+  </cellXfs>
+</styleSheet>`;
+
+    let sheet1 = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">
+  <sheetViews><sheetView tabSelected="1" workbookViewId="0"/></sheetViews>
+  <sheetFormatPr defaultRowHeight="18"/>
+  <cols>
+    <col min="1" max="1" width="5" customWidth="1"/>
+    <col min="2" max="2" width="16" customWidth="1"/>
+    <col min="3" max="6" width="7" customWidth="1"/>
+    <col min="7" max="11" width="6" customWidth="1"/>
+    <col min="12" max="39" width="6" customWidth="1"/>
+    <col min="40" max="41" width="11" customWidth="1"/>
+    <col min="42" max="42" width="16" customWidth="1"/>
+  </cols>
+  <sheetData>
+    <row r="1" ht="24" customHeight="1">
+      <c r="A1" s="1" t="inlineStr"><is><t>${title}</t></is></c>
+    </row>
+    <row r="2" ht="22" customHeight="1">
+      <c r="A2" s="2" t="inlineStr"><is><t>No</t></is></c>
+      <c r="B2" s="2" t="inlineStr"><is><t>豌丞錐</t></is></c>
+      <c r="C2" s="2" t="inlineStr"><is><t>8譎ょ庄</t></is></c>
+      <c r="D2" s="2" t="inlineStr"><is><t>譌ｩ荳榊庄</t></is></c>
+      <c r="E2" s="2" t="inlineStr"><is><t>驕・ｸ榊庄</t></is></c>
+      <c r="F2" s="2" t="inlineStr"><is><t>E荳榊庄</t></is></c>
+      <c r="G2" s="2" t="inlineStr"><is><t>蜑・</t></is></c>
+      <c r="H2" s="2" t="inlineStr"><is><t>蜑・</t></is></c>
+      <c r="I2" s="2" t="inlineStr"><is><t>蜑・</t></is></c>
+      <c r="J2" s="2" t="inlineStr"><is><t>蜑・</t></is></c>
+      <c r="K2" s="2" t="inlineStr"><is><t>蜑・</t></is></c>`;
+
+    for (let d = 0; d < NUM_DAYS; d++) {
+        const di = term.dates[d];
+        const colLetter = toColLetter(12 + d);
+        let sIdx = 2;
+        if (di.weekday === '蝨・) sIdx = 3;
+        else if (di.weekday === '譌･') sIdx = 4;
+        const dateStr = `${di.m}/${di.day}(${di.weekday})`;
+        sheet1 += `\n      <c r="${colLetter}2" s="${sIdx}" t="inlineStr"><is><t>${dateStr}</t></is></c>`;
+    }
+    sheet1 += `\n      <c r="AN2" s="2" t="inlineStr"><is><t>蟶梧悍莨第焚</t></is></c>`;
+    sheet1 += `\n      <c r="AO2" s="2" t="inlineStr"><is><t>蟶梧悍譛我ｼ第焚</t></is></c>`;
+    sheet1 += `\n      <c r="AP2" s="2" t="inlineStr"><is><t>蛯呵・/t></is></c>`;
+    sheet1 += `\n    </row>`;
+
+    for (let s = 0; s < NUM_STAFF; s++) {
+        const staff = staffList[s];
+        const r = s + 3;
+        sheet1 += `\n    <row r="${r}" ht="20" customHeight="1">`;
+        sheet1 += `\n      <c r="A${r}" s="5"><v>${staff.id}</v></c>`;
+        sheet1 += `\n      <c r="B${r}" s="6" t="inlineStr"><is><t>${staff.name}</t></is></c>`;
+        sheet1 += `\n      <c r="C${r}" s="5"><v>${staff.can8 ? 1 : 0}</v></c>`;
+        sheet1 += `\n      <c r="D${r}" s="5"><v>${staff.noEarly ? 1 : 0}</v></c>`;
+        sheet1 += `\n      <c r="E${r}" s="5"><v>${staff.noLate ? 1 : 0}</v></c>`;
+        sheet1 += `\n      <c r="F${r}" s="5"><v>${staff.noEve ? 1 : 0}</v></c>`;
+        for (let p = 0; p < 5; p++) {
+            const colLetter = toColLetter(7 + p);
+            const prevSym = staff.prevDays[p] || '';
+            sheet1 += `\n      <c r="${colLetter}${r}" s="5" t="inlineStr"><is><t>${prevSym}</t></is></c>`;
+        }
+        for (let d = 0; d < NUM_DAYS; d++) {
+            const colLetter = toColLetter(12 + d);
+            const sym = staff.days && staff.days[d];
+            if (sym) {
+                sheet1 += `\n      <c r="${colLetter}${r}" s="5" t="inlineStr"><is><t>${sym}</t></is></c>`;
+            } else {
+                sheet1 += `\n      <c r="${colLetter}${r}" s="5"/>`;
+            }
+        }
+        const fOff = `COUNTIF(L${r}:AM${r},&quot;莨・quot;)+0.5*(COUNTIF(L${r}:AM${r},&quot;笳・莨・quot;)+COUNTIF(L${r}:AM${r},&quot;莨・笳・quot;))`;
+        const fPaid = `COUNTIF(L${r}:AM${r},&quot;譛・quot;)+0.5*(COUNTIF(L${r}:AM${r},&quot;笳・譛・quot;)+COUNTIF(L${r}:AM${r},&quot;譛・笳・quot;))`;
+        sheet1 += `\n      <c r="AN${r}" s="7"><f>${fOff}</f><v>0</v></c>`;
+        sheet1 += `\n      <c r="AO${r}" s="7"><f>${fPaid}</f><v>0</v></c>`;
+        sheet1 += `\n      <c r="AP${r}" s="5"/>`;
+        sheet1 += `\n    </row>`;
+    }
+
+    sheet1 += `\n  </sheetData>`;
+    sheet1 += `\n  <dataValidations count="1">
+    <dataValidation type="list" allowBlank="1" showInputMessage="1" showErrorMessage="1" sqref="L3:AM52" promptTitle="蟶梧悍蜍､蜍吶・驕ｸ謚・ prompt="繝励Ν繝繧ｦ繝ｳ縺九ｉ蟶梧悍蜍､蜍呵ｨ伜捷繧帝∈謚槭＠縺ｦ縺上□縺輔＞縲・ errorTitle="蜈･蜉帛､繧ｨ繝ｩ繝ｼ" error="荳隕ｧ・医・繝ｫ繝繧ｦ繝ｳ・峨↓縺ゅｋ險伜捷縺ｮ縺ｿ蜈･蜉帙〒縺阪∪縺吶・>
+      <formula1>&quot;莨・譛・笳・蜃ｺ,譌ｩ,驕・E,8譎・笳・莨・莨・笳・笳・譛・譛・笳・荳・,荳・,荳・,荳・,荳・,荳・,荳・,荳・&quot;</formula1>
+    </dataValidation>
+  </dataValidations>`;
+    sheet1 += `\n  <pageMargins left="0.7" right="0.7" top="0.75" bottom="0.75" header="0.3" footer="0.3"/>\n</worksheet>`;
+
+    const files = [
+        { name: '[Content_Types].xml', data: contentTypes },
+        { name: '_rels/.rels', data: rels },
+        { name: 'xl/workbook.xml', data: workbook },
+        { name: 'xl/_rels/workbook.xml.rels', data: wbRels },
+        { name: 'xl/styles.xml', data: styles },
+        { name: 'xl/worksheets/sheet1.xml', data: sheet1 }
+    ];
+
+    return createZipUint8Array(files);
+}
+
+// ==========================================
+// 螳溯｡後・繝・せ繝・
+// ==========================================
+async function runAllTests() {
+    try {
+        // 繧ｹ繧ｿ繝・ヵ縺ｮ蟶梧悍繧偵ユ繧ｹ繝郁ｨｭ螳・
+        staffList[0].days[0] = '莨・;
+        staffList[0].days[1] = '譛・;
+        staffList[1].days[5] = '譌ｩ';
+        staffList[2].days[10] = '笳・莨・;
+        staffList[3].days[15] = '荳・';
+
+        // 1. XLSX繝舌う繝翫Μ逕滓・
+        const zipBuf = generateBlankXlsxBytes();
+        let binary = '';
+        for (let i = 0; i < zipBuf.length; i++) binary += String.fromCharCode(zipBuf[i]);
+        const b64 = btoa(binary);
+
+        // 2. 繧ｽ繝ｫ繝舌・螳溯｡後ユ繧ｹ繝茨ｼ亥ｸ梧悍譫縺檎｢ｺ螳壹＆繧後◆迥ｶ諷九〒隗｣縺代ｋ縺具ｼ・
+        const inputGrid = [];
+        for (let s = 0; s < NUM_STAFF; s++) {
+            inputGrid[s] = [];
+            for (let d = 0; d < NUM_DAYS; d++) {
+                const sym = staffList[s].days[d] || '';
+                inputGrid[s][d] = {
+                    symbol: sym,
+                    isFixed: (sym !== '')
+                };
+            }
+        }
+
+        const solver = new ShiftScheduleSolver(staffList, inputGrid);
+        const solveRes = solver.solve();
+
+        if (!solveRes.success) {
+            throw new Error("Solver failed: " + (solveRes.errors || []).join('; '));
+        }
+
+        // 蟶梧悍譫縺後☆縺ｹ縺ｦ邯ｭ謖√＆繧後※縺・ｋ縺区､懆ｨｼ
+        if (solveRes.grid[0][0] !== '莨・) throw new Error("Staff 0 Day 0 expected '莨・ but got " + solveRes.grid[0][0]);
+        if (solveRes.grid[0][1] !== '譛・) throw new Error("Staff 0 Day 1 expected '譛・ but got " + solveRes.grid[0][1]);
+        if (solveRes.grid[1][5] !== '譌ｩ') throw new Error("Staff 1 Day 5 expected '譌ｩ' but got " + solveRes.grid[1][5]);
+        if (solveRes.grid[2][10] !== '笳・莨・) throw new Error("Staff 2 Day 10 expected '笳・莨・ but got " + solveRes.grid[2][10]);
+        if (solveRes.grid[3][15] !== '荳・') throw new Error("Staff 3 Day 15 expected '荳・' but got " + solveRes.grid[3][15]);
+
+        document.getElementById('test-result').innerText = `SUCCESS_ALL: b64len=${b64.length}, b64=${b64}`;
+    } catch (err) {
+        document.getElementById('test-result').innerText = `ERROR: ${err.message}\n${err.stack}`;
+    }
+}
+runAllTests();
+</script>
+
+
+</body></html>

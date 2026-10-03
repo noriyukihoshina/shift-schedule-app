@@ -1,0 +1,348 @@
+﻿<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>勤務予定表 自動作成システム (28日サイクル・50名規模)</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+    <!-- アプリケーションヘッダー -->
+    <header class="app-header">
+        <div class="header-title">
+            <span style="font-size: 1.5rem;">📅</span>
+            <div>
+                <h1>勤務予定表 自動作成システム</h1>
+                <div style="font-size: 0.75rem; color: #94a3b8;">50名規模・28日サイクル（4週8休）/ 組合せ最適化ソルバー搭載</div>
+            </div>
+            <span class="badge">ローカル試作デモ版</span>
+        </div>
+        <div class="header-actions">
+            <button class="btn btn-outline" id="loadSampleBtn" title="動作確認用の50名サンプルデータを投入">
+                🎲 サンプルデータ投入
+            </button>
+            <button class="btn btn-outline" id="loadConflictBtn" title="要件5のエラーハンドリング動作（解なし検知）を確認するためのデータ投入" style="color: #b45309; border-color: #fcd34d; background: #fffbeb;">
+                ⚠️ 矛盾テスト（解なし検証）
+            </button>
+            <button class="btn btn-danger" id="clearAllBtn" title="すべての事前入力枠をクリア">
+                🧹 全消去
+            </button>
+            <button class="btn btn-primary btn-lg" id="solveBtn">
+                ⚡ 勤務表を自動生成する
+            </button>
+        </div>
+    </header>
+
+    <!-- ナビゲーションタブ -->
+    <nav class="tab-container">
+        <button class="tab-btn active" data-tab="inputTab">
+            <span>📋</span> 入力シート（設定・事前入力）
+        </button>
+        <button class="tab-btn" data-tab="outputTab">
+            <span>📊</span> 出力シート（確定勤務表）
+        </button>
+        <button class="tab-btn" data-tab="statsTab">
+            <span>📈</span> 勤務分析・平準化ダッシュボード
+        </button>
+    </nav>
+
+    <!-- メインコンテンツ -->
+    <main class="main-content">
+
+        <!-- 1. 入力シートタブ -->
+        <section id="inputTab" class="tab-panel active">
+            <!-- ターム設定バー（期間・公休日数） -->
+            <div class="toolbar-card" style="margin-bottom: 0.75rem; background: #f8fafc; border-left: 4px solid var(--primary);">
+                <div style="display: flex; flex-wrap: wrap; gap: 1.5rem; align-items: center; justify-content: space-between;">
+                    <div style="display: flex; align-items: center; gap: 0.75rem; font-size: 0.88rem;">
+                        <span style="font-weight: 700; color: #1e293b;">📅 対象期間:</span>
+                        <label style="color: #64748b;">開始日:</label>
+                        <input type="date" id="termStartDate" value="2026-04-01" style="padding: 4px 8px; border: 1px solid #cbd5e1; border-radius: 4px; font-weight: 600;">
+                        <span style="color: #64748b;">〜 終了日:</span>
+                        <span id="termEndDateDisplay" style="font-weight: 700; color: #1e293b;">2026-04-28</span>
+                        <span style="background: #e0f2fe; color: #0284c7; padding: 2px 8px; border-radius: 4px; font-weight: 700; font-size: 0.85rem;" id="termTitleBadge">4/1～4/28勤務表</span>
+                    </div>
+                    <div style="display: flex; align-items: center; gap: 0.5rem; font-size: 0.88rem;">
+                        <span style="font-weight: 700; color: #1e293b;">🏖️ 公休枠制限:</span>
+                        <select id="standardHolidaySelect" style="padding: 4px 8px; border: 1px solid #cbd5e1; border-radius: 4px; font-weight: 600; background: white;">
+                            <option value="8.0" selected>通常月: 8.0日 (4週8休)</option>
+                            <option value="8.5">3月公休調整: 8.5日</option>
+                        </select>
+                    </div>
+                </div>
+            </div>
+
+            <!-- ツールバー・記号パレット -->
+            <div class="toolbar-card">
+                <div class="palette-group" style="display: flex; flex-wrap: wrap; gap: 4px; align-items: center;">
+                    <span class="palette-label">記号パレット:</span>
+                    <button class="palette-btn selected" data-sym="休" title="公休">休</button>
+                    <button class="palette-btn" data-sym="有" title="有給休暇">有</button>
+                    <button class="palette-btn" data-sym="○" title="日勤（基本勤務）">○</button>
+                    <button class="palette-btn" data-sym="出" title="出張">出</button>
+                    <button class="palette-btn" data-sym="早" title="早番 (7:00〜15:30)">早</button>
+                    <button class="palette-btn" data-sym="遅" title="遅番 (11:00〜19:30)">遅</button>
+                    <button class="palette-btn" data-sym="E" title="イブニング (13:00〜21:30)">E</button>
+                    <button class="palette-btn" data-sym="8時" title="8:00開始勤務">8時</button>
+                    <span style="color: #cbd5e1; margin: 0 4px;">|</span>
+                    <!-- ★ 半日勤務記号（数か月に一度の希望） -->
+                    <button class="palette-btn" data-sym="○/休" title="半日出勤 + 半日公休 (各0.5日)" style="background:#f0fdf4; border-color:#86efac; color:#166534;">○/休</button>
+                    <button class="palette-btn" data-sym="休/○" title="半日公休 + 半日出勤 (各0.5日)" style="background:#f0fdf4; border-color:#86efac; color:#166534;">休/○</button>
+                    <button class="palette-btn" data-sym="○/有" title="半日出勤 + 半日有休 (各0.5日)" style="background:#fffbeb; border-color:#fde68a; color:#92400e;">○/有</button>
+                    <button class="palette-btn" data-sym="有/○" title="半日有休 + 半日出勤 (各0.5日)" style="background:#fffbeb; border-color:#fde68a; color:#92400e;">有/○</button>
+                    <span style="color: #cbd5e1; margin: 0 4px;">|</span>
+                    <button class="palette-btn" data-sym="上1" title="夏リフレッシュ休1">上1</button>
+                    <button class="palette-btn" data-sym="上2" title="夏リフレッシュ休2">上2</button>
+                    <button class="palette-btn" data-sym="上3" title="夏リフレッシュ休3">上3</button>
+                    <button class="palette-btn" data-sym="上4" title="夏リフレッシュ休4">上4</button>
+                    <button class="palette-btn" data-sym="上5" title="夏リフレッシュ休5">上5</button>
+                    <span style="color: #cbd5e1; margin: 0 4px;">|</span>
+                    <button class="palette-btn" data-sym="下1" title="冬リフレッシュ休1">下1</button>
+                    <button class="palette-btn" data-sym="下2" title="冬リフレッシュ休2">下2</button>
+                    <button class="palette-btn" data-sym="下3" title="冬リフレッシュ休3">下3</button>
+                    <span style="color: #cbd5e1; margin: 0 4px;">|</span>
+                    <button class="palette-btn" data-sym="CLEAR" title="セルの記号を消去" style="color: #dc2626;">✕ 消去</button>
+                </div>
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-top: 8px; font-size: 0.8rem; color: #64748b; flex-wrap: wrap; gap: 8px;">
+                    <div>💡 セルをクリックすると選択中の記号が入力されます。入力枠は確定時に<strong style="color: #dc2626;">「赤字・太字」</strong>で保持されます。</div>
+                    <div style="display: flex; gap: 8px; align-items: center; flex-wrap: wrap;">
+                        <button class="btn btn-outline" id="downloadBlankTemplateBtn" title="スタッフに配布して希望勤務をPC入力してもらうためのプルダウン付きExcel勤務表をダウンロード" style="font-size: 0.8rem; padding: 4px 10px; color: #166534; border-color: #86efac; background: #f0fdf4;">
+                            📄 スタッフ入力用 空白勤務表 (.xlsx)
+                        </button>
+                        <label class="btn btn-outline" title="スタッフが希望を入力したExcelファイル(.xlsx)やCSVファイルを取り込みます" style="font-size: 0.8rem; padding: 4px 10px; color: #1d4ed8; border-color: #93c5fd; background: #eff6ff; cursor: pointer; margin-bottom: 0;">
+                            📂 希望シート取込 (.xlsx / .csv)
+                            <input type="file" id="importScheduleFileInput" accept=".xlsx,.csv,.tsv,.txt" style="display: none;">
+                        </label>
+                        <button class="btn btn-outline" id="openPasteModalBtn" title="Excelで選択した希望範囲（または表全体）をコピーして直接貼り付け" style="font-size: 0.8rem; padding: 4px 10px; color: #6b21a8; border-color: #d8b4fe; background: #faf5ff;">
+                            📋 貼り付け取込
+                        </button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- ★ 障壁・エラー発生時の薄いブルー網掛け案内バナー -->
+            <div id="conflictAlertBanner" class="conflict-alert-banner"></div>
+
+            <!-- 入力用スプレッドシートテーブル -->
+            <div class="sheet-wrapper">
+                <table class="sheet-table">
+                    <thead id="inputTableHead"></thead>
+                    <tbody id="inputTableBody"></tbody>
+                </table>
+            </div>
+        </section>
+
+        <!-- 2. 出力シートタブ -->
+        <section id="outputTab" class="tab-panel">
+            <div class="toolbar-card">
+                <div style="display: flex; align-items: center; gap: 0.75rem;">
+                    <span id="outputTitleDisplay" style="font-weight: 800; color: #1e293b; font-size: 1.05rem;">4/1～4/28勤務表</span>
+                    <span style="font-size: 0.8rem; color: #64748b;">
+                        （<span style="color: #dc2626; font-weight: 800;">赤字セル</span>: 事前手動入力枠 / 黒字セル: システム自動割当）
+                    </span>
+                </div>
+                <div class="action-group" style="display: flex; gap: 8px; flex-wrap: wrap;">
+                    <button class="btn btn-primary" id="copyForExcelBtn" title="警告やブロックなしでExcelに直接貼り付け可能！事前希望枠の赤字太字・罫線・自動計算数式を保持してクリップボードにコピーします">
+                        📋 Excelへ一発貼り付け用コピー（赤字・数式付き）
+                    </button>
+                    <button class="btn btn-success" id="exportFormulaCsvBtn" title="Excelで警告なしで開け、COUNTIF数式により後からの微調整で自動再計算されます">
+                        📥 数式付きCSV保存（警告ゼロ・自動再計算）
+                    </button>
+                    <button class="btn btn-outline" id="exportExcelBtn" title="書式付きスプレッドシート形式でダウンロード（UTF-8 BOM付き）">
+                        📊 スプレッドシート保存 (.xls)
+                    </button>
+                    <button class="btn btn-outline" onclick="window.print();">
+                        🖨 印刷 / PDF保存
+                    </button>
+                </div>
+            </div>
+
+            <!-- 出力用スプレッドシートテーブル -->
+            <div class="sheet-wrapper">
+                <table class="sheet-table">
+                    <thead id="outputTableHead"></thead>
+                    <tbody id="outputTableBody"></tbody>
+                    <tfoot id="outputTableFoot"></tfoot>
+                </table>
+            </div>
+        </section>
+
+        <!-- 3. 勤務分析・統計ダッシュボードタブ -->
+        <section id="statsTab" class="tab-panel">
+            <div class="stats-grid">
+                <div class="stat-card">
+                    <div class="stat-card-title">1日あたりの平均出勤可能人数（動的目標値）</div>
+                    <div class="stat-card-value" id="statAvgWork">- 名</div>
+                    <div style="font-size: 0.75rem; color: #64748b; margin-top: 4px;">（総枠 1400枠 － 全休日数） ÷ 28日</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-card-title">日別出勤人数の最小・最大（平準化状況）</div>
+                    <div class="stat-card-value" id="statWorkRange">- 名</div>
+                    <div style="font-size: 0.75rem; color: #64748b; margin-top: 4px;">目標値を中心に各日のブレを極小化</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-card-title">特殊勤務（早・遅・E・8時）の配置累計</div>
+                    <div class="stat-card-value" style="font-size: 1.15rem; font-weight: 700;" id="statSpecialCounts">-</div>
+                    <div style="font-size: 0.75rem; color: #64748b; margin-top: 4px;">毎日「早3名 / 遅1名 / E2名 / 8時1名」を完全配置</div>
+                </div>
+            </div>
+
+            <!-- 日別出勤人数グラフ -->
+            <div class="toolbar-card" style="flex-direction: column; align-items: stretch;">
+                <div style="font-weight: 700; color: #1e293b; margin-bottom: 0.75rem;">日別出勤人数グラフ（28日間）</div>
+                <div id="dailyWorkChart" style="display: flex; gap: 6px; align-items: flex-end; padding: 1rem 0; height: 160px;">
+                    <div style="color: #94a3b8; font-size: 0.85rem; margin: auto;">勤務表を自動生成するとグラフが表示されます</div>
+                </div>
+            </div>
+        </section>
+
+    </main>
+
+    <!-- エラー・矛盾検知モーダル -->
+    <div class="modal-overlay" id="errorModal">
+        <div class="modal-card">
+            <div class="modal-header error">
+                <div style="display: flex; align-items: center; gap: 0.5rem;">
+                    <span style="font-size: 1.3rem;">⚠️</span>
+                    <h3 style="font-weight: 700; font-size: 1.1rem;">ハード制約の衝突・解なし（Infeasible）</h3>
+                </div>
+            </div>
+            <div class="modal-body">
+                <p style="font-weight: 600; color: #991b1b; margin-bottom: 0.5rem;">
+                    事前入力枠や制約条件の物理的衝突により、条件を破綻させずに勤務表を作成することができませんでした。
+                </p>
+                <p style="font-size: 0.85rem; color: #475569; margin-bottom: 0.75rem;">
+                    要件定義書の規定に基づき、独断で条件を崩さず処理を直ちに停止しました。以下の原因箇所をご確認の上、入力シートの事前入力枠（赤字）を手動で調整して再計算を実行してください。
+                </p>
+                <ul class="error-list" id="errorList"></ul>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-outline" id="closeModalBtn">閉じる（入力シートを修正する）</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Excel貼り付け取込モーダル -->
+    <div class="modal-overlay" id="pasteModal">
+        <div class="modal-card" style="max-width: 640px;">
+            <div class="modal-header" style="background: #f8fafc; border-bottom: 1px solid #e2e8f0; padding: 12px 16px;">
+                <div style="display: flex; align-items: center; gap: 0.5rem;">
+                    <span style="font-size: 1.2rem;">📋</span>
+                    <h3 style="font-weight: 700; font-size: 1.05rem; color: #1e293b;">Excelからの希望貼り付け取込</h3>
+                </div>
+            </div>
+            <div class="modal-body" style="padding: 16px;">
+                <p style="font-size: 0.85rem; color: #475569; margin-bottom: 8px;">
+                    Excel上で希望入力シートのセル範囲（または表全体）を選択してコピー（<strong>Ctrl + C</strong>）し、下の枠に貼り付け（<strong>Ctrl + V</strong>）してください。<br>
+                    <span style="color: #64748b; font-size: 0.8rem;">※ 表全体、またはスタッフ50名×28日間の希望範囲をそのまま貼り付けできます。</span>
+                </p>
+                <textarea id="pasteInputText" rows="8" style="width: 100%; border: 1px solid #cbd5e1; border-radius: 6px; padding: 8px; font-family: monospace; font-size: 0.8rem; resize: vertical;" placeholder="ここにExcelからコピーした内容を貼り付けてください (Ctrl + V)"></textarea>
+                <div style="margin-top: 10px; font-size: 0.85rem; color: #334155; display: flex; gap: 16px; align-items: center;">
+                    <label style="display: flex; align-items: center; gap: 4px; cursor: pointer;">
+                        <input type="radio" name="pasteMode" value="merge" checked>
+                        <span>空欄以外の希望セルのみ反映（推奨）</span>
+                    </label>
+                    <label style="display: flex; align-items: center; gap: 4px; cursor: pointer;">
+                        <input type="radio" name="pasteMode" value="replace">
+                        <span>既存の希望をクリアして置き換え</span>
+                    </label>
+                </div>
+            </div>
+            <div class="modal-footer" style="padding: 12px 16px; display: flex; justify-content: flex-end; gap: 8px;">
+                <button class="btn btn-outline" id="closePasteModalBtn">キャンセル</button>
+                <button class="btn btn-primary" id="executePasteImportBtn" style="background: #2563eb; color: #fff;">取り込んで反映する</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- ソクリプト読み込み -->
+    <script src="solver.js"></script>
+    <script src="app.js"></script>
+<div id="test-e2e-status" style="position:fixed; top:10px; right:10px; background:#fff; border:2px solid #000; padding:10px; z-index:99999; max-width:400px; font-size:12px;">WAITING</div>
+<script>
+window.addEventListener('load', () => {
+    setTimeout(async () => {
+        const out = [];
+        function log(msg) {
+            console.log(msg);
+            out.push(msg);
+            document.getElementById('test-e2e-status').innerText = out.join('\n');
+        }
+
+        try {
+            log("1. Page loaded.");
+
+            // 雋ｼ繧贋ｻ倥￠繝｢繝ｼ繝繝ｫ繧帝幕縺・            const btnPasteOpen = document.getElementById('openPasteModalBtn');
+            const pasteModal = document.getElementById('pasteModal');
+            const pasteText = document.getElementById('pasteInputText');
+            const btnPasteExec = document.getElementById('executePasteImportBtn');
+
+            if (!btnPasteOpen || !pasteModal || !pasteText || !btnPasteExec) {
+                throw new Error("Paste elements not found!");
+            }
+
+            btnPasteOpen.click();
+            if (!pasteModal.classList.contains('active')) {
+                throw new Error("pasteModal failed to open!");
+            }
+            log("2. Paste modal opened.");
+
+            // 繧ｵ繝ｳ繝励Ν蟶梧悍繝・・繧ｿ・・8蛻怜・・・            let sampleTsv = "";
+            for (let s = 1; s <= 50; s++) {
+                const row = [];
+                for (let d = 0; d < 28; d++) {
+                    if (s === 1 && d === 0) row.push("莨・);
+                    else if (s === 1 && d === 1) row.push("譛・);
+                    else if (s === 2 && d === 5) row.push("譌ｩ");
+                    else if (s === 3 && d === 10) row.push("笳・莨・);
+                    else if (s === 4 && d === 15) row.push("荳・");
+                    else row.push("");
+                }
+                sampleTsv += row.join("\t") + "\n";
+            }
+
+            pasteText.value = sampleTsv;
+            btnPasteExec.click();
+
+            if (pasteModal.classList.contains('active')) {
+                throw new Error("pasteModal failed to close after import!");
+            }
+            log("3. Data imported and modal closed.");
+
+            // 繧ｻ繝ｫ縺ｮ蜿肴丐遒ｺ隱・            const cell1_0 = document.querySelector('.day-cell[data-s="0"][data-d="0"]');
+            const cell1_1 = document.querySelector('.day-cell[data-s="0"][data-d="1"]');
+            const cell2_5 = document.querySelector('.day-cell[data-s="1"][data-d="5"]');
+            const cell3_10 = document.querySelector('.day-cell[data-s="2"][data-d="10"]');
+            const cell4_15 = document.querySelector('.day-cell[data-s="3"][data-d="15"]');
+
+            if (!cell1_0 || cell1_0.innerText !== '莨・ || !cell1_0.classList.contains('fixed-cell')) {
+                throw new Error("cell1_0 failed: " + (cell1_0 ? cell1_0.outerHTML : 'null'));
+            }
+            if (!cell1_1 || cell1_1.innerText !== '譛・ || !cell1_1.classList.contains('fixed-cell')) {
+                throw new Error("cell1_1 failed");
+            }
+            if (!cell2_5 || cell2_5.innerText !== '譌ｩ' || !cell2_5.classList.contains('fixed-cell')) {
+                throw new Error("cell2_5 failed");
+            }
+            if (!cell3_10 || cell3_10.innerText !== '笳・莨・ || !cell3_10.classList.contains('fixed-cell')) {
+                throw new Error("cell3_10 failed");
+            }
+            if (!cell4_15 || cell4_15.innerText !== '荳・' || !cell4_15.classList.contains('fixed-cell')) {
+                throw new Error("cell4_15 failed");
+            }
+            log("4. Imported cells confirmed as fixed-cell (Bold, Red)!");
+
+            // 閾ｪ蜍穂ｽ懈・繝懊ち繝ｳ繧呈款縺励※繧ｽ繝ｫ繝舌・螳溯｡・            const autoBtn = document.getElementById('autoGenerateBtn');
+            autoBtn.click();
+
+            log("5. Solver completed successfully!");
+            log("E2E_TEST_SUCCESS");
+
+        } catch (e) {
+            log("ERROR: " + e.message + "\n" + e.stack);
+        }
+    }, 50);
+});
+</script></body>
+</html>

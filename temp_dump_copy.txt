@@ -1,0 +1,33 @@
+﻿<!DOCTYPE html>
+<html><head><meta charset="utf-8"></head>
+<body>
+<div id="output">RUNNING</div>
+<textarea id="captured"></textarea>
+<script src="solver.js"></script>
+<script src="app.js"></script>
+<script>
+window.addEventListener('DOMContentLoaded', () => {
+    setTimeout(() => {
+        // 郢ｧ・ｵ郢晢ｽｳ郢晏干ﾎ晁ｬ壼供繝ｻ邵ｺ蜉ｱ窶ｻ髫暦ｽ｣邵ｺ繝ｻ        document.getElementById('solveBtn').click();
+        setTimeout(() => {
+            // copyForExcel邵ｺ・ｮHTML郢ｧ蛛ｵ縺冗ｹ晢ｽ｣郢晏干繝｡郢晢ｽ｣邵ｺ蜷ｶ・狗ｸｺ貅假ｽ∫ｸｲ・ｽavigator.clipboard.write郢ｧ蛛ｵﾎ皮ｹ昴・縺・
+            let capturedHtml = '';
+            navigator.clipboard.write = async (items) => {
+                for (const item of items) {
+                    if (item.types.includes('text/html')) {
+                        const blob = await item.getType('text/html');
+                        capturedHtml = await blob.text();
+                    }
+                }
+                const el = document.getElementById('captured');
+                el.value = capturedHtml;
+                document.getElementById('output').innerText = 'DONE';
+            };
+
+            document.getElementById('copyForExcelBtn').click();
+        }, 1000);
+    }, 300);
+});
+</script>
+
+</body></html>

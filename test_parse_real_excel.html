@@ -1,0 +1,147 @@
+<!DOCTYPE html>
+<html>
+<head><meta charset="utf-8"></head>
+<body>
+<div id="res">LOADING...</div>
+<script>
+async function parseXlsxBuffer(arrayBuffer) {
+    const bytes = new Uint8Array(arrayBuffer);
+    const view = new DataView(bytes.buffer);
+    const textDecoder = new TextDecoder();
+    const entries = {};
+
+    let pos = 0;
+    while (pos < bytes.length - 4) {
+        const sig = view.getUint32(pos, true);
+        if (sig === 0x04034b50) {
+            const method = view.getUint16(pos + 8, true);
+            const compSize = view.getUint32(pos + 18, true);
+            const nameLen = view.getUint16(pos + 26, true);
+            const extraLen = view.getUint16(pos + 28, true);
+            const name = textDecoder.decode(bytes.subarray(pos + 30, pos + 30 + nameLen));
+            const dataStart = pos + 30 + nameLen + extraLen;
+            const compData = bytes.subarray(dataStart, dataStart + compSize);
+
+            let decompData = null;
+            if (method === 0) {
+                decompData = compData;
+            } else if (method === 8) {
+                if (typeof DecompressionStream !== 'undefined') {
+                    const ds = new DecompressionStream('deflate-raw');
+                    const writer = ds.writable.getWriter();
+                    writer.write(compData);
+                    writer.close();
+                    const reader = ds.readable.getReader();
+                    const chunks = [];
+                    while (true) {
+                        const { done, value } = await reader.read();
+                        if (done) break;
+                        chunks.push(value);
+                    }
+                    const totalLen = chunks.reduce((acc, c) => acc + c.length, 0);
+                    decompData = new Uint8Array(totalLen);
+                    let off = 0;
+                    for (const c of chunks) {
+                        decompData.set(c, off);
+                        off += c.length;
+                    }
+                }
+            }
+
+            if (decompData) {
+                entries[name] = textDecoder.decode(decompData);
+            }
+            pos = dataStart + compSize;
+        } else {
+            pos++;
+        }
+    }
+
+    const sharedStrings = [];
+    if (entries['xl/sharedStrings.xml']) {
+        const parser = new DOMParser();
+        const xmlDoc = parser.parseFromString(entries['xl/sharedStrings.xml'], 'text/xml');
+        const siNodes = xmlDoc.getElementsByTagName('si');
+        for (let i = 0; i < siNodes.length; i++) {
+            const si = siNodes[i];
+            const tNodes = si.getElementsByTagName('t');
+            let str = '';
+            for (let j = 0; j < tNodes.length; j++) str += tNodes[j].textContent;
+            sharedStrings.push(str);
+        }
+    }
+
+    const items = [];
+    const sheetXml = entries['xl/worksheets/sheet1.xml'];
+    if (!sheetXml) throw new Error('sheet1.xml not found');
+
+    const parser = new DOMParser();
+    const xmlDoc = parser.parseFromString(sheetXml, 'text/xml');
+    const cNodes = xmlDoc.getElementsByTagName('c');
+
+    for (let i = 0; i < cNodes.length; i++) {
+        const c = cNodes[i];
+        const ref = c.getAttribute('r');
+        if (!ref) continue;
+
+        const m = ref.match(/^([A-Z]+)([0-9]+)$/);
+        if (!m) continue;
+
+        const colStr = m[1];
+        const row = parseInt(m[2], 10);
+        let col = 0;
+        for (let k = 0; k < colStr.length; k++) {
+            col = col * 26 + (colStr.charCodeAt(k) - 64);
+        }
+
+        // L(12)〜AM(39), row 3〜52
+        if (row >= 3 && row <= 52 && col >= 12 && col <= 39) {
+            const t = c.getAttribute('t');
+            let val = '';
+            if (t === 's') {
+                const vNode = c.getElementsByTagName('v')[0];
+                if (vNode) {
+                    const idx = parseInt(vNode.textContent, 10);
+                    val = sharedStrings[idx] || '';
+                }
+            } else if (t === 'inlineStr') {
+                const isNode = c.getElementsByTagName('is')[0];
+                if (isNode) {
+                    const tNodes = isNode.getElementsByTagName('t');
+                    for (let j = 0; j < tNodes.length; j++) val += tNodes[j].textContent;
+                }
+            } else {
+                const vNode = c.getElementsByTagName('v')[0];
+                if (vNode) val = vNode.textContent;
+            }
+
+            if (val && val.trim() !== '') {
+                items.push({
+                    staffIdx: row - 3,
+                    dayIdx: col - 12,
+                    symbol: val.trim()
+                });
+            }
+        }
+    }
+    return items;
+}
+
+async function run() {
+    try {
+        const resp = await fetch('temp_b64.txt');
+        const b64 = await resp.text();
+        const binary = atob(b64.trim());
+        const bytes = new Uint8Array(binary.length);
+        for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+
+        const items = await parseXlsxBuffer(bytes.buffer);
+        document.getElementById('res').innerText = 'PARSE_SUCCESS: count=' + items.length + ', items=' + JSON.stringify(items);
+    } catch (e) {
+        document.getElementById('res').innerText = 'ERR: ' + e.message;
+    }
+}
+run();
+</script>
+</body>
+</html>

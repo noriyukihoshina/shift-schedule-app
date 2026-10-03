@@ -1,0 +1,45 @@
+<!DOCTYPE html>
+<html>
+<head><meta charset="utf-8"></head>
+<body>
+<div id="out"></div>
+<script src="solver.js"></script>
+<script src="app.js"></script>
+<script>
+window.addEventListener('DOMContentLoaded', () => {
+    setTimeout(() => {
+        // 自動生成を実行
+        const autoBtn = document.getElementById('autoGenerateBtn');
+        if (autoBtn) autoBtn.click();
+
+        setTimeout(() => {
+            // copyForExcelの出力をキャプチャするため、関数を呼んでHTMLとプレーンテキストを調べる
+            const table = document.querySelector('#outputTableBody');
+            console.log("Output table rows:", table ? table.rows.length : 0);
+
+            // lastSolveResult をチェック
+            const term = getTermInfo();
+            const startCol = 'C';
+            const endCol = 'AD';
+
+            // スタッフ1 (row 3) と スタッフ2 (row 4) の数式を確認
+            const s1_rng = `C3:AD3`;
+            const s2_rng = `C4:AD4`;
+
+            // 出力テーブルのヘッダーを確認
+            const head = document.getElementById('outputTableHead');
+            const foot = document.getElementById('outputTableFoot');
+
+            document.getElementById('out').innerText = JSON.stringify({
+                termTitle: term.title,
+                headHtml: head ? head.innerHTML : '',
+                footHtml: foot ? foot.innerHTML : '',
+                row1_cells: table && table.rows[0] ? Array.from(table.rows[0].cells).map(c => c.innerText) : [],
+                row2_cells: table && table.rows[1] ? Array.from(table.rows[1].cells).map(c => c.innerText) : []
+            }, null, 2);
+        }, 500);
+    }, 200);
+});
+</script>
+</body>
+</html>

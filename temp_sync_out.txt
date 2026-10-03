@@ -1,0 +1,107 @@
+﻿<!DOCTYPE html>
+<html><head><meta charset="utf-8"></head>
+<body>
+<input type="date" id="termStartDate" value="2026-04-01">
+<span id="termEndDateDisplay"></span>
+<span id="termTitleBadge"></span>
+<span id="outputTitleDisplay"></span>
+<table><thead id="inputTableHead"></thead><tbody id="inputTableBody"></tbody></table>
+
+<div id="test-log">ERROR: staffList is not defined<br>1. Init check.</div>
+
+<script src="solver.js"></script>
+<script src="app.js"></script>
+<script>
+// app.js 縺ｮ DOMContentLoaded 縺ｯ譌｢縺ｫ襍ｰ繧・
+async function runTest() {
+    const logs = [];
+    function log(msg) { logs.push(msg); }
+
+    try {
+        log("1. Init check.");
+        // 蛻晄悄迥ｶ諷狗｢ｺ隱・
+        const st2_d5_init = staffList[1].days[4];
+        log("2. Initial Staff 2 day 5=" + st2_d5_init);
+
+        // 4/29縲・/26縺ｮXLSX繧呈ｨ｡縺励◆繝・・繧ｿ
+        // verified_staff_blank_template.xlsx 縺ｮ繧ｿ繧､繝医Ν繧・・繝・ム繝ｼ繧貞・迴ｾ
+        // parseXlsxBuffer 縺ｫ貂｡縺吩ｻ｣繧上ｊ縺ｫ縲｝arseXlsxBuffer 縺ｧ讀懷・縺輔ｌ繧九Ο繧ｸ繝・け繧堤峩謗･繝・せ繝・
+        const mockSharedStrings = [
+            "4譛・9譌･・・譛・6譌･ 繧ｹ繧ｿ繝・ヵ蟶梧悍蜍､蜍吝・蜉帙す繝ｼ繝茨ｼ亥ｸ梧悍蜍､蜍吶・繝励Ν繝繧ｦ繝ｳ縺九ｉ驕ｸ謚槭＠縺ｦ縺上□縺輔＞・・,
+            "No", "豌丞錐", "4/29", "4/30"
+        ];
+        const titleRegex = /(?:(\d{4})[蟷ｴ\/-])?(\d{1,2})譛・\d{1,2})譌･[・槭恠-](\d{1,2})譛・\d{1,2})譌･/;
+        let detected = null;
+        for (const str of mockSharedStrings) {
+            const m = str.match(titleRegex);
+            if (m) {
+                const y = m[1] ? parseInt(m[1], 10) : 2026;
+                const mon = String(parseInt(m[2], 10)).padStart(2, '0');
+                const day = String(parseInt(m[3], 10)).padStart(2, '0');
+                detected = `${y}-${mon}-${day}`;
+                break;
+            }
+        }
+        log("3. Detected startDate=" + detected);
+        if (detected !== '2026-04-29') throw new Error("Regex title detection failed: " + detected);
+
+        // 譌･莉倥ｒ蜿肴丐
+        document.getElementById('termStartDate').value = detected;
+        getTermInfo();
+
+        // 菴占陸蛛･荳(0) 縺ｮ蟶梧悍繝・・繧ｿ繧偵う繝ｳ繝昴・繝・(replace 繝｢繝ｼ繝・
+        const importedItems = [
+            { staffIdx: 0, dayIdx: 1, symbol: '莨・ },
+            { staffIdx: 0, dayIdx: 2, symbol: '譛・ }
+        ];
+
+        applyScheduleImport(importedItems, 'replace');
+
+        // 讀懆ｨｼ1: 譛滄俣縺ｨ繝舌ャ繧ｸ
+        const curStart = document.getElementById('termStartDate').value;
+        const curEnd = document.getElementById('termEndDateDisplay').textContent;
+        const curBadge = document.getElementById('termTitleBadge').textContent;
+        log("4. Dates: Start=" + curStart + ", End=" + curEnd + ", Badge=" + curBadge);
+
+        if (curStart !== '2026-04-29') throw new Error('Start date not updated!');
+        if (curEnd !== '2026-05-26') throw new Error('End date not updated!');
+        if (!curBadge.includes('4/29・・/26')) throw new Error('Badge not updated!');
+
+        // 讀懆ｨｼ2: 繝倥ャ繝繝ｼ
+        const ths = document.querySelectorAll('#inputTableHead tr:nth-child(2) th');
+        const d1Th = ths[5];
+        const d28Th = ths[ths.length - 1];
+        log("5. Header: Day1=" + d1Th.innerText.replace(/\n/g, ' ') + ", Day28=" + d28Th.innerText.replace(/\n/g, ' '));
+
+        if (!d1Th.innerText.includes('4/29') || !d1Th.innerText.includes('豌ｴ')) {
+            throw new Error('Day1 header wrong: ' + d1Th.innerText);
+        }
+        if (!d28Th.innerText.includes('5/26') || !d28Th.innerText.includes('轣ｫ')) {
+            throw new Error('Day28 header wrong: ' + d28Th.innerText);
+        }
+
+        // 讀懆ｨｼ3: 蜿､縺・し繝ｳ繝励Ν繝・・繧ｿ・磯斡譛ｨ鄒主調縺ｮ5譌･逶ｮ縲梧怏縲阪↑縺ｩ・峨′螳悟・繧ｯ繝ｪ繧｢縺輔ｌ縺ｦ縺・ｋ縺・
+        const cellSt2_d5 = document.querySelector('.day-cell[data-s="1"][data-d="4"]');
+        log("6. Old sample check: Staff 2 Day 5 cell text='" + (cellSt2_d5 ? cellSt2_d5.innerText : 'null') + "'");
+        if (cellSt2_d5 && cellSt2_d5.innerText !== '') {
+            throw new Error('Old sample data still exists in cell! Text=' + cellSt2_d5.innerText);
+        }
+
+        // 讀懆ｨｼ4: 蜿悶ｊ霎ｼ繧薙□蟶梧悍繝・・繧ｿ縺ｮ縺ｿ縺悟渚譏縺輔ｌ縺ｦ縺・ｋ縺・
+        const cellSt1_d2 = document.querySelector('.day-cell[data-s="0"][data-d="1"]');
+        const cellSt1_d3 = document.querySelector('.day-cell[data-s="0"][data-d="2"]');
+        log("7. Imported check: Staff 1 Day 2='" + (cellSt1_d2 ? cellSt1_d2.innerText : '') + "', Day 3='" + (cellSt1_d3 ? cellSt1_d3.innerText : '') + "'");
+
+        if (!cellSt1_d2 || cellSt1_d2.innerText !== '莨・) throw new Error('Staff 1 Day 2 莨・not applied');
+        if (!cellSt1_d3 || cellSt1_d3.innerText !== '譛・) throw new Error('Staff 1 Day 3 譛・not applied');
+
+        document.getElementById('test-log').innerText = "SUCCESS_ALL_TESTS_PASSED\n" + logs.join("\n");
+    } catch (e) {
+        document.getElementById('test-log').innerText = "ERROR: " + e.message + "\n" + logs.join("\n");
+    }
+}
+runTest();
+</script>
+
+
+</body></html>

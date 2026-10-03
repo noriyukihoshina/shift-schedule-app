@@ -1,0 +1,213 @@
+<!DOCTYPE html>
+<html>
+<head><meta charset="utf-8"></head>
+<body>
+<div id="status">INITIALIZING</div>
+<script src="solver.js"></script>
+<script src="app.js"></script>
+<script>
+async function runTests() {
+    try {
+        const term = getTermInfo();
+        console.log("Term:", term.startMonth, term.startDate);
+
+        // 1. スタッフ希望を何件かセット
+        inputGrid[0][0] = { symbol: '休', isFixed: true };
+        inputGrid[0][1] = { symbol: '有', isFixed: true };
+        inputGrid[1][5] = { symbol: '早', isFixed: true };
+        inputGrid[2][10] = { symbol: '○/休', isFixed: true };
+
+        // 2. downloadBlankXlsxのロジックをテスト実行し、Base64を取得
+        // downloadBlankXlsx内の生成部分を検証
+        const title = `${term.startMonth}月${term.startDate}日～${term.endMonth}月${term.endDate}日 スタッフ希望勤務入力シート（希望勤務はプルダウンから選択してください）`;
+
+        const contentTypes = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">
+  <Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/>
+  <Default Extension="xml" ContentType="application/xml"/>
+  <Override PartName="/xl/workbook.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml"/>
+  <Override PartName="/xl/worksheets/sheet1.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/>
+  <Override PartName="/xl/styles.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.styles+xml"/>
+</Types>`;
+
+        const rels = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">
+  <Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="xl/workbook.xml"/>
+</Relationships>`;
+
+        const workbook = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships">
+  <sheets>
+    <sheet name="希望入力シート" sheetId="1" r:id="rId1"/>
+  </sheets>
+</workbook>`;
+
+        const wbRels = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">
+  <Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet1.xml"/>
+  <Relationship Id="rId2" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles" Target="styles.xml"/>
+</Relationships>`;
+
+        const styles = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<styleSheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">
+  <fonts count="4">
+    <font><sz val="11"/><name val="游ゴシック"/></font>
+    <font><b/><sz val="11"/><name val="游ゴシック"/></font>
+    <font><b/><sz val="12"/><name val="游ゴシック"/><color rgb="1E293B"/></font>
+    <font><b/><sz val="11"/><name val="游ゴシック"/><color rgb="DC2626"/></font>
+  </fonts>
+  <fills count="6">
+    <fill><patternFill patternType="none"/></fill>
+    <fill><patternFill patternType="gray125"/></fill>
+    <fill><patternFill patternType="solid"><fgColor rgb="F1F5F9"/></patternFill></fill>
+    <fill><patternFill patternType="solid"><fgColor rgb="EFF6FF"/></patternFill></fill>
+    <fill><patternFill patternType="solid"><fgColor rgb="FEF2F2"/></patternFill></fill>
+    <fill><patternFill patternType="solid"><fgColor rgb="F0FDF4"/></patternFill></fill>
+  </fills>
+  <borders count="2">
+    <border><left/><right/><top/><bottom/></border>
+    <border>
+      <left style="thin"><color rgb="CBD5E1"/></left>
+      <right style="thin"><color rgb="CBD5E1"/></right>
+      <top style="thin"><color rgb="CBD5E1"/></top>
+      <bottom style="thin"><color rgb="CBD5E1"/></bottom>
+    </border>
+  </borders>
+  <cellStyleXfs count="1">
+    <xf numFmtId="0" fontId="0" fillId="0" borderId="0"/>
+  </cellStyleXfs>
+  <cellXfs count="8">
+    <xf numFmtId="0" fontId="0" fillId="0" borderId="0" xfId="0"/>
+    <xf numFmtId="0" fontId="2" fillId="0" borderId="0" xfId="0"><alignment horizontal="left" vertical="center"/></xf>
+    <xf numFmtId="0" fontId="1" fillId="2" borderId="1" xfId="0"><alignment horizontal="center" vertical="center"/></xf>
+    <xf numFmtId="0" fontId="1" fillId="3" borderId="1" xfId="0"><alignment horizontal="center" vertical="center"/></xf>
+    <xf numFmtId="0" fontId="1" fillId="4" borderId="1" xfId="0"><alignment horizontal="center" vertical="center"/></xf>
+    <xf numFmtId="0" fontId="0" fillId="0" borderId="1" xfId="0"><alignment horizontal="center" vertical="center"/></xf>
+    <xf numFmtId="0" fontId="0" fillId="0" borderId="1" xfId="0"><alignment horizontal="left" vertical="center"/></xf>
+    <xf numFmtId="0" fontId="1" fillId="5" borderId="1" xfId="0"><alignment horizontal="center" vertical="center"/></xf>
+  </cellXfs>
+</styleSheet>`;
+
+        function toColLetter(colIdx) {
+            let temp = colIdx;
+            let letter = '';
+            while (temp > 0) {
+                let rem = (temp - 1) % 26;
+                letter = String.fromCharCode(65 + rem) + letter;
+                temp = Math.floor((temp - 1) / 26);
+            }
+            return letter;
+        }
+
+        let sheet1 = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">
+  <sheetViews><sheetView tabSelected="1" workbookViewId="0"/></sheetViews>
+  <sheetFormatPr defaultRowHeight="18"/>
+  <cols>
+    <col min="1" max="1" width="5" customWidth="1"/>
+    <col min="2" max="2" width="16" customWidth="1"/>
+    <col min="3" max="6" width="7" customWidth="1"/>
+    <col min="7" max="11" width="6" customWidth="1"/>
+    <col min="12" max="39" width="6" customWidth="1"/>
+    <col min="40" max="41" width="11" customWidth="1"/>
+    <col min="42" max="42" width="16" customWidth="1"/>
+  </cols>
+  <sheetData>
+    <row r="1" ht="24" customHeight="1">
+      <c r="A1" s="1" t="inlineStr"><is><t>${title}</t></is></c>
+    </row>
+    <row r="2" ht="22" customHeight="1">
+      <c r="A2" s="2" t="inlineStr"><is><t>No</t></is></c>
+      <c r="B2" s="2" t="inlineStr"><is><t>氏名</t></is></c>
+      <c r="C2" s="2" t="inlineStr"><is><t>8時可</t></is></c>
+      <c r="D2" s="2" t="inlineStr"><is><t>早不可</t></is></c>
+      <c r="E2" s="2" t="inlineStr"><is><t>遅不可</t></is></c>
+      <c r="F2" s="2" t="inlineStr"><is><t>E不可</t></is></c>
+      <c r="G2" s="2" t="inlineStr"><is><t>前5</t></is></c>
+      <c r="H2" s="2" t="inlineStr"><is><t>前4</t></is></c>
+      <c r="I2" s="2" t="inlineStr"><is><t>前3</t></is></c>
+      <c r="J2" s="2" t="inlineStr"><is><t>前2</t></is></c>
+      <c r="K2" s="2" t="inlineStr"><is><t>前1</t></is></c>`;
+
+        for (let d = 0; d < 28; d++) {
+            const di = term.dates[d];
+            const colLetter = toColLetter(12 + d);
+            let sIdx = 2;
+            if (di.weekday === '土') sIdx = 3;
+            else if (di.weekday === '日' || di.isHoliday) sIdx = 4;
+            const dateStr = `${di.month}/${di.day}(${di.weekday})`;
+            sheet1 += `\n      <c r="${colLetter}2" s="${sIdx}" t="inlineStr"><is><t>${dateStr}</t></is></c>`;
+        }
+        sheet1 += `\n      <c r="AN2" s="2" t="inlineStr"><is><t>希望休数</t></is></c>`;
+        sheet1 += `\n      <c r="AO2" s="2" t="inlineStr"><is><t>希望有休数</t></is></c>`;
+        sheet1 += `\n      <c r="AP2" s="2" t="inlineStr"><is><t>備考</t></is></c>`;
+        sheet1 += `\n    </row>`;
+
+        for (let s = 0; s < 50; s++) {
+            const staff = staffList[s];
+            const r = s + 3;
+            sheet1 += `\n    <row r="${r}" ht="20" customHeight="1">`;
+            sheet1 += `\n      <c r="A${r}" s="5"><v>${staff.id}</v></c>`;
+            sheet1 += `\n      <c r="B${r}" s="6" t="inlineStr"><is><t>${staff.name}</t></is></c>`;
+            sheet1 += `\n      <c r="C${r}" s="5"><v>${staff.can8 ? 1 : 0}</v></c>`;
+            sheet1 += `\n      <c r="D${r}" s="5"><v>${staff.noEarly ? 1 : 0}</v></c>`;
+            sheet1 += `\n      <c r="E${r}" s="5"><v>${staff.noLate ? 1 : 0}</v></c>`;
+            sheet1 += `\n      <c r="F${r}" s="5"><v>${staff.noEve ? 1 : 0}</v></c>`;
+            for (let p = 0; p < 5; p++) {
+                const colLetter = toColLetter(7 + p);
+                const prevSym = staff.prevDays[p] || '';
+                sheet1 += `\n      <c r="${colLetter}${r}" s="5" t="inlineStr"><is><t>${prevSym}</t></is></c>`;
+            }
+            for (let d = 0; d < 28; d++) {
+                const colLetter = toColLetter(12 + d);
+                const cell = inputGrid[s] && inputGrid[s][d];
+                if (cell && cell.symbol) {
+                    sheet1 += `\n      <c r="${colLetter}${r}" s="5" t="inlineStr"><is><t>${cell.symbol}</t></is></c>`;
+                } else {
+                    sheet1 += `\n      <c r="${colLetter}${r}" s="5"/>`;
+                }
+            }
+            const fOff = `COUNTIF(L${r}:AM${r},&quot;休&quot;)+0.5*(COUNTIF(L${r}:AM${r},&quot;○/休&quot;)+COUNTIF(L${r}:AM${r},&quot;休/○&quot;))`;
+            const fPaid = `COUNTIF(L${r}:AM${r},&quot;有&quot;)+0.5*(COUNTIF(L${r}:AM${r},&quot;○/有&quot;)+COUNTIF(L${r}:AM${r},&quot;有/○&quot;))`;
+            sheet1 += `\n      <c r="AN${r}" s="7"><f>${fOff}</f><v>0</v></c>`;
+            sheet1 += `\n      <c r="AO${r}" s="7"><f>${fPaid}</f><v>0</v></c>`;
+            sheet1 += `\n      <c r="AP${r}" s="5"/>`;
+            sheet1 += `\n    </row>`;
+        }
+        sheet1 += `\n  </sheetData>`;
+        sheet1 += `\n  <dataValidations count="1">
+    <dataValidation type="list" allowBlank="1" showInputMessage="1" showErrorMessage="1" sqref="L3:AM52" promptTitle="希望勤務の選択" prompt="プルダウンから希望勤務記号を選択してください。" errorTitle="入力値エラー" error="一覧（プルダウン）にある記号のみ入力できます。">
+      <formula1>&quot;休,有,○,出,早,遅,E,8時,○/休,休/○,○/有,有/○,上1,上2,上3,上4,上5,下1,下2,下3&quot;</formula1>
+    </dataValidation>
+  </dataValidations>`;
+        sheet1 += `\n  <pageMargins left="0.7" right="0.7" top="0.75" bottom="0.75" header="0.3" footer="0.3"/>\n</worksheet>`;
+
+        const files = [
+            { name: '[Content_Types].xml', data: contentTypes },
+            { name: '_rels/.rels', data: rels },
+            { name: 'xl/workbook.xml', data: workbook },
+            { name: 'xl/_rels/workbook.xml.rels', data: wbRels },
+            { name: 'xl/styles.xml', data: styles },
+            { name: 'xl/worksheets/sheet1.xml', data: sheet1 }
+        ];
+
+        // zipCrcTable and createZipUint8Array from app.js
+        const zipBuf = createZipUint8Array(files);
+
+        // 3. parseXlsxBufferで逆パースできるかテスト
+        const parsedItems = await parseXlsxBuffer(zipBuf.buffer);
+        console.log("Parsed items count:", parsedItems.length);
+
+        let binary = '';
+        for (let i = 0; i < zipBuf.length; i++) binary += String.fromCharCode(zipBuf[i]);
+        const b64 = btoa(binary);
+
+        document.getElementById('status').innerText = `SUCCESS: items=${parsedItems.length}, b64len=${b64.length}, b64=${b64}`;
+    } catch (e) {
+        document.getElementById('status').innerText = `ERROR: ${e.message}\n${e.stack}`;
+    }
+}
+window.addEventListener('DOMContentLoaded', runTests);
+</script>
+</body>
+</html>

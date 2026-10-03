@@ -1,0 +1,24 @@
+﻿<html><body>
+<table border= 1>
+<tr>
+  <th>No</th><th>氏名</th><th>4/29</th><th>4/30</th><th>出勤</th><th>公休</th>
+</tr>
+<tr>
+  <td>1</td><td>佐藤 健一</td><td>○</td><td>休</td>
+  <td>=COUNTIF(C2:D2,○)</td>
+  <td>=COUNTIF(C2:D2,休)</td>
+</tr>
+<tr>
+  <td>2</td><td>鈴木 美咲</td><td>休</td><td>○</td>
+  <td>=COUNTIF(C3:D3,○)</td>
+  <td>=COUNTIF(C3:D3,休)</td>
+</tr>
+<tr>
+  <th colspan=2>出勤人数合計</th>
+  <td>=COUNTIF(C2:C3,○)</td>
+  <td>=COUNTIF(D2:D3,○)</td>
+  <td>=SUM(E2:E3)</td>
+  <td>=SUM(F2:F3)</td>
+</tr>
+</table>
+</body></html>
