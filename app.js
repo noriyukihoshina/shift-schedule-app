@@ -632,11 +632,12 @@ document.addEventListener('DOMContentLoaded', () => {
 
             for (let d = 0; d < NUM_DAYS; d++) {
                 const cell = grid[s][d];
+                const displaySym = cell.symbol ? cell.symbol.replace(/[◦•･◯〇●]/g, '○') : '';
                 // 事前入力希望枠は赤字・太字（網掛けなし！）
                 const cls = cell.isFixed ? 'day-cell fixed-cell' : 'day-cell auto-cell';
                 const thickCls = ((d + 1) % 7 === 0) ? 'border-thick-right' : '';
                 const titleText = cell.isFixed ? '🔒 事前固定希望枠（赤字・太字保持）' : 'システム自動配置';
-                bodyHtml += `<td class="${cls} ${thickCls} ${rowBottomCls}" title="${titleText}">${cell.symbol}</td>`;
+                bodyHtml += `<td class="${cls} ${thickCls} ${rowBottomCls}" title="${titleText}">${displaySym}</td>`;
             }
 
             bodyHtml += `
@@ -881,18 +882,19 @@ document.addEventListener('DOMContentLoaded', () => {
         const endCol = 'AD';
 
         // 罫線スタイル定義（画像3のメリハリある区切り）
+        const fontMeiryo = "font-family:'Meiryo', 'Yu Gothic', 'MS PGothic', sans-serif;";
         const borderThin = 'border:0.5pt solid #cbd5e1;';
         const borderThickR = 'border-right:2pt solid #475569;';
         const borderMediumR = 'border-right:1.5pt solid #64748b;';
         const borderThickB = 'border-bottom:2pt solid #475569;';
 
-        let html = `<table style="border-collapse:collapse; font-family:'Meiryo',sans-serif; font-size:10pt; border:2pt solid #475569;">
+        let html = `<table style="border-collapse:collapse; ${fontMeiryo} font-size:10pt; border:2pt solid #475569;">
 <thead>
   <tr>
-    <th rowspan="2" style="background-color:#f1f5f9; font-weight:bold; ${borderThin} ${borderThickB}">No</th>
-    <th rowspan="2" style="background-color:#f1f5f9; font-weight:bold; ${borderThin} ${borderThickR} ${borderThickB}">氏名</th>
-    <th colspan="${NUM_DAYS}" style="background-color:#f8fafc; color:#1e293b; font-weight:bold; font-size:11pt; ${borderThin} ${borderThickR} ${borderThickB}">${term.title}（赤字太字: 事前希望枠 / 黒字: 自動配置）</th>
-    <th colspan="8" style="background-color:#e0f2fe; color:#0369a1; font-weight:bold; ${borderThin} ${borderThickB}">勤務・休暇 集計（自動計算数式）</th>
+    <th rowspan="2" style="${fontMeiryo} background-color:#f1f5f9; font-weight:bold; ${borderThin} ${borderThickB}">No</th>
+    <th rowspan="2" style="${fontMeiryo} background-color:#f1f5f9; font-weight:bold; ${borderThin} ${borderThickR} ${borderThickB}">氏名</th>
+    <th colspan="${NUM_DAYS}" style="${fontMeiryo} background-color:#f8fafc; color:#1e293b; font-weight:bold; font-size:11pt; ${borderThin} ${borderThickR} ${borderThickB}">${term.title}（赤字太字: 事前希望枠 / 黒字: 自動配置）</th>
+    <th colspan="8" style="${fontMeiryo} background-color:#e0f2fe; color:#0369a1; font-weight:bold; ${borderThin} ${borderThickB}">勤務・休暇 集計（自動計算数式）</th>
   </tr>
   <tr>
 `;
@@ -902,17 +904,17 @@ document.addEventListener('DOMContentLoaded', () => {
             const bg = dateInfo.wIdx === 5 ? '#e0f2fe' : (dateInfo.wIdx === 6 ? '#ffe4e6' : '#f1f5f9');
             const col = dateInfo.wIdx === 5 ? '#0284c7' : (dateInfo.wIdx === 6 ? '#e11d48' : '#1e293b');
             const rightBorder = ((d + 1) === NUM_DAYS) ? borderThickR : (((d + 1) % 7 === 0) ? borderMediumR : '');
-            html += `    <th style="background-color:${bg}; color:${col}; font-weight:bold; ${borderThin} ${rightBorder} ${borderThickB}">${dateInfo.label}<br><small>${dateInfo.weekday}</small></th>\n`;
+            html += `    <th style="${fontMeiryo} background-color:${bg}; color:${col}; font-weight:bold; ${borderThin} ${rightBorder} ${borderThickB}">${dateInfo.label}<br><small>${dateInfo.weekday}</small></th>\n`;
         }
 
-        html += `    <th style="background-color:#f1f5f9; font-weight:bold; ${borderThin} ${borderThickB}">出勤</th>
-    <th style="background-color:#f1f5f9; color:#2563eb; font-weight:bold; ${borderThin} ${borderThickB}">公休</th>
-    <th style="background-color:#fef3c7; color:#b45309; font-weight:bold; ${borderThin} ${borderThickB}">有休</th>
-    <th style="background-color:#f1f5f9; color:#059669; font-weight:bold; ${borderThin} ${borderThickB}">リフ</th>
-    <th style="background-color:#f1f5f9; font-weight:bold; ${borderThin} ${borderThickB}">早</th>
-    <th style="background-color:#f1f5f9; font-weight:bold; ${borderThin} ${borderThickB}">遅</th>
-    <th style="background-color:#f1f5f9; font-weight:bold; ${borderThin} ${borderThickB}">E</th>
-    <th style="background-color:#f1f5f9; font-weight:bold; ${borderThin} ${borderThickB}">8時</th>
+        html += `    <th style="${fontMeiryo} background-color:#f1f5f9; font-weight:bold; ${borderThin} ${borderThickB}">出勤</th>
+    <th style="${fontMeiryo} background-color:#f1f5f9; color:#2563eb; font-weight:bold; ${borderThin} ${borderThickB}">公休</th>
+    <th style="${fontMeiryo} background-color:#fef3c7; color:#b45309; font-weight:bold; ${borderThin} ${borderThickB}">有休</th>
+    <th style="${fontMeiryo} background-color:#f1f5f9; color:#059669; font-weight:bold; ${borderThin} ${borderThickB}">リフ</th>
+    <th style="${fontMeiryo} background-color:#f1f5f9; font-weight:bold; ${borderThin} ${borderThickB}">早</th>
+    <th style="${fontMeiryo} background-color:#f1f5f9; font-weight:bold; ${borderThin} ${borderThickB}">遅</th>
+    <th style="${fontMeiryo} background-color:#f1f5f9; font-weight:bold; ${borderThin} ${borderThickB}">E</th>
+    <th style="${fontMeiryo} background-color:#f1f5f9; font-weight:bold; ${borderThin} ${borderThickB}">8時</th>
   </tr>
 </thead>
 <tbody>
@@ -940,34 +942,35 @@ document.addEventListener('DOMContentLoaded', () => {
             const fH8 = `=COUNTIF(${rng},"8時")`;
 
             html += `  <tr>\n`;
-            html += `    <td style="font-weight:bold; ${borderThin} ${rowBottom} text-align:center;">${staff.id}</td>\n`;
-            html += `    <td style="font-weight:bold; ${borderThin} ${borderThickR} ${rowBottom} text-align:left;">${staff.name}</td>\n`;
+            html += `    <td style="${fontMeiryo} font-weight:bold; ${borderThin} ${rowBottom} text-align:center;">${staff.id}</td>\n`;
+            html += `    <td style="${fontMeiryo} font-weight:bold; ${borderThin} ${borderThickR} ${rowBottom} text-align:left;">${staff.name}</td>\n`;
 
             plainText += `${staff.id}\t${staff.name}`;
 
             for (let d = 0; d < NUM_DAYS; d++) {
                 const cell = grid[s][d];
-                plainText += `\t${cell.symbol}`;
+                const sym = cell.symbol ? cell.symbol.replace(/[◦•･◯〇●]/g, '○') : '';
+                plainText += `\t${sym}`;
                 const rightBorder = ((d + 1) === NUM_DAYS) ? borderThickR : (((d + 1) % 7 === 0) ? borderMediumR : '');
 
                 // ★ 要望対応: 希望枠の網掛け（背景色）は完全除去！文字色のみ赤字・太字！
                 if (cell.isFixed) {
-                    html += `    <td style="color:#DC2626 !important; font-weight:bold !important; ${borderThin} ${rightBorder} ${rowBottom} text-align:center;"><b style="color:#DC2626;">${cell.symbol}</b></td>\n`;
+                    html += `    <td style="${fontMeiryo} color:#DC2626 !important; font-weight:bold !important; ${borderThin} ${rightBorder} ${rowBottom} text-align:center;"><b style="color:#DC2626;">${sym}</b></td>\n`;
                 } else {
-                    html += `    <td style="${borderThin} ${rightBorder} ${rowBottom} text-align:center;">${cell.symbol}</td>\n`;
+                    html += `    <td style="${fontMeiryo} ${borderThin} ${rightBorder} ${rowBottom} text-align:center;">${sym}</td>\n`;
                 }
             }
 
             const staffStat = (stats.staffStats && stats.staffStats[s]) ? stats.staffStats[s] : { workDays: 0, offDays: 0, paidDays: 0, refDays: 0, early: 0, late: 0, eve: 0, h8: 0 };
 
-            html += `    <td style="font-weight:bold; ${borderThin} ${rowBottom} text-align:center;">${fWork}</td>\n`;
-            html += `    <td style="font-weight:bold; color:#2563eb; ${borderThin} ${rowBottom} text-align:center;">${fOff}</td>\n`;
-            html += `    <td style="font-weight:bold; color:#b45309; background-color:#fef3c7; ${borderThin} ${rowBottom} text-align:center;">${fPaid}</td>\n`;
-            html += `    <td style="font-weight:bold; color:#059669; ${borderThin} ${rowBottom} text-align:center;">${fRef}</td>\n`;
-            html += `    <td style="${borderThin} ${rowBottom} text-align:center;">${fEarly}</td>\n`;
-            html += `    <td style="${borderThin} ${rowBottom} text-align:center;">${fLate}</td>\n`;
-            html += `    <td style="${borderThin} ${rowBottom} text-align:center;">${fEve}</td>\n`;
-            html += `    <td style="${borderThin} ${rowBottom} text-align:center;">${fH8}</td>\n`;
+            html += `    <td style="${fontMeiryo} font-weight:bold; ${borderThin} ${rowBottom} text-align:center;">${fWork}</td>\n`;
+            html += `    <td style="${fontMeiryo} font-weight:bold; color:#2563eb; ${borderThin} ${rowBottom} text-align:center;">${fOff}</td>\n`;
+            html += `    <td style="${fontMeiryo} font-weight:bold; color:#b45309; background-color:#fef3c7; ${borderThin} ${rowBottom} text-align:center;">${fPaid}</td>\n`;
+            html += `    <td style="${fontMeiryo} font-weight:bold; color:#059669; ${borderThin} ${rowBottom} text-align:center;">${fRef}</td>\n`;
+            html += `    <td style="${fontMeiryo} ${borderThin} ${rowBottom} text-align:center;">${fEarly}</td>\n`;
+            html += `    <td style="${fontMeiryo} ${borderThin} ${rowBottom} text-align:center;">${fLate}</td>\n`;
+            html += `    <td style="${fontMeiryo} ${borderThin} ${rowBottom} text-align:center;">${fEve}</td>\n`;
+            html += `    <td style="${fontMeiryo} ${borderThin} ${rowBottom} text-align:center;">${fH8}</td>\n`;
             html += `  </tr>\n`;
 
             plainText += `\t${fWork}\t${fOff}\t${fPaid}\t${fRef}\t${fEarly}\t${fLate}\t${fEve}\t${fH8}\r\n`;
@@ -981,9 +984,9 @@ document.addEventListener('DOMContentLoaded', () => {
         const startRow = 3;
         const endRow = NUM_STAFF + 2; // 52行目
 
-        // 1. 54行目: 出勤人数合計（○・特殊・半日）
+        // 1. 54行目: 出勤人数合計
         html += `  <tr style="background-color:#f8fafc; font-weight:bold;">\n`;
-        html += `    <th colspan="2" style="${borderThin} ${borderThickR} border-bottom:1pt solid #64748b; text-align:center;">出勤人数合計（○・特殊・半日）</th>\n`;
+        html += `    <th colspan="2" style="${fontMeiryo} ${borderThin} ${borderThickR} border-bottom:1pt solid #64748b; text-align:center;">出勤人数合計</th>\n`;
         plainText += `出勤人数合計\t-`;
 
         for (let d = 0; d < NUM_DAYS; d++) {
@@ -991,7 +994,7 @@ document.addEventListener('DOMContentLoaded', () => {
             const colRng = `${col}${startRow}:${col}${endRow}`;
             const rightBorder = ((d + 1) === NUM_DAYS) ? borderThickR : (((d + 1) % 7 === 0) ? borderMediumR : '');
             const fDayWork = `=COUNTIF(${colRng},"○")+COUNTIF(${colRng},"出")+COUNTIF(${colRng},"早")+COUNTIF(${colRng},"遅")+COUNTIF(${colRng},"E")+COUNTIF(${colRng},"8時")+0.5*(COUNTIF(${colRng},"○/休")+COUNTIF(${colRng},"休/○")+COUNTIF(${colRng},"○/有")+COUNTIF(${colRng},"有/○"))`;
-            html += `    <td style="font-weight:bold; ${borderThin} ${rightBorder} border-bottom:1pt solid #64748b; text-align:center;">${fDayWork}</td>\n`;
+            html += `    <td style="${fontMeiryo} font-weight:bold; ${borderThin} ${rightBorder} border-bottom:1pt solid #64748b; text-align:center;">${fDayWork}</td>\n`;
             plainText += `\t${fDayWork}`;
         }
         // AE〜AL列の足元（出勤〜8時の列合計数式）
@@ -1004,75 +1007,75 @@ document.addEventListener('DOMContentLoaded', () => {
         const sumEve   = `=SUM(AK${startRow}:AK${endRow})`;
         const sumH8    = `=SUM(AL${startRow}:AL${endRow})`;
 
-        html += `    <td style="font-weight:bold; ${borderThin} border-bottom:1pt solid #64748b; text-align:center;">${sumWork}</td>\n`;
-        html += `    <td style="font-weight:bold; color:#2563eb; ${borderThin} border-bottom:1pt solid #64748b; text-align:center;">${sumOff}</td>\n`;
-        html += `    <td style="font-weight:bold; color:#b45309; background-color:#fef3c7; ${borderThin} border-bottom:1pt solid #64748b; text-align:center;">${sumPaid}</td>\n`;
-        html += `    <td style="font-weight:bold; color:#059669; ${borderThin} border-bottom:1pt solid #64748b; text-align:center;">${sumRef}</td>\n`;
-        html += `    <td style="${borderThin} border-bottom:1pt solid #64748b; text-align:center;">${sumEarly}</td>\n`;
-        html += `    <td style="${borderThin} border-bottom:1pt solid #64748b; text-align:center;">${sumLate}</td>\n`;
-        html += `    <td style="${borderThin} border-bottom:1pt solid #64748b; text-align:center;">${sumEve}</td>\n`;
-        html += `    <td style="${borderThin} border-bottom:1pt solid #64748b; text-align:center;">${sumH8}</td>\n`;
+        html += `    <td style="${fontMeiryo} font-weight:bold; ${borderThin} border-bottom:1pt solid #64748b; text-align:center;">${sumWork}</td>\n`;
+        html += `    <td style="${fontMeiryo} font-weight:bold; color:#2563eb; ${borderThin} border-bottom:1pt solid #64748b; text-align:center;">${sumOff}</td>\n`;
+        html += `    <td style="${fontMeiryo} font-weight:bold; color:#b45309; background-color:#fef3c7; ${borderThin} border-bottom:1pt solid #64748b; text-align:center;">${sumPaid}</td>\n`;
+        html += `    <td style="${fontMeiryo} font-weight:bold; color:#059669; ${borderThin} border-bottom:1pt solid #64748b; text-align:center;">${sumRef}</td>\n`;
+        html += `    <td style="${fontMeiryo} ${borderThin} border-bottom:1pt solid #64748b; text-align:center;">${sumEarly}</td>\n`;
+        html += `    <td style="${fontMeiryo} ${borderThin} border-bottom:1pt solid #64748b; text-align:center;">${sumLate}</td>\n`;
+        html += `    <td style="${fontMeiryo} ${borderThin} border-bottom:1pt solid #64748b; text-align:center;">${sumEve}</td>\n`;
+        html += `    <td style="${fontMeiryo} ${borderThin} border-bottom:1pt solid #64748b; text-align:center;">${sumH8}</td>\n`;
         html += `  </tr>\n`;
         plainText += `\t${sumWork}\t${sumOff}\t${sumPaid}\t${sumRef}\t${sumEarly}\t${sumLate}\t${sumEve}\t${sumH8}\r\n`;
 
         // 2. 55行目: 早番 (COUNTIF数式)
         html += `  <tr style="background-color:#fff7ed; font-weight:bold; font-size:9pt;">\n`;
-        html += `    <th colspan="2" style="color:#c2410c; ${borderThin} ${borderThickR} border-bottom:0.5pt solid #cbd5e1; text-align:center;">早番</th>\n`;
+        html += `    <th colspan="2" style="${fontMeiryo} color:#c2410c; ${borderThin} ${borderThickR} border-bottom:0.5pt solid #cbd5e1; text-align:center;">早番</th>\n`;
         plainText += `早番\t-`;
         for (let d = 0; d < NUM_DAYS; d++) {
             const col = getExcelColName(d + 2);
             const colRng = `${col}${startRow}:${col}${endRow}`;
             const rightBorder = ((d + 1) === NUM_DAYS) ? borderThickR : (((d + 1) % 7 === 0) ? borderMediumR : '');
             const fDayEarly = `=COUNTIF(${colRng},"早")`;
-            html += `    <td style="color:#c2410c; ${borderThin} ${rightBorder} border-bottom:0.5pt solid #cbd5e1; text-align:center;">${fDayEarly}</td>\n`;
+            html += `    <td style="${fontMeiryo} color:#c2410c; ${borderThin} ${rightBorder} border-bottom:0.5pt solid #cbd5e1; text-align:center;">${fDayEarly}</td>\n`;
             plainText += `\t${fDayEarly}`;
         }
-        html += `    <td colspan="8" style="${borderThin} border-bottom:0.5pt solid #cbd5e1; text-align:center; color:#94a3b8;">-</td>\n  </tr>\n`;
+        html += `    <td colspan="8" style="${fontMeiryo} ${borderThin} border-bottom:0.5pt solid #cbd5e1; text-align:center; color:#94a3b8;">-</td>\n  </tr>\n`;
         plainText += '\t-\t-\t-\t-\t-\t-\t-\t-\r\n';
 
         // 3. 56行目: 遅番 (COUNTIF数式)
         html += `  <tr style="background-color:#f0f9ff; font-weight:bold; font-size:9pt;">\n`;
-        html += `    <th colspan="2" style="color:#0369a1; ${borderThin} ${borderThickR} border-bottom:0.5pt solid #cbd5e1; text-align:center;">遅番</th>\n`;
+        html += `    <th colspan="2" style="${fontMeiryo} color:#0369a1; ${borderThin} ${borderThickR} border-bottom:0.5pt solid #cbd5e1; text-align:center;">遅番</th>\n`;
         plainText += `遅番\t-`;
         for (let d = 0; d < NUM_DAYS; d++) {
             const col = getExcelColName(d + 2);
             const colRng = `${col}${startRow}:${col}${endRow}`;
             const rightBorder = ((d + 1) === NUM_DAYS) ? borderThickR : (((d + 1) % 7 === 0) ? borderMediumR : '');
             const fDayLate = `=COUNTIF(${colRng},"遅")`;
-            html += `    <td style="color:#0369a1; ${borderThin} ${rightBorder} border-bottom:0.5pt solid #cbd5e1; text-align:center;">${fDayLate}</td>\n`;
+            html += `    <td style="${fontMeiryo} color:#0369a1; ${borderThin} ${rightBorder} border-bottom:0.5pt solid #cbd5e1; text-align:center;">${fDayLate}</td>\n`;
             plainText += `\t${fDayLate}`;
         }
-        html += `    <td colspan="8" style="${borderThin} border-bottom:0.5pt solid #cbd5e1; text-align:center; color:#94a3b8;">-</td>\n  </tr>\n`;
+        html += `    <td colspan="8" style="${fontMeiryo} ${borderThin} border-bottom:0.5pt solid #cbd5e1; text-align:center; color:#94a3b8;">-</td>\n  </tr>\n`;
         plainText += '\t-\t-\t-\t-\t-\t-\t-\t-\r\n';
 
         // 4. 57行目: E（イブニング） (COUNTIF数式)
         html += `  <tr style="background-color:#faf5ff; font-weight:bold; font-size:9pt;">\n`;
-        html += `    <th colspan="2" style="color:#7e22ce; ${borderThin} ${borderThickR} border-bottom:0.5pt solid #cbd5e1; text-align:center;">E</th>\n`;
+        html += `    <th colspan="2" style="${fontMeiryo} color:#7e22ce; ${borderThin} ${borderThickR} border-bottom:0.5pt solid #cbd5e1; text-align:center;">E</th>\n`;
         plainText += `E\t-`;
         for (let d = 0; d < NUM_DAYS; d++) {
             const col = getExcelColName(d + 2);
             const colRng = `${col}${startRow}:${col}${endRow}`;
             const rightBorder = ((d + 1) === NUM_DAYS) ? borderThickR : (((d + 1) % 7 === 0) ? borderMediumR : '');
             const fDayEve = `=COUNTIF(${colRng},"E")`;
-            html += `    <td style="color:#7e22ce; ${borderThin} ${rightBorder} border-bottom:0.5pt solid #cbd5e1; text-align:center;">${fDayEve}</td>\n`;
+            html += `    <td style="${fontMeiryo} color:#7e22ce; ${borderThin} ${rightBorder} border-bottom:0.5pt solid #cbd5e1; text-align:center;">${fDayEve}</td>\n`;
             plainText += `\t${fDayEve}`;
         }
-        html += `    <td colspan="8" style="${borderThin} border-bottom:0.5pt solid #cbd5e1; text-align:center; color:#94a3b8;">-</td>\n  </tr>\n`;
+        html += `    <td colspan="8" style="${fontMeiryo} ${borderThin} border-bottom:0.5pt solid #cbd5e1; text-align:center; color:#94a3b8;">-</td>\n  </tr>\n`;
         plainText += '\t-\t-\t-\t-\t-\t-\t-\t-\r\n';
 
         // 5. 58行目: 8時勤務 (COUNTIF数式)
         html += `  <tr style="background-color:#f0fdfa; font-weight:bold; font-size:9pt;">\n`;
-        html += `    <th colspan="2" style="color:#0f766e; ${borderThin} ${borderThickR} ${borderThickB} text-align:center;">8時</th>\n`;
+        html += `    <th colspan="2" style="${fontMeiryo} color:#0f766e; ${borderThin} ${borderThickR} ${borderThickB} text-align:center;">8時</th>\n`;
         plainText += `8時\t-`;
         for (let d = 0; d < NUM_DAYS; d++) {
             const col = getExcelColName(d + 2);
             const colRng = `${col}${startRow}:${col}${endRow}`;
             const rightBorder = ((d + 1) === NUM_DAYS) ? borderThickR : (((d + 1) % 7 === 0) ? borderMediumR : '');
             const fDayH8 = `=COUNTIF(${colRng},"8時")`;
-            html += `    <td style="color:#0f766e; ${borderThin} ${rightBorder} ${borderThickB} text-align:center;">${fDayH8}</td>\n`;
+            html += `    <td style="${fontMeiryo} color:#0f766e; ${borderThin} ${rightBorder} ${borderThickB} text-align:center;">${fDayH8}</td>\n`;
             plainText += `\t${fDayH8}`;
         }
-        html += `    <td colspan="8" style="${borderThin} ${borderThickB} text-align:center; color:#94a3b8;">-</td>\n  </tr>\n</tfoot>\n</table>`;
+        html += `    <td colspan="8" style="${fontMeiryo} ${borderThin} ${borderThickB} text-align:center; color:#94a3b8;">-</td>\n  </tr>\n</tfoot>\n</table>`;
         plainText += '\t-\t-\t-\t-\t-\t-\t-\t-\r\n';
         plainText += '\t-\t-\t-\t-\t-\t-\t-\t-\r\n';
         plainText += '\t-\t-\t-\t-\t-\t-\t-\t-\r\n';
@@ -1426,7 +1429,7 @@ document.addEventListener('DOMContentLoaded', () => {
         // 表記揺れの自動吸収
         if (s === '公休' || s === '公' || s === '休日') return '休';
         if (s === '有休' || s === '有給' || s === '年休') return '有';
-        if (s === '〇' || s === '日勤' || s === '日' || s === 'O' || s === 'o' || s === '○') return '○';
+        if (s === '〇' || s === '◯' || s === '◦' || s === '•' || s === '･' || s === '●' || s === '日勤' || s === '日' || s === 'O' || s === 'o' || s === '○') return '○';
         if (s === '出張') return '出';
         if (s === '早番') return '早';
         if (s === '遅番') return '遅';
@@ -1434,7 +1437,7 @@ document.addEventListener('DOMContentLoaded', () => {
         if (s === '8' || s === '８' || s === '8:00') return '8時';
 
         // 半日勤務の揺れ
-        s = s.replace(/〇/g, '○').replace(/公休/g, '休').replace(/有休/g, '有');
+        s = s.replace(/[〇◯◦•･●]/g, '○').replace(/公休/g, '休').replace(/有休/g, '有');
         if (s === '○/休' || s === '休/○' || s === '○/有' || s === '有/○') return s;
 
         // リフレッシュ休暇（全角数字を半角に変換）
@@ -1944,12 +1947,13 @@ document.addEventListener('DOMContentLoaded', () => {
 
             for (let d = 0; d < NUM_DAYS; d++) {
                 const cell = grid[s][d];
+                const sym = cell.symbol ? cell.symbol.replace(/[◦•･◯〇●]/g, '○') : '';
                 const rightBorder = ((d + 1) === NUM_DAYS) ? borderThickR : (((d + 1) % 7 === 0) ? borderMediumR : '');
                 // 網掛け完全除去、文字色のみ赤字・太字
                 if (cell.isFixed) {
-                    html += `      <td class="fixed-cell" style="color:#DC2626 !important; font-weight:bold !important; ${borderThin} ${rightBorder} ${rowBottom}"><b style="color:#DC2626;">${cell.symbol}</b></td>\n`;
+                    html += `      <td class="fixed-cell" style="color:#DC2626 !important; font-weight:bold !important; ${borderThin} ${rightBorder} ${rowBottom}"><b style="color:#DC2626;">${sym}</b></td>\n`;
                 } else {
-                    html += `      <td class="auto-cell" style="${borderThin} ${rightBorder} ${rowBottom}">${cell.symbol}</td>\n`;
+                    html += `      <td class="auto-cell" style="${borderThin} ${rightBorder} ${rowBottom}">${sym}</td>\n`;
                 }
             }
 
@@ -1985,9 +1989,9 @@ document.addEventListener('DOMContentLoaded', () => {
         const startRow = 3;
         const endRow = NUM_STAFF + 2; // 52行目
 
-        // 1. 54行目: 出勤人数合計（○・特殊・半日）
+        // 1. 54行目: 出勤人数合計
         html += `    <tr class="foot-total">
-      <th colspan="2" style="${borderThin} ${borderThickR} border-bottom:1pt solid #64748b;">出勤人数合計（○・特殊・半日）</th>
+      <th colspan="2" style="${borderThin} ${borderThickR} border-bottom:1pt solid #64748b;">出勤人数合計</th>
 `;
         for (let d = 0; d < NUM_DAYS; d++) {
             const col = getExcelColName(d + 2);

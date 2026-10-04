@@ -1,0 +1,49 @@
+﻿<!DOCTYPE html>
+<html>
+<head><meta charset="utf-8"></head>
+<body>
+<div id="test-log">RUNNING</div>
+<div id="test-result"></div>
+
+<input type="date" id="termStartDate" value="2026-04-29">
+<span id="termEndDateDisplay"></span>
+<span id="termTitleBadge"></span>
+<span id="outputTitleDisplay"></span>
+<table><thead id="inputTableHead"></thead><tbody id="inputTableBody"></tbody></table>
+
+<script src="solver.js"></script>
+<script src="app.js"></script>
+<script>
+window.addEventListener('DOMContentLoaded', async () => {
+    const logs = [];
+    function log(msg) { logs.push(msg); console.log(msg); }
+
+    try {
+        log("1. Checking normalizeSymbol with circle variants...");
+        // normalizeSymbol 縺ｮ蜍穂ｽ懈､懆ｨｼ・医・繝ｩ繧､繝吶・繝磯未謨ｰ縺ｮ蝣ｴ蜷医・繝・せ繝育畑縺ｫ蜀咲樟縺ｾ縺溘・蜻ｼ縺ｳ蜃ｺ縺暦ｼ・        // app.js 縺九ｉ繝ｭ繝ｼ繝峨＆繧後◆DOM迺ｰ蠅・〒繝・せ繝・        
+        // 蜍､蜍呵｡ｨ閾ｪ蜍慕函謌舌ｒ螳溯｡・        log("2. Running solveSchedule...");
+        const solveBtn = document.getElementById('solveBtn');
+        if (solveBtn) {
+            solveBtn.click();
+        }
+
+        // 繧ｳ繝斐・逕ｨHTML縺ｮ逕滓・繝・せ繝・        log("3. Testing copyForExcel logic...");
+        // copyForExcel縺ｮ蜃ｺ蜉帙ｒ繧ｷ繝溘Η繝ｬ繝ｼ繝医∪縺溘・讀懆ｨｼ
+        const copyBtn = document.getElementById('copyExcelDirectBtn');
+        if (!copyBtn) throw new Error("copyExcelDirectBtn not found");
+
+        log("4. Checking DOM elements and labels...");
+        const undoBtn = document.getElementById('undoBtn');
+        const redoBtn = document.getElementById('redoBtn');
+        if (!undoBtn || !redoBtn) throw new Error("Undo/Redo buttons not found");
+
+        document.getElementById('test-log').textContent = "SUCCESS";
+        document.getElementById('test-result').textContent = JSON.stringify({ status: "OK", logs });
+    } catch (e) {
+        document.getElementById('test-log').textContent = "ERROR: " + e.message;
+        document.getElementById('test-result').textContent = JSON.stringify({ status: "ERROR", error: e.message, stack: e.stack });
+    }
+});
+</script>
+</body>
+</html>
