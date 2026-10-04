@@ -931,10 +931,10 @@ document.addEventListener('DOMContentLoaded', () => {
             const rowBottom = isLastStaff ? borderThickB : '';
             const rng = `${startCol}${rowNum}:${endCol}${rowNum}`;
 
-            // 各種数式 (半日出勤・半日休の0.5加算を含む)
-            const fWork = `=COUNTIF(${rng},"○")+COUNTIF(${rng},"出")+COUNTIF(${rng},"早")+COUNTIF(${rng},"遅")+COUNTIF(${rng},"E")+COUNTIF(${rng},"8時")+0.5*(COUNTIF(${rng},"○/休")+COUNTIF(${rng},"休/○")+COUNTIF(${rng},"○/有")+COUNTIF(${rng},"有/○"))`;
-            const fOff = `=COUNTIF(${rng},"休")+0.5*(COUNTIF(${rng},"○/休")+COUNTIF(${rng},"休/○"))`;
-            const fPaid = `=COUNTIF(${rng},"有")+0.5*(COUNTIF(${rng},"○/有")+COUNTIF(${rng},"有/○"))`;
+            // 各種数式 (半日出勤・半日休の0.5加算を含む。○と〇の両方を完全集計！)
+            const fWork = `=COUNTIF(${rng},"○")+COUNTIF(${rng},"〇")+COUNTIF(${rng},"◯")+COUNTIF(${rng},"出")+COUNTIF(${rng},"早")+COUNTIF(${rng},"遅")+COUNTIF(${rng},"E")+COUNTIF(${rng},"8時")+0.5*(COUNTIF(${rng},"○/休")+COUNTIF(${rng},"〇/休")+COUNTIF(${rng},"休/○")+COUNTIF(${rng},"休/〇")+COUNTIF(${rng},"○/有")+COUNTIF(${rng},"〇/有")+COUNTIF(${rng},"有/○")+COUNTIF(${rng},"有/〇"))`;
+            const fOff = `=COUNTIF(${rng},"休")+0.5*(COUNTIF(${rng},"○/休")+COUNTIF(${rng},"〇/休")+COUNTIF(${rng},"休/○")+COUNTIF(${rng},"休/〇"))`;
+            const fPaid = `=COUNTIF(${rng},"有")+0.5*(COUNTIF(${rng},"○/有")+COUNTIF(${rng},"〇/有")+COUNTIF(${rng},"有/○")+COUNTIF(${rng},"有/〇"))`;
             const fRef = `=COUNTIF(${rng},"上1")+COUNTIF(${rng},"上2")+COUNTIF(${rng},"上3")+COUNTIF(${rng},"上4")+COUNTIF(${rng},"上5")+COUNTIF(${rng},"下1")+COUNTIF(${rng},"下2")+COUNTIF(${rng},"下3")`;
             const fEarly = `=COUNTIF(${rng},"早")`;
             const fLate = `=COUNTIF(${rng},"遅")`;
@@ -949,15 +949,17 @@ document.addEventListener('DOMContentLoaded', () => {
 
             for (let d = 0; d < NUM_DAYS; d++) {
                 const cell = grid[s][d];
-                const sym = cell.symbol ? cell.symbol.replace(/[◦•･◯〇●]/g, '○') : '';
+                let rawSym = cell.symbol || '';
+                // Excel貼り付け時にArial環境でも確実に大きな丸「○」に見えるよう、漢数字ゼロ「〇」(U+3007)に統一
+                let sym = rawSym.replace(/[◦•･◯○●]/g, '〇');
                 plainText += `\t${sym}`;
                 const rightBorder = ((d + 1) === NUM_DAYS) ? borderThickR : (((d + 1) % 7 === 0) ? borderMediumR : '');
 
                 // ★ 要望対応: 希望枠の網掛け（背景色）は完全除去！文字色のみ赤字・太字！
                 if (cell.isFixed) {
-                    html += `    <td style="${fontMeiryo} color:#DC2626 !important; font-weight:bold !important; ${borderThin} ${rightBorder} ${rowBottom} text-align:center;"><b style="color:#DC2626;">${sym}</b></td>\n`;
+                    html += `    <td style="${fontMeiryo} color:#DC2626 !important; font-weight:bold !important; ${borderThin} ${rightBorder} ${rowBottom} text-align:center;"><font face="Meiryo"><b style="color:#DC2626;">${sym}</b></font></td>\n`;
                 } else {
-                    html += `    <td style="${fontMeiryo} ${borderThin} ${rightBorder} ${rowBottom} text-align:center;">${sym}</td>\n`;
+                    html += `    <td style="${fontMeiryo} ${borderThin} ${rightBorder} ${rowBottom} text-align:center;"><font face="Meiryo">${sym}</font></td>\n`;
                 }
             }
 
@@ -993,7 +995,7 @@ document.addEventListener('DOMContentLoaded', () => {
             const col = getExcelColName(d + 2); // 0日目 = C列
             const colRng = `${col}${startRow}:${col}${endRow}`;
             const rightBorder = ((d + 1) === NUM_DAYS) ? borderThickR : (((d + 1) % 7 === 0) ? borderMediumR : '');
-            const fDayWork = `=COUNTIF(${colRng},"○")+COUNTIF(${colRng},"出")+COUNTIF(${colRng},"早")+COUNTIF(${colRng},"遅")+COUNTIF(${colRng},"E")+COUNTIF(${colRng},"8時")+0.5*(COUNTIF(${colRng},"○/休")+COUNTIF(${colRng},"休/○")+COUNTIF(${colRng},"○/有")+COUNTIF(${colRng},"有/○"))`;
+            const fDayWork = `=COUNTIF(${colRng},"○")+COUNTIF(${colRng},"〇")+COUNTIF(${colRng},"◯")+COUNTIF(${colRng},"出")+COUNTIF(${colRng},"早")+COUNTIF(${colRng},"遅")+COUNTIF(${colRng},"E")+COUNTIF(${colRng},"8時")+0.5*(COUNTIF(${colRng},"○/休")+COUNTIF(${colRng},"〇/休")+COUNTIF(${colRng},"休/○")+COUNTIF(${colRng},"休/〇")+COUNTIF(${colRng},"○/有")+COUNTIF(${colRng},"〇/有")+COUNTIF(${colRng},"有/○")+COUNTIF(${colRng},"有/〇"))`;
             html += `    <td style="${fontMeiryo} font-weight:bold; ${borderThin} ${rightBorder} border-bottom:1pt solid #64748b; text-align:center;">${fDayWork}</td>\n`;
             plainText += `\t${fDayWork}`;
         }
@@ -1372,8 +1374,8 @@ document.addEventListener('DOMContentLoaded', () => {
             }
 
             // AE列: 希望休自動集計数式, AF列: 希望有休自動集計数式, AG列: 備考
-            const fOff = `COUNTIF(C${r}:AD${r},&quot;休&quot;)+0.5*(COUNTIF(C${r}:AD${r},&quot;○/休&quot;)+COUNTIF(C${r}:AD${r},&quot;休/○&quot;))`;
-            const fPaid = `COUNTIF(C${r}:AD${r},&quot;有&quot;)+0.5*(COUNTIF(C${r}:AD${r},&quot;○/有&quot;)+COUNTIF(C${r}:AD${r},&quot;有/○&quot;))`;
+            const fOff = `COUNTIF(C${r}:AD${r},&quot;休&quot;)+0.5*(COUNTIF(C${r}:AD${r},&quot;○/休&quot;)+COUNTIF(C${r}:AD${r},&quot;〇/休&quot;)+COUNTIF(C${r}:AD${r},&quot;休/○&quot;)+COUNTIF(C${r}:AD${r},&quot;休/〇&quot;))`;
+            const fPaid = `COUNTIF(C${r}:AD${r},&quot;有&quot;)+0.5*(COUNTIF(C${r}:AD${r},&quot;○/有&quot;)+COUNTIF(C${r}:AD${r},&quot;〇/有&quot;)+COUNTIF(C${r}:AD${r},&quot;有/○&quot;)+COUNTIF(C${r}:AD${r},&quot;有/〇&quot;))`;
             sheet1 += `\n      <c r="AE${r}" s="7"><f>${fOff}</f><v>0</v></c>`;
             sheet1 += `\n      <c r="AF${r}" s="7"><f>${fPaid}</f><v>0</v></c>`;
             sheet1 += `\n      <c r="AG${r}" s="5"/>`;
@@ -1947,7 +1949,8 @@ document.addEventListener('DOMContentLoaded', () => {
 
             for (let d = 0; d < NUM_DAYS; d++) {
                 const cell = grid[s][d];
-                const sym = cell.symbol ? cell.symbol.replace(/[◦•･◯〇●]/g, '○') : '';
+                let rawSym = cell.symbol || '';
+                let sym = rawSym.replace(/[◦•･◯○●]/g, '〇');
                 const rightBorder = ((d + 1) === NUM_DAYS) ? borderThickR : (((d + 1) % 7 === 0) ? borderMediumR : '');
                 // 網掛け完全除去、文字色のみ赤字・太字
                 if (cell.isFixed) {
@@ -1962,9 +1965,9 @@ document.addEventListener('DOMContentLoaded', () => {
             const endCol = 'AD';
             const rng = `${startCol}${rowNum}:${endCol}${rowNum}`;
 
-            const fWork = `=COUNTIF(${rng},"○")+COUNTIF(${rng},"出")+COUNTIF(${rng},"早")+COUNTIF(${rng},"遅")+COUNTIF(${rng},"E")+COUNTIF(${rng},"8時")+0.5*(COUNTIF(${rng},"○/休")+COUNTIF(${rng},"休/○")+COUNTIF(${rng},"○/有")+COUNTIF(${rng},"有/○"))`;
-            const fOff = `=COUNTIF(${rng},"休")+0.5*(COUNTIF(${rng},"○/休")+COUNTIF(${rng},"休/○"))`;
-            const fPaid = `=COUNTIF(${rng},"有")+0.5*(COUNTIF(${rng},"○/有")+COUNTIF(${rng},"有/○"))`;
+            const fWork = `=COUNTIF(${rng},"○")+COUNTIF(${rng},"〇")+COUNTIF(${rng},"◯")+COUNTIF(${rng},"出")+COUNTIF(${rng},"早")+COUNTIF(${rng},"遅")+COUNTIF(${rng},"E")+COUNTIF(${rng},"8時")+0.5*(COUNTIF(${rng},"○/休")+COUNTIF(${rng},"〇/休")+COUNTIF(${rng},"休/○")+COUNTIF(${rng},"休/〇")+COUNTIF(${rng},"○/有")+COUNTIF(${rng},"〇/有")+COUNTIF(${rng},"有/○")+COUNTIF(${rng},"有/〇"))`;
+            const fOff = `=COUNTIF(${rng},"休")+0.5*(COUNTIF(${rng},"○/休")+COUNTIF(${rng},"〇/休")+COUNTIF(${rng},"休/○")+COUNTIF(${rng},"休/〇"))`;
+            const fPaid = `=COUNTIF(${rng},"有")+0.5*(COUNTIF(${rng},"○/有")+COUNTIF(${rng},"〇/有")+COUNTIF(${rng},"有/○")+COUNTIF(${rng},"有/〇"))`;
             const fRef = `=COUNTIF(${rng},"上1")+COUNTIF(${rng},"上2")+COUNTIF(${rng},"上3")+COUNTIF(${rng},"上4")+COUNTIF(${rng},"上5")+COUNTIF(${rng},"下1")+COUNTIF(${rng},"下2")+COUNTIF(${rng},"下3")`;
             const fEarly = `=COUNTIF(${rng},"早")`;
             const fLate = `=COUNTIF(${rng},"遅")`;
@@ -1997,7 +2000,7 @@ document.addEventListener('DOMContentLoaded', () => {
             const col = getExcelColName(d + 2);
             const colRng = `${col}${startRow}:${col}${endRow}`;
             const rightBorder = ((d + 1) === NUM_DAYS) ? borderThickR : (((d + 1) % 7 === 0) ? borderMediumR : '');
-            const fDayWork = `=COUNTIF(${colRng},"○")+COUNTIF(${colRng},"出")+COUNTIF(${colRng},"早")+COUNTIF(${colRng},"遅")+COUNTIF(${colRng},"E")+COUNTIF(${colRng},"8時")+0.5*(COUNTIF(${colRng},"○/休")+COUNTIF(${colRng},"休/○")+COUNTIF(${colRng},"○/有")+COUNTIF(${colRng},"有/○"))`;
+            const fDayWork = `=COUNTIF(${colRng},"○")+COUNTIF(${colRng},"〇")+COUNTIF(${colRng},"◯")+COUNTIF(${colRng},"出")+COUNTIF(${colRng},"早")+COUNTIF(${colRng},"遅")+COUNTIF(${colRng},"E")+COUNTIF(${colRng},"8時")+0.5*(COUNTIF(${colRng},"○/休")+COUNTIF(${colRng},"〇/休")+COUNTIF(${colRng},"休/○")+COUNTIF(${colRng},"休/〇")+COUNTIF(${colRng},"○/有")+COUNTIF(${colRng},"〇/有")+COUNTIF(${colRng},"有/○")+COUNTIF(${colRng},"有/〇"))`;
             html += `      <td style="font-weight:bold; ${borderThin} ${rightBorder} border-bottom:1pt solid #64748b;">${fDayWork}</td>\n`;
         }
         const sumWork = `=SUM(AE${startRow}:AE${endRow})`;

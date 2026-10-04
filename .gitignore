@@ -1,0 +1,7 @@
+*.ps1
+*.txt
+*.png
+*.xlsx
+test_*
+run_*
+cap_*

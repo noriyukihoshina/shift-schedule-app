@@ -48,10 +48,16 @@ function isHolidaySymbol(sym) {
     return false;
 }
 
+// ★ 追加要件: 公休（休）判定。連勤の切断・リセットは「丸1日の公休（休）」のみ！
+// 有休（有）やリフレッシュ休暇（上/下）は公休ではないため連勤をリセットしない！
+function isFullOffSymbol(sym) {
+    return sym === SYMBOLS.OFF;
+}
+
 // 勤務日判定（日勤、出張、特殊勤務、および半日出勤を含む勤務）
 function isWorkSymbol(sym) {
     if (!sym) return false;
-    if ([SYMBOLS.WORK, SYMBOLS.TRIP, SYMBOLS.EARLY, SYMBOLS.LATE, SYMBOLS.EVE, SYMBOLS.H8].includes(sym)) return true;
+    if ([SYMBOLS.WORK, '〇', '◯', SYMBOLS.TRIP, SYMBOLS.EARLY, SYMBOLS.LATE, SYMBOLS.EVE, SYMBOLS.H8].includes(sym)) return true;
     if (isHalfDuty(sym)) return true; // 半日出勤を含むため連勤カウント等の勤務日とみなす
     return false;
 }
@@ -106,19 +112,23 @@ function validateInitialState(staffList) {
             }
         }
 
-        // C. 6連勤チェック (当ターム内)
-        let workStreak = [];
+        // C. 6連勤チェック (公休から公休の間のカウント。有休やリフ休は公休ではないため連勤を切断しない！)
+        let nonOffStreak = [];
         for (let d = 0; d < numDays; d++) {
-            if (isWorkSymbol(staff.days[d])) {
-                workStreak.push(d);
-                if (workStreak.length >= 6) {
-                    errors.push(`【スタッフ No.${staff.id} ${staff.name}】${d + 1}日目時点で事前入力により6連続勤務となっています（最大連勤は5日です）。`);
-                    workStreak.forEach(wDay => {
-                        conflictCells.push({ staffIndex: sIdx, dayIndex: wDay, reason: `6連勤となるため休日を挟んでください` });
+            const sym = staff.days[d];
+            if (sym && !isFullOffSymbol(sym)) {
+                nonOffStreak.push(d);
+                if (nonOffStreak.length >= 6) {
+                    errors.push(`【スタッフ No.${staff.id} ${staff.name}】${d + 1}日目時点で公休のない連続期間が${nonOffStreak.length}日となっています（公休から公休の間は最大5日以内です）。`);
+                    nonOffStreak.forEach(wDay => {
+                        conflictCells.push({ staffIndex: sIdx, dayIndex: wDay, reason: `公休間隔が5日を超えているため公休(休)を挟んでください` });
                     });
                 }
-            } else if (isHolidaySymbol(staff.days[d])) {
-                workStreak = [];
+            } else if (isFullOffSymbol(sym)) {
+                nonOffStreak = [];
+            } else {
+                // 空欄の場合は公休を配置できる可能性があるため一旦リセット
+                nonOffStreak = [];
             }
         }
     });
@@ -255,22 +265,25 @@ class ShiftScheduler {
             if (!isHolidaySymbol(sym)) return false;
         }
 
-        // 4. 6連続勤務の禁止 (最大連勤5日)
-        if (isWorkSymbol(sym)) {
-            // 確定勤務のみの直接連勤チェック（前タームを含む）
-            let pastWork = 0;
+        // 4. 6連続勤務の禁止 (公休から公休の間のカウント。最大連勤5日)
+        if (!isFullOffSymbol(sym)) {
+            // 過去方向: 直近の公休(休)までの公休なし確定日数（前タームを含む）
+            let pastNonOff = 0;
             for (let i = d - 1; i >= -5; i--) {
                 const ps = this.getSymbol(s, i);
-                if (isWorkSymbol(ps)) pastWork++;
+                if (isFullOffSymbol(ps)) break;
+                if (ps !== '') pastNonOff++;
                 else break;
             }
-            let futureWork = 0;
+            // 未来方向: 直近の公休(休)までの公休なし確定日数
+            let futureNonOff = 0;
             for (let i = d + 1; i < this.numDays; i++) {
                 const fs = this.getSymbol(s, i);
-                if (isWorkSymbol(fs)) futureWork++;
+                if (isFullOffSymbol(fs)) break;
+                if (fs !== '') futureNonOff++;
                 else break;
             }
-            if (pastWork + 1 + futureWork > 5) return false;
+            if (pastNonOff + 1 + futureNonOff > 5) return false;
         }
 
         return true;
@@ -284,10 +297,10 @@ class ShiftScheduler {
     canSustainConsecutiveWork(s, d) {
         const hols = [];
 
-        // 前ターム末尾の最後の休日位置（-5 〜 -1、無ければ -6）
+        // 前ターム末尾の最後の公休位置（-5 〜 -1、無ければ -6）
         let lastPrevHol = -6;
         for (let p = 4; p >= 0; p--) {
-            if (isHolidaySymbol(this.staffList[s].prevDays[p])) {
+            if (isFullOffSymbol(this.staffList[s].prevDays[p])) {
                 lastPrevHol = p - 5;
                 break;
             }
@@ -297,10 +310,11 @@ class ShiftScheduler {
         let curOff = 0;
         for (let day = 0; day < this.numDays; day++) {
             const sym = this.grid[s][day].symbol;
-            if (isHolidaySymbol(sym)) {
+            if (isFullOffSymbol(sym)) {
                 hols.push(day);
-                if (sym === SYMBOLS.OFF) curOff += 1.0;
-                else if (sym === SYMBOLS.HALF_WORK_OFF || sym === SYMBOLS.HALF_OFF_WORK) curOff += 0.5;
+                curOff += 1.0;
+            } else if (sym === SYMBOLS.HALF_WORK_OFF || sym === SYMBOLS.HALF_OFF_WORK) {
+                curOff += 0.5;
             }
         }
 
@@ -618,23 +632,23 @@ class ShiftScheduler {
             let stillNeeded = stdHolidays - currentOff;
             if (stillNeeded < 0) stillNeeded = 0;
 
-            // --- フェーズ0: 前ターム末尾からの連勤切断（超重要！） ---
+            // --- フェーズ0: 前ターム末尾からの連勤切断（公休基準） ---
             let pConsec = 0;
             for (let p = 4; p >= 0; p--) {
                 const ps = this.staffList[s].prevDays[p];
-                if (isWorkSymbol(ps)) pConsec++;
+                if (!isFullOffSymbol(ps)) pConsec++;
                 else break;
             }
             if (pConsec > 0 && stillNeeded > 0) {
                 const deadline = 5 - pConsec;
-                let hasHolidayInDeadline = false;
+                let hasOffInDeadline = false;
                 for (let d = 0; d < deadline && d < this.numDays; d++) {
-                    if (isHolidaySymbol(this.grid[s][d].symbol)) {
-                        hasHolidayInDeadline = true;
+                    if (isFullOffSymbol(this.grid[s][d].symbol)) {
+                        hasOffInDeadline = true;
                         break;
                     }
                 }
-                if (!hasHolidayInDeadline) {
+                if (!hasOffInDeadline) {
                     for (let d = Math.min(deadline - 1, this.numDays - 1); d >= 0; d--) {
                         if (this.grid[s][d].symbol === '') {
                             if (stillNeeded >= 1.0) {
@@ -651,13 +665,13 @@ class ShiftScheduler {
             }
 
             // --- フェーズ1: 5連勤超過スパンの最長優先均等分割 ---
-            // 5連勤を超えている区間がある限り、最も長い区間の中間地点に休日を1日配置して切断
+            // 5連勤（公休間隔5日超過）がある限り、最も長い区間の中間地点に公休(休)を配置して切断
             while (stillNeeded >= 0.5) {
-                // 現在の全休日インデックスを収集
+                // 現在の全公休インデックスを収集（有休・リフ休は公休ではないため連勤を切断しない！）
                 const hols = [];
                 let lastPrevHol = -6;
                 for (let p = 4; p >= 0; p--) {
-                    if (isHolidaySymbol(this.staffList[s].prevDays[p])) {
+                    if (isFullOffSymbol(this.staffList[s].prevDays[p])) {
                         lastPrevHol = p - 5;
                         break;
                     }
@@ -665,11 +679,11 @@ class ShiftScheduler {
                 hols.push(lastPrevHol);
 
                 for (let d = 0; d < this.numDays; d++) {
-                    if (isHolidaySymbol(this.grid[s][d].symbol)) {
+                    if (isFullOffSymbol(this.grid[s][d].symbol)) {
                         hols.push(d);
                     }
                 }
-                // 仮想末尾休日（ターム末尾の翌日: this.numDays）
+                // 仮想末尾公休（ターム末尾の翌日: this.numDays）
                 hols.push(this.numDays);
 
                 // 各区間の連勤リスク（空欄＋確定勤務の連続日数）を探索
@@ -939,11 +953,11 @@ class ShiftScheduler {
                 for (let i = 0; i < 5; i++) sequence.push(this.staffList[s].prevDays[i] || '');
                 for (let d = 0; d < this.numDays; d++) sequence.push(this.grid[s][d].symbol);
 
-                // 6連勤以上の区間を探索
+                // 6連勤（公休間隔5日超過）の区間を探索
                 let consec = 0;
                 let violationEnd = -1;
                 for (let idx = 0; idx < sequence.length; idx++) {
-                    if (isWorkSymbol(sequence[idx])) {
+                    if (!isFullOffSymbol(sequence[idx])) {
                         consec++;
                         if (consec > 5) {
                             violationEnd = idx - 5; // grid上のインデックス
@@ -999,10 +1013,10 @@ class ShiftScheduler {
             }
         }
 
-        // 6連勤禁止 (最大5連勤)
+        // 6連勤禁止 (公休から公休の間が最大5日)
         let consec = 0;
         for (let idx = 0; idx < sequence.length; idx++) {
-            if (isWorkSymbol(sequence[idx])) {
+            if (!isFullOffSymbol(sequence[idx])) {
                 consec++;
                 if (consec > 5) return false;
             } else {
@@ -1062,17 +1076,17 @@ class ShiftScheduler {
                 }
             }
 
-            // 6連勤禁止チェック (最大5連勤)
+            // 6連勤禁止チェック (公休から公休の間のカウント。最大5連勤)
             let consec = 0;
             let startIdx = 0;
             for (let idx = 0; idx < sequence.length; idx++) {
-                if (isWorkSymbol(sequence[idx])) {
+                if (!isFullOffSymbol(sequence[idx])) {
                     if (consec === 0) startIdx = idx;
                     consec++;
                     if (consec > 5) {
                         const sLabel = startIdx < 5 ? `前${5 - startIdx}日目` : `${startIdx - 4}日目`;
                         const eLabel = idx < 5 ? `前${5 - idx}日目` : `${idx - 4}日目`;
-                        errors.push(`【スタッフ No.${staff.id} ${staff.name}】${sLabel}〜${eLabel}で${consec}連勤（最大5連勤違反）です [${sequence.slice(5).join(',')}]`);
+                        errors.push(`【スタッフ No.${staff.id} ${staff.name}】${sLabel}〜${eLabel}で公休なし${consec}日連続（最大5連勤違反）です [${sequence.slice(5).join(',')}]`);
                         break;
                     }
                 } else {
