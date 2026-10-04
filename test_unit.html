@@ -1,0 +1,76 @@
+<!DOCTYPE html>
+<html>
+<head><meta charset="utf-8"></head>
+<body>
+<div id="output"></div>
+<script>
+// 1. レイアウト判定テスト
+const mockSheetXml = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">
+  <sheetData>
+    <row r="1"><c r="A1" t="inlineStr"><is><t>4/1～4/28勤務表</t></is></c></row>
+    <row r="2"><c r="A2" t="inlineStr"><is><t>No</t></is></c><c r="B2" t="inlineStr"><is><t>氏名</t></is></c><c r="C2" t="inlineStr"><is><t>4/1</t></is></c><c r="N2" t="inlineStr"><is><t>4/12</t></is></c></row>
+    <row r="3"><c r="A3"/><c r="B3"/><c r="C3" t="inlineStr"><is><t>水</t></is></c><c r="N3" t="inlineStr"><is><t>日</t></is></c><c r="U3" t="inlineStr"><is><t>日</t></is></c><c r="AB3" t="inlineStr"><is><t>日</t></is></c></row>
+    <row r="4"><c r="A4"><v>1</v></c><c r="B4" t="inlineStr"><is><t>佐藤 健一</t></is></c><c r="C4"/><c r="N4"/><c r="U4"/><c r="AB4"/></row>
+  </sheetData>
+</worksheet>`;
+
+const parser = new DOMParser();
+const xmlDoc = parser.parseFromString(mockSheetXml, 'text/xml');
+const cNodes = xmlDoc.getElementsByTagName('c');
+
+let isNewLayout = false;
+for (let i = 0; i < Math.min(200, cNodes.length); i++) {
+    const ref = cNodes[i].getAttribute('r');
+    if (ref && /^C[2-4]$/.test(ref)) {
+        isNewLayout = true;
+        break;
+    }
+}
+
+const parsedItems = [];
+for (let i = 0; i < cNodes.length; i++) {
+    const c = cNodes[i];
+    const ref = c.getAttribute('r');
+    if (!ref) continue;
+    const m = ref.match(/^([A-Z]+)([0-9]+)$/);
+    if (!m) continue;
+    const colStr = m[1];
+    const row = parseInt(m[2], 10);
+    let col = 0;
+    for (let k = 0; k < colStr.length; k++) col = col * 26 + (colStr.charCodeAt(k) - 64);
+
+    let staffIdx = -1;
+    let dayIdx = -1;
+    if (isNewLayout) {
+        if (row >= 4 && row <= 53 && col >= 3 && col <= 30) {
+            staffIdx = row - 4;
+            dayIdx = col - 3;
+        }
+    } else {
+        if (row >= 3 && row <= 52 && col >= 12 && col <= 39) {
+            staffIdx = row - 3;
+            dayIdx = col - 12;
+        }
+    }
+
+    if (staffIdx >= 0 && dayIdx >= 0) {
+        const isNode = c.getElementsByTagName('is')[0];
+        let val = '';
+        if (isNode) {
+            const tNodes = isNode.getElementsByTagName('t');
+            for (let j = 0; j < tNodes.length; j++) val += tNodes[j].textContent;
+        }
+        if (val && val.trim() !== '') {
+            parsedItems.push({ staffIdx, dayIdx, symbol: val.trim() });
+        }
+    }
+}
+
+const out = [];
+out.push("isNewLayout: " + isNewLayout);
+out.push("parsedItemsCount: " + parsedItems.length);
+document.getElementById('output').textContent = out.join('\n');
+</script>
+</body>
+</html>

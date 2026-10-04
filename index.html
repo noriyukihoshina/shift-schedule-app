@@ -25,6 +25,9 @@
             <button class="btn btn-outline" id="loadConflictBtn" title="要件5のエラーハンドリング動作（解なし検知）を確認するためのデータ投入" style="color: #b45309; border-color: #fcd34d; background: #fffbeb;">
                 ⚠️ 矛盾テスト（解なし検証）
             </button>
+            <button class="btn btn-outline" id="headerUndoBtn" disabled title="直前の操作を1つ元に戻します (Ctrl+Z)" style="opacity: 0.5;">
+                ↩ 戻る
+            </button>
             <button class="btn btn-danger" id="clearAllBtn" title="すべての事前入力枠をクリア">
                 🧹 全消去
             </button>
@@ -103,6 +106,13 @@
                     <button class="palette-btn" data-sym="下3" title="冬リフレッシュ休3">下3</button>
                     <span style="color: #cbd5e1; margin: 0 4px;">|</span>
                     <button class="palette-btn" data-sym="CLEAR" title="セルの記号を消去" style="color: #dc2626;">✕ 消去</button>
+                    <span style="color: #cbd5e1; margin: 0 4px;">|</span>
+                    <button class="btn btn-outline" id="undoBtn" disabled title="直前の操作を1つ元に戻します (Ctrl+Z)" style="font-size: 0.82rem; padding: 4px 10px; opacity: 0.5; font-weight: 600;">
+                        ↩ 戻る
+                    </button>
+                    <button class="btn btn-outline" id="redoBtn" disabled title="元に戻した操作をやり直します (Ctrl+Y)" style="font-size: 0.82rem; padding: 4px 10px; opacity: 0.5; font-weight: 600;">
+                        ↪ やり直す
+                    </button>
                 </div>
                 <div style="display: flex; justify-content: space-between; align-items: center; margin-top: 8px; font-size: 0.8rem; color: #64748b; flex-wrap: wrap; gap: 8px;">
                     <div>💡 セルをクリックすると選択中の記号が入力されます。入力枠は確定時に<strong style="color: #dc2626;">「赤字・太字」</strong>で保持されます。</div>

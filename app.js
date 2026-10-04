@@ -62,6 +62,102 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     }
 
+    // ==========================================
+    // ★ 戻る（Undo） / やり直す（Redo） 履歴管理
+    // ==========================================
+    const MAX_HISTORY = 50;
+    const undoStack = [];
+    const redoStack = [];
+
+    function getHistorySnapshot() {
+        return {
+            staffList: staffList.map(s => ({
+                id: s.id,
+                name: s.name,
+                can8: s.can8,
+                noEarly: s.noEarly,
+                noLate: s.noLate,
+                noEve: s.noEve,
+                prevDays: [...s.prevDays],
+                days: [...s.days]
+            })),
+            startDate: document.getElementById('termStartDate')?.value || '2026-04-01'
+        };
+    }
+
+    function pushHistory() {
+        undoStack.push(getHistorySnapshot());
+        if (undoStack.length > MAX_HISTORY) {
+            undoStack.shift();
+        }
+        redoStack.length = 0; // 新規操作時はredoをクリア
+        updateUndoRedoUI();
+    }
+
+    function undo() {
+        if (undoStack.length === 0) return;
+        redoStack.push(getHistorySnapshot());
+        const prevState = undoStack.pop();
+        restoreHistoryState(prevState);
+        updateUndoRedoUI();
+        showToast('↩ 直前の状態に戻しました');
+    }
+
+    function redo() {
+        if (redoStack.length === 0) return;
+        undoStack.push(getHistorySnapshot());
+        const nextState = redoStack.pop();
+        restoreHistoryState(nextState);
+        updateUndoRedoUI();
+        showToast('↪ やり直しました');
+    }
+
+    function restoreHistoryState(state) {
+        if (!state || !state.staffList) return;
+        state.staffList.forEach((s, idx) => {
+            if (staffList[idx]) {
+                staffList[idx].name = s.name;
+                staffList[idx].can8 = s.can8;
+                staffList[idx].noEarly = s.noEarly;
+                staffList[idx].noLate = s.noLate;
+                staffList[idx].noEve = s.noEve;
+                staffList[idx].prevDays = [...s.prevDays];
+                staffList[idx].days = [...s.days];
+            }
+        });
+        if (state.startDate) {
+            const startDateInput = document.getElementById('termStartDate');
+            if (startDateInput && startDateInput.value !== state.startDate) {
+                startDateInput.value = state.startDate;
+                getTermInfo();
+            }
+        }
+        clearConflictHighlights();
+        renderInputTable();
+    }
+
+    function updateUndoRedoUI() {
+        const undoDisabled = (undoStack.length === 0);
+        const redoDisabled = (redoStack.length === 0);
+        const undoBtns = [document.getElementById('undoBtn'), document.getElementById('headerUndoBtn')];
+        const redoBtns = [document.getElementById('redoBtn')];
+
+        undoBtns.forEach(btn => {
+            if (btn) {
+                btn.disabled = undoDisabled;
+                btn.style.opacity = undoDisabled ? '0.5' : '1';
+                btn.style.cursor = undoDisabled ? 'not-allowed' : 'pointer';
+            }
+        });
+        redoBtns.forEach(btn => {
+            if (btn) {
+                btn.disabled = redoDisabled;
+                btn.style.opacity = redoDisabled ? '0.5' : '1';
+                btn.style.cursor = redoDisabled ? 'not-allowed' : 'pointer';
+            }
+        });
+    }
+
     // サンプルデータの生成（現場の運用に合わせて1〜9番のみ8時可）
     function loadSampleData() {
         initStaffData();
@@ -252,7 +348,10 @@ document.addEventListener('DOMContentLoaded', () => {
         document.querySelectorAll('.staff-name-input').forEach(input => {
             input.addEventListener('change', (e) => {
                 const s = parseInt(e.target.dataset.s, 10);
-                staffList[s].name = e.target.value;
+                if (staffList[s].name !== e.target.value) {
+                    pushHistory();
+                    staffList[s].name = e.target.value;
+                }
             });
         });
 
@@ -260,6 +359,7 @@ document.addEventListener('DOMContentLoaded', () => {
             chk.addEventListener('change', (e) => {
                 const s = parseInt(e.target.dataset.s, 10);
                 const flag = e.target.dataset.flag;
+                pushHistory();
                 staffList[s][flag] = e.target.checked;
             });
         });
@@ -276,29 +376,35 @@ document.addEventListener('DOMContentLoaded', () => {
 
                 if (type === 'prev') {
                     const p = parseInt(cell.dataset.p, 10);
-                    staffList[s].prevDays[p] = newSym;
-                    cell.textContent = newSym;
+                    if (staffList[s].prevDays[p] !== newSym) {
+                        pushHistory();
+                        staffList[s].prevDays[p] = newSym;
+                        cell.textContent = newSym;
+                    }
                 } else if (type === 'day') {
                     const d = parseInt(cell.dataset.d, 10);
-                    staffList[s].days[d] = newSym;
-                    cell.textContent = newSym;
+                    if (staffList[s].days[d] !== newSym) {
+                        pushHistory();
+                        staffList[s].days[d] = newSym;
+                        cell.textContent = newSym;
 
-                    if (newSym) {
-                        cell.classList.add('fixed-cell');
-                        cell.title = `事前固定枠: ${newSym}（自動上書きロック中）`;
-                    } else {
-                        cell.classList.remove('fixed-cell');
-                        cell.title = 'クリックで記号入力';
-                    }
+                        if (newSym) {
+                            cell.classList.add('fixed-cell');
+                            cell.title = `事前固定枠: ${newSym}（自動上書きロック中）`;
+                        } else {
+                            cell.classList.remove('fixed-cell');
+                            cell.title = 'クリックで記号入力';
+                        }
 
-                    if (cell.classList.contains('conflict-highlight')) {
-                        cell.classList.remove('conflict-highlight');
-                        cell.removeAttribute('data-conflict-reason');
+                        if (cell.classList.contains('conflict-highlight')) {
+                            cell.classList.remove('conflict-highlight');
+                            cell.removeAttribute('data-conflict-reason');
 
-                        const remaining = document.querySelectorAll('.conflict-highlight');
-                        if (remaining.length === 0) {
-                            const banner = document.getElementById('conflictAlertBanner');
-                            if (banner) banner.classList.remove('show');
+                            const remaining = document.querySelectorAll('.conflict-highlight');
+                            if (remaining.length === 0) {
+                                const banner = document.getElementById('conflictAlertBanner');
+                                if (banner) banner.classList.remove('show');
+                            }
                         }
                     }
                 }
@@ -680,21 +786,52 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     document.getElementById('loadSampleBtn').addEventListener('click', () => {
+        pushHistory();
         loadSampleData();
+        showToast('🎲 サンプルデータを投入しました（「↩ 戻る」で元に戻せます）');
     });
 
     const conflictBtn = document.getElementById('loadConflictBtn');
     if (conflictBtn) {
         conflictBtn.addEventListener('click', () => {
+            pushHistory();
             loadConflictSampleData();
         });
     }
 
     document.getElementById('clearAllBtn').addEventListener('click', () => {
         if (confirm('すべての事前入力枠および設定をクリアしますか？')) {
+            pushHistory();
             clearConflictHighlights();
             initStaffData();
             renderInputTable();
+            showToast('🧹 全消去しました（「↩ 戻る」で元に戻せます）');
+        }
+    });
+
+    // ★ 戻る（Undo） / やり直す（Redo） ボタンイベント
+    const undoBtn = document.getElementById('undoBtn');
+    if (undoBtn) undoBtn.addEventListener('click', undo);
+
+    const headerUndoBtn = document.getElementById('headerUndoBtn');
+    if (headerUndoBtn) headerUndoBtn.addEventListener('click', undo);
+
+    const redoBtn = document.getElementById('redoBtn');
+    if (redoBtn) redoBtn.addEventListener('click', redo);
+
+    // ★ キーボードショートカット (Ctrl+Z: 戻る / Ctrl+Y: やり直す)
+    document.addEventListener('keydown', (e) => {
+        if (e.target && (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA')) {
+            // テキスト入力欄にフォーカスがある時はブラウザ標準の文字Undoに委ねる
+            return;
+        }
+
+        if ((e.ctrlKey || e.metaKey) && !e.shiftKey && e.key.toLowerCase() === 'z') {
+            e.preventDefault();
+            undo();
+        } else if ((e.ctrlKey || e.metaKey) && (e.key.toLowerCase() === 'y' || (e.shiftKey && e.key.toLowerCase() === 'z'))) {
+            e.preventDefault();
+            redo();
         }
     });
 
@@ -1342,7 +1479,11 @@ document.addEventListener('DOMContentLoaded', () => {
         renderInputTable();
         const term = getTermInfo();
         const modeText = mode === 'replace' ? '（既存枠クリア済み）' : '';
-        showToast(`🎉 【${term.title}】${affectedStaff.size}名・計${updatedCount}件の希望勤務を取り込みました${modeText}`);
+        if (updatedCount === 0) {
+            showToast(`📄 【${term.title}】事前希望枠を全クリア（白紙）にしました`);
+        } else {
+            showToast(`🎉 【${term.title}】${affectedStaff.size}名・計${updatedCount}件の希望勤務を取り込みました${modeText}`);
+        }
     }
 
     // ==========================================
@@ -1447,6 +1588,16 @@ document.addEventListener('DOMContentLoaded', () => {
             }
         }
 
+        // レイアウト判定: C列（C2〜C4）にセルが存在するかで新レイアウト（行4〜53, 列3〜30）かどうかを判定
+        let isNewLayout = false;
+        for (let i = 0; i < Math.min(200, cNodes.length); i++) {
+            const ref = cNodes[i].getAttribute('r');
+            if (ref && /^C[2-4]$/.test(ref)) {
+                isNewLayout = true;
+                break;
+            }
+        }
+
         for (let i = 0; i < cNodes.length; i++) {
             const c = cNodes[i];
             const ref = c.getAttribute('r');
@@ -1488,15 +1639,19 @@ document.addEventListener('DOMContentLoaded', () => {
             let staffIdx = -1;
             let dayIdx = -1;
 
-            // 新レイアウト: スタッフ行 4〜53, 日付列 C〜AD (列 3〜30)
-            if (row >= 4 && row <= 53 && col >= 3 && col <= 30) {
-                staffIdx = row - 4;
-                dayIdx = col - 3;
-            }
-            // 旧レイアウト互換: スタッフ行 3〜52, 日付列 L〜AM (列 12〜39)
-            else if (row >= 3 && row <= 52 && col >= 12 && col <= 39) {
-                staffIdx = row - 3;
-                dayIdx = col - 12;
+            if (isNewLayout) {
+                // 新レイアウト: スタッフ行 4〜53, 日付列 C〜AD (列 3〜30)
+                // ※ 行3は曜日ヘッダーなので絶対にスタッフ行として扱わない！
+                if (row >= 4 && row <= 53 && col >= 3 && col <= 30) {
+                    staffIdx = row - 4;
+                    dayIdx = col - 3;
+                }
+            } else {
+                // 旧レイアウト互換: スタッフ行 3〜52, 日付列 L〜AM (列 12〜39)
+                if (row >= 3 && row <= 52 && col >= 12 && col <= 39) {
+                    staffIdx = row - 3;
+                    dayIdx = col - 12;
+                }
             }
 
             if (staffIdx >= 0 && staffIdx < NUM_STAFF && dayIdx >= 0 && dayIdx < NUM_DAYS) {
@@ -1628,9 +1783,10 @@ document.addEventListener('DOMContentLoaded', () => {
                 staffIdx = noVal - 1;
             } else {
                 const nameVal = rowVals[1] || rowVals[0];
-                const found = staffList.findIndex(st => st.name === nameVal.trim());
-                if (found >= 0) staffIdx = found;
-                else if (r - dataStartRow < NUM_STAFF) staffIdx = r - dataStartRow;
+                if (nameVal && nameVal.trim() !== '') {
+                    const found = staffList.findIndex(st => st.name === nameVal.trim());
+                    if (found >= 0) staffIdx = found;
+                }
             }
 
             if (staffIdx >= 0 && staffIdx < NUM_STAFF) {
@@ -1668,10 +1824,23 @@ document.addEventListener('DOMContentLoaded', () => {
                     parseResult = parseCsvOrTsvText(text);
                 }
 
+                // ★ 白紙シート（希望入力なし）を取り込んだ場合でも、既存データを全クリア（白紙化）して正常に反映！
                 if (!parseResult || !parseResult.items || parseResult.items.length === 0) {
-                    alert('シート内に有効な希望勤務データが見つかりませんでした。');
+                    pushHistory();
+                    if (parseResult && parseResult.startDate) {
+                        const startDateInput = document.getElementById('termStartDate');
+                        if (startDateInput) {
+                            startDateInput.value = parseResult.startDate;
+                            getTermInfo();
+                        }
+                    }
+                    applyScheduleImport([], 'replace');
+                    showToast('📄 白紙の希望シートを取り込みました。事前希望枠を全クリア（白紙）にしました。');
                     return;
                 }
+
+                // ★ 取り込み前状態を履歴に保存（「↩ 戻る」で取り消し可能）
+                pushHistory();
 
                 // ★ 要望対応1: 取り込んだシートの期間に合わせて、indexの対象期間（開始日・終了日・ヘッダー日付）を自動同期！
                 if (parseResult.startDate) {

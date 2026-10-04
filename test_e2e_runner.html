@@ -1,0 +1,128 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8">
+    <title>E2E Undo & Blank Import Test</title>
+</head>
+<body>
+    <pre id="test-output">RUNNING</pre>
+    <iframe id="appFrame" src="index.html" style="width:1000px; height:800px;"></iframe>
+
+    <script>
+    window.addEventListener('load', async () => {
+        const frame = document.getElementById('appFrame');
+        await new Promise(r => setTimeout(r, 1500));
+
+        const doc = frame.contentDocument || frame.contentWindow.document;
+        const win = frame.contentWindow;
+
+        const results = [];
+        function log(msg) {
+            results.push(msg);
+            console.log(msg);
+        }
+
+        // Test 1: 初期状態の確認
+        log("Test 1: Check initial state and Undo button");
+        const undoBtn = doc.getElementById('undoBtn');
+        const headerUndoBtn = doc.getElementById('headerUndoBtn');
+        log("Undo button disabled initially: " + undoBtn.disabled + " (Expected: true)");
+
+        // Test 2: セルクリックによる変更とUndo
+        log("\nTest 2: Cell click and Undo");
+        const cell = doc.querySelector('td[data-type="day"][data-s="0"][data-d="0"]'); // 佐藤さんの1日目
+        const origVal = cell.textContent;
+        // 「休」パレットが選択されている状態でクリック
+        cell.click();
+        log("Cell value after click: '" + cell.textContent + "' (Expected: '休')");
+        log("Undo button enabled after click: " + !undoBtn.disabled + " (Expected: true)");
+
+        // 戻るボタンをクリック
+        undoBtn.click();
+        log("Cell value after Undo: '" + cell.textContent + "' (Expected: '" + origVal + "')");
+        log("Undo button disabled after Undo back: " + undoBtn.disabled + " (Expected: true)");
+
+        // やり直すボタンをクリック
+        const redoBtn = doc.getElementById('redoBtn');
+        log("Redo button enabled: " + !redoBtn.disabled + " (Expected: true)");
+        redoBtn.click();
+        log("Cell value after Redo: '" + cell.textContent + "' (Expected: '休')");
+
+        // もう一度Undoして元に戻す
+        undoBtn.click();
+        log("Cell restored again: '" + cell.textContent + "' (Expected: '" + origVal + "')");
+
+        // Test 3: 白紙xlsxのパーステスト
+        log("\nTest 3: Parse blank xlsx with row 3 weekdays");
+        const mockSheetXml = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">
+  <sheetData>
+    <row r="1"><c r="A1" t="inlineStr"><is><t>4/1～4/28勤務表</t></is></c></row>
+    <row r="2"><c r="A2" t="inlineStr"><is><t>No</t></is></c><c r="B2" t="inlineStr"><is><t>氏名</t></is></c><c r="C2" t="inlineStr"><is><t>4/1</t></is></c><c r="N2" t="inlineStr"><is><t>4/12</t></is></c></row>
+    <row r="3"><c r="A3"/><c r="B3"/><c r="C3" t="inlineStr"><is><t>水</t></is></c><c r="N3" t="inlineStr"><is><t>日</t></is></c><c r="U3" t="inlineStr"><is><t>日</t></is></c><c r="AB3" t="inlineStr"><is><t>日</t></is></c></row>
+    <row r="4"><c r="A4"><v>1</v></c><c r="B4" t="inlineStr"><is><t>佐藤 健一</t></is></c><c r="C4"/><c r="N4"/><c r="U4"/><c r="AB4"/></row>
+  </sheetData>
+</worksheet>`;
+
+        const parser = new DOMParser();
+        const xmlDoc = parser.parseFromString(mockSheetXml, 'text/xml');
+        const cNodes = xmlDoc.getElementsByTagName('c');
+
+        let isNewLayout = false;
+        for (let i = 0; i < Math.min(200, cNodes.length); i++) {
+            const ref = cNodes[i].getAttribute('r');
+            if (ref && /^C[2-4]$/.test(ref)) {
+                isNewLayout = true;
+                break;
+            }
+        }
+        log("isNewLayout detected: " + isNewLayout + " (Expected: true)");
+
+        const parsedItems = [];
+        for (let i = 0; i < cNodes.length; i++) {
+            const c = cNodes[i];
+            const ref = c.getAttribute('r');
+            if (!ref) continue;
+            const m = ref.match(/^([A-Z]+)([0-9]+)$/);
+            if (!m) continue;
+            const colStr = m[1];
+            const row = parseInt(m[2], 10);
+            let col = 0;
+            for (let k = 0; k < colStr.length; k++) col = col * 26 + (colStr.charCodeAt(k) - 64);
+
+            let staffIdx = -1;
+            let dayIdx = -1;
+            if (isNewLayout) {
+                if (row >= 4 && row <= 53 && col >= 3 && col <= 30) {
+                    staffIdx = row - 4;
+                    dayIdx = col - 3;
+                }
+            } else {
+                if (row >= 3 && row <= 52 && col >= 12 && col <= 39) {
+                    staffIdx = row - 3;
+                    dayIdx = col - 12;
+                }
+            }
+
+            if (staffIdx >= 0 && dayIdx >= 0) {
+                const isNode = c.getElementsByTagName('is')[0];
+                let val = '';
+                if (isNode) {
+                    const tNodes = isNode.getElementsByTagName('t');
+                    for (let j = 0; j < tNodes.length; j++) val += tNodes[j].textContent;
+                }
+                if (val && val.trim() !== '') {
+                    parsedItems.push({ staffIdx, dayIdx, symbol: val.trim() });
+                }
+            }
+        }
+
+        log("Parsed items from blank sheet: " + parsedItems.length + " (Expected: 0)");
+        const hasSatouCircle = parsedItems.some(it => it.staffIdx === 0 && it.symbol === '日');
+        log("Satou has Sunday misclassified as circle: " + hasSatouCircle + " (Expected: false)");
+
+        document.getElementById('test-output').textContent = results.join('\n');
+    });
+    </script>
+</body>
+</html>
