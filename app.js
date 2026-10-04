@@ -893,7 +893,7 @@ document.addEventListener('DOMContentLoaded', () => {
   <tr>
     <th rowspan="2" style="${fontMeiryo} background-color:#f1f5f9; font-weight:bold; ${borderThin} ${borderThickB}">No</th>
     <th rowspan="2" style="${fontMeiryo} background-color:#f1f5f9; font-weight:bold; ${borderThin} ${borderThickR} ${borderThickB}">氏名</th>
-    <th colspan="${NUM_DAYS}" style="${fontMeiryo} background-color:#f8fafc; color:#1e293b; font-weight:bold; font-size:11pt; ${borderThin} ${borderThickR} ${borderThickB}">${term.title}（赤字太字: 事前希望枠 / 黒字: 自動配置）</th>
+    <th colspan="${NUM_DAYS}" style="${fontMeiryo} background-color:#f8fafc; color:#1e293b; font-weight:bold; font-size:11pt; ${borderThin} ${borderThickR} ${borderThickB}">${term.title}</th>
     <th colspan="8" style="${fontMeiryo} background-color:#e0f2fe; color:#0369a1; font-weight:bold; ${borderThin} ${borderThickB}">勤務・休暇 集計（自動計算数式）</th>
   </tr>
   <tr>
@@ -926,7 +926,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
         for (let s = 0; s < NUM_STAFF; s++) {
             const staff = staffList[s];
-            const rowNum = s + 3; // Excel上の行番号 (3〜52)
+            const rowNum = s + 4; // Excel上の行番号 (4〜53)
             const isLastStaff = (s === NUM_STAFF - 1);
             const rowBottom = isLastStaff ? borderThickB : '';
             const rng = `${startCol}${rowNum}:${endCol}${rowNum}`;
@@ -983,8 +983,8 @@ document.addEventListener('DOMContentLoaded', () => {
         // ==========================================
         html += `</tbody>\n<tfoot>\n`;
 
-        const startRow = 3;
-        const endRow = NUM_STAFF + 2; // 52行目
+        const startRow = 4;
+        const endRow = NUM_STAFF + 3; // 53行目
 
         // 1. 54行目: 出勤人数合計
         html += `  <tr style="background-color:#f8fafc; font-weight:bold;">\n`;
@@ -1911,7 +1911,7 @@ document.addEventListener('DOMContentLoaded', () => {
     <tr>
       <th rowspan="2" class="header" style="width:35px; ${borderThin} ${borderThickB}">No</th>
       <th rowspan="2" class="header" style="width:100px; ${borderThin} ${borderThickR} ${borderThickB}">氏名</th>
-      <th colspan="${NUM_DAYS}" class="header" style="font-size:11pt; ${borderThin} ${borderThickR} ${borderThickB}">${term.title}（<span style="color:#DC2626; font-weight:bold;">赤字太字</span>: 事前希望枠 / 黒字: 自動配置）</th>
+      <th colspan="${NUM_DAYS}" class="header" style="font-size:11pt; ${borderThin} ${borderThickR} ${borderThickB}">${term.title}</th>
       <th colspan="8" class="header-stat" style="${borderThin} ${borderThickB}">勤務・休暇 集計</th>
     </tr>
     <tr>
@@ -1960,7 +1960,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 }
             }
 
-            const rowNum = s + 3; // Excel行番号 3〜52
+            const rowNum = s + 4; // Excel行番号 4〜53
             const startCol = 'C';
             const endCol = 'AD';
             const rng = `${startCol}${rowNum}:${endCol}${rowNum}`;
@@ -1989,8 +1989,8 @@ document.addEventListener('DOMContentLoaded', () => {
         html += `  </tbody>
   <tfoot>
 `;
-        const startRow = 3;
-        const endRow = NUM_STAFF + 2; // 52行目
+        const startRow = 4;
+        const endRow = NUM_STAFF + 3; // 53行目
 
         // 1. 54行目: 出勤人数合計
         html += `    <tr class="foot-total">
