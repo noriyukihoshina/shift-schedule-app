@@ -773,16 +773,28 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // 第1段階: 基本勤務表 自動生成ボタン（特殊勤務の自動割当は行わず、すべて○で保持）
     const solveBtn = document.getElementById('solveBtn');
+    function setSolveLoading(loading) {
+        const btns = [document.getElementById('solveBtn'), document.getElementById('inputSolveBtn')];
+        btns.forEach(btn => {
+            if (!btn) return;
+            btn.disabled = loading;
+            if (loading) {
+                btn.innerHTML = `
+                    <svg class="animate-spin" style="width:16px;height:16px;margin-right:6px;display:inline-block;animation:spin 1s linear infinite;" viewBox="0 0 24 24" fill="none">
+                        <circle cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4" style="opacity:0.25;"></circle>
+                        <path fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                    </svg>
+                    基本勤務表を計算中...
+                `;
+            } else {
+                btn.innerHTML = `⚡ 勤務表を自動生成する`;
+            }
+        });
+    }
+
     if (solveBtn) {
         solveBtn.addEventListener('click', () => {
-            solveBtn.disabled = true;
-            solveBtn.innerHTML = `
-                <svg class="animate-spin" style="width:16px;height:16px;margin-right:6px;display:inline-block;animation:spin 1s linear infinite;" viewBox="0 0 24 24" fill="none">
-                    <circle cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4" style="opacity:0.25;"></circle>
-                    <path fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                </svg>
-                基本勤務表を計算中...
-            `;
+            setSolveLoading(true);
 
             setTimeout(() => {
                 try {
@@ -793,8 +805,7 @@ document.addEventListener('DOMContentLoaded', () => {
                     });
                     const result = scheduler.solveBaseSchedule();
 
-                    solveBtn.disabled = false;
-                    solveBtn.innerHTML = `⚡ 勤務表を自動生成する`;
+                    setSolveLoading(false);
 
                     if (result.success) {
                         clearConflictHighlights();
@@ -809,8 +820,7 @@ document.addEventListener('DOMContentLoaded', () => {
                         showErrorModal(result.errors);
                     }
                 } catch (err) {
-                    solveBtn.disabled = false;
-                    solveBtn.innerHTML = `⚡ 勤務表を自動生成する`;
+                    setSolveLoading(false);
                     showErrorModal([`予期せぬエラーが発生しました: ${err.message}`]);
                 }
             }, 80);
@@ -1130,11 +1140,14 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     }
 
-    document.getElementById('loadSampleBtn').addEventListener('click', () => {
-        pushHistory();
-        loadSampleData();
-        showToast('🎲 サンプルデータを投入しました（「↩ 戻る」で元に戻せます）');
-    });
+    const sampleBtn = document.getElementById('loadSampleBtn');
+    if (sampleBtn) {
+        sampleBtn.addEventListener('click', () => {
+            pushHistory();
+            loadSampleData();
+            showToast('🎲 サンプルデータを投入しました（「↩ 戻る」で元に戻せます）');
+        });
+    }
 
     const conflictBtn = document.getElementById('loadConflictBtn');
     if (conflictBtn) {
@@ -1144,15 +1157,34 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     }
 
-    document.getElementById('clearAllBtn').addEventListener('click', () => {
-        if (confirm('すべての事前入力枠および設定をクリアしますか？')) {
-            pushHistory();
-            clearConflictHighlights();
-            initStaffData();
-            renderInputTable();
-            showToast('🧹 全消去しました（「↩ 戻る」で元に戻せます）');
-        }
-    });
+    const clearAllBtn = document.getElementById('clearAllBtn');
+    if (clearAllBtn) {
+        clearAllBtn.addEventListener('click', () => {
+            if (confirm('すべての事前入力枠および設定をクリアしますか？')) {
+                pushHistory();
+                clearConflictHighlights();
+                initStaffData();
+                renderInputTable();
+                showToast('🧹 全消去しました（「↩ 戻る」で元に戻せます）');
+            }
+        });
+    }
+
+    // ★ 入力シート内の「⚡ 勤務表を自動生成する」ボタン連携
+    const inputSolveBtn = document.getElementById('inputSolveBtn');
+    if (inputSolveBtn && solveBtn) {
+        inputSolveBtn.addEventListener('click', () => {
+            solveBtn.click();
+        });
+    }
+
+    // ★ 入力シート内の「🧹 全消去」ボタン連携
+    const inputClearBtn = document.getElementById('inputClearBtn');
+    if (inputClearBtn && clearAllBtn) {
+        inputClearBtn.addEventListener('click', () => {
+            clearAllBtn.click();
+        });
+    }
 
     // ★ 戻る（Undo） / やり直す（Redo） ボタンイベント
     const undoBtn = document.getElementById('undoBtn');
