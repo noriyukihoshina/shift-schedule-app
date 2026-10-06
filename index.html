@@ -172,15 +172,15 @@
                         <button class="btn btn-success" id="outputAssignSpecialBtn" style="background: #059669; border-color: #059669; color: white; font-weight: 700;" title="基本勤務表の「○」から、早3名・遅1名・E2名・8時1名を割り当てて最終完成させます">
                             ✨ 特殊勤務を入れる
                         </button>
-                        <button class="btn btn-outline" id="validateOutputBtn" style="font-weight: 700; color: #1e40af; border-color: #93c5fd; background: #eff6ff;" title="確定勤務表のすべてのハード制約・ソフト制約（連勤、週休2日、特殊勤務翌日休、属性人数等）を厳格に再チェックします">
-                            🔍 制約チェック
+                        <button class="btn btn-primary" id="copyForExcelBtn" title="警告やブロックなしでExcelに直接貼り付け可能！事前希望枠の赤字太字・罫線・自動計算数式を保持してクリップボードにコピーします">
+                            📋 Excelへ一発貼り付け用コピー（赤字・数式付き）
                         </button>
                         <label class="btn btn-outline" title="Excel等で手動修正した勤務表(.xlsxや.csv)を再読み込みし、制約違反を自動チェックして青い網掛けで表示します" style="font-size: 0.82rem; padding: 5px 12px; color: #1d4ed8; border-color: #93c5fd; background: #eff6ff; cursor: pointer; margin-bottom: 0; font-weight: 700; display: inline-flex; align-items: center; gap: 4px;">
                             📂 修正済み勤務表取込 (.xlsx / .csv)
                             <input type="file" id="importModifiedScheduleFileInput" accept=".xlsx,.csv,.tsv,.txt" style="display: none;">
                         </label>
-                        <button class="btn btn-primary" id="copyForExcelBtn" title="警告やブロックなしでExcelに直接貼り付け可能！事前希望枠の赤字太字・罫線・自動計算数式を保持してクリップボードにコピーします">
-                            📋 Excelへ一発貼り付け用コピー（赤字・数式付き）
+                        <button class="btn btn-outline" id="validateOutputBtn" style="font-weight: 700; color: #1e40af; border-color: #93c5fd; background: #eff6ff;" title="確定勤務表のすべてのハード制約・ソフト制約（連勤、週休2日、特殊勤務翌日休、属性人数等）を厳格に再チェックします">
+                            🔍 制約チェック
                         </button>
                         <button class="btn btn-outline" id="exportExcelBtn" title="書式付きスプレッドシート形式でダウンロード（UTF-8 BOM付き）">
                             📊 スプレッドシート保存 (.xls)
