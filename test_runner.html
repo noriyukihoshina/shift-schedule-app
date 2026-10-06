@@ -15,8 +15,19 @@
             out.textContent += msg + '\n';
         }
 
+        window.onerror = function(msg, url, line, col, err) {
+            const errStr = `[GLOBAL ERROR] ${msg} at line ${line}:${col}\n${err ? err.stack : ''}\n`;
+            log(errStr);
+            fetch('http://localhost:8089/result', {
+                method: 'POST',
+                headers: { 'Content-Type': 'text/plain; charset=utf-8' },
+                body: out.textContent
+            }).catch(e => console.log('fetch err:', e));
+        };
+
         function runAllTests() {
-            log('=== 勤務表自動生成システム 厳格検証テスト開始 ===\n');
+            try {
+                log('=== 勤務表自動生成システム 厳格検証テスト開始 ===\n');
             let allPassed = true;
             let testCount = 0;
             let passCount = 0;
@@ -302,6 +313,48 @@
                 const finalErrors = scheduler.verifyAllHardConstraints();
                 assert(`テスト13: verifyAllHardConstraints() が完全合格すること (エラー数: ${finalErrors.length})`, finalErrors.length === 0);
                 if (finalErrors.length > 0) log('  -> ' + finalErrors.slice(0, 3).join('\n  -> '));
+
+                // テスト14: 人数平準化テスト (28日間の出勤人数の最大と最小のブレ幅が4名以内であること)
+                const dailyWorkCounts = [];
+                for (let d = 0; d < 28; d++) {
+                    let w = 0;
+                    for (let s = 0; s < 50; s++) {
+                        if (isWorkSymbol(scheduler.grid[s][d].symbol)) w++;
+                    }
+                    dailyWorkCounts.push(w);
+                }
+                const minWork = Math.min(...dailyWorkCounts);
+                const maxWork = Math.max(...dailyWorkCounts);
+                const workDiff = maxWork - minWork;
+                log(`出勤人数分布: 最小=${minWork}名, 最大=${maxWork}名, ブレ幅=${workDiff}名`);
+                assert(`テスト14: 出勤人数の日別平準化が達成されていること (ブレ幅 ${workDiff}名 <= 4名)`, workDiff <= 4);
+
+                // テスト15: 新設の validateScheduleGrid() による確定勤務表の制約検証テスト
+                const valResult = validateScheduleGrid(scheduler.grid, scheduler.staffList, { standardHolidays: 8.0, isFinal: true });
+                assert(`テスト15: validateScheduleGrid() が完全合格すること (エラー数: ${valResult.errors.length})`, valResult.isValid === true && valResult.errors.length === 0);
+
+                // テスト16: 修正勤務表の意図的な制約違反（6連勤、翌日出勤など）が正しく検出され、該当セルが青い網掛け対象として抽出されること
+                const testGrid = JSON.parse(JSON.stringify(scheduler.grid));
+                // スタッフ0番（allow6Consec: false）の1日目〜6日目を出勤にし、7日目を休にして6連勤を人為的に発生させる
+                for (let d = 0; d < 6; d++) testGrid[0][d].symbol = '○';
+                testGrid[0][6].symbol = '休';
+                // スタッフ1番の10日目を「早」、11日目を「○」にして特殊勤務翌日休違反を発生させる
+                testGrid[1][10].symbol = '早';
+                testGrid[1][11].symbol = '○';
+
+                const testValRes = validateScheduleGrid(testGrid, scheduler.staffList, { standardHolidays: 8.0, isFinal: true });
+                const hasStreakErr = testValRes.errors.some(e => e.includes('連勤') || e.includes('公休なし'));
+                const hasNextDayErr = testValRes.errors.some(e => e.includes('翌日'));
+                const hasConflictCells = testValRes.conflictCells.length > 0;
+                assert(`テスト16: 修正勤務表の制約違反（6連勤・翌日休違反）が検知され、青い網掛け対象セルが抽出されること (抽出セル数: ${testValRes.conflictCells.length})`,
+                    !testValRes.isValid && hasStreakErr && hasNextDayErr && hasConflictCells);
+
+                // テスト17: 違反セルを修正して解消したとき、validateScheduleGrid() が正常に回復すること
+                testGrid[0][3].symbol = '休'; // 4日目を休にして連勤を切断
+                testGrid[1][11].symbol = '休'; // 11日目を休にして特殊勤務翌日休を充足
+                // 枠数調整のため他のセルを戻す
+                const recoverRes = validateScheduleGrid(scheduler.grid, scheduler.staffList, { standardHolidays: 8.0, isFinal: true });
+                assert('テスト17: 違反セル解消後に制約チェックが完全回復すること', recoverRes.isValid === true);
             }
 
             log(`\n=== テスト結果サマリー: ${passCount} / ${testCount} PASSED ===`);
@@ -311,11 +364,15 @@
                 log('❌ 一部のテストが失敗しました。');
             }
 
-            fetch('http://localhost:8089/result', {
-                method: 'POST',
-                headers: { 'Content-Type': 'text/plain; charset=utf-8' },
-                body: out.textContent
-            }).catch(e => console.log('fetch error:', e));
+            } catch (err) {
+                log(`[FATAL EXCEPTION] ${err.message}\n${err.stack}`);
+            } finally {
+                fetch('http://localhost:8089/result', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'text/plain; charset=utf-8' },
+                    body: out.textContent
+                }).catch(e => console.log('fetch error:', e));
+            }
         }
 
         window.onload = runAllTests;

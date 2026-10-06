@@ -467,15 +467,10 @@ document.addEventListener('DOMContentLoaded', () => {
                             cell.title = 'クリックで記号入力';
                         }
 
-                        if (cell.classList.contains('conflict-highlight')) {
-                            cell.classList.remove('conflict-highlight');
-                            cell.removeAttribute('data-conflict-reason');
-
-                            const remaining = document.querySelectorAll('.conflict-highlight');
-                            if (remaining.length === 0) {
-                                const banner = document.getElementById('conflictAlertBanner');
-                                if (banner) banner.classList.remove('show');
-                            }
+                        const hasHighlights = document.querySelectorAll('#inputTableBody .conflict-highlight').length > 0;
+                        const hasBanner = document.getElementById('conflictAlertBanner')?.classList.contains('show');
+                        if (hasHighlights || hasBanner) {
+                            checkInputConstraints(false);
                         }
                     }
                 }
@@ -483,7 +478,10 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     }
 
-    function applyConflictHighlights(conflictCells) {
+    // ==========================================
+    // 入力シート用 障壁・制約違反ハイライト制御
+    // ==========================================
+    function applyConflictHighlights(conflictCells, errors = []) {
         clearConflictHighlights();
 
         if (!conflictCells || conflictCells.length === 0) return;
@@ -500,17 +498,26 @@ document.addEventListener('DOMContentLoaded', () => {
         const banner = document.getElementById('conflictAlertBanner');
         if (banner) {
             banner.classList.add('show');
+            const errList = errors && errors.length > 0
+                ? `<ul style="font-size:0.8rem; color:#1e293b; margin:4px 0 0 0; padding-left:18px; max-height:100px; overflow-y:auto;">
+                    ${errors.slice(0, 8).map(e => `<li>${e}</li>`).join('')}
+                    ${errors.length > 8 ? `<li style="color:#64748b; font-style:italic;">...他 ${errors.length - 8} 件</li>` : ''}
+                   </ul>`
+                : '';
             banner.innerHTML = `
-                <div style="display:flex; align-items:center; gap:10px;">
-                    <span style="font-size:1.4rem;">ℹ️</span>
-                    <div>
-                        <strong style="color:#1e3a8a;">障壁となっている箇所（薄いブルーの網掛けセル: ${conflictCells.length}箇所）を特定しました</strong>
-                        <div style="font-size:0.82rem; color:#2563eb; margin-top:2px;">
-                            該当セルをクリックして希望休を出勤に変更するなど調整してください。解消すると網掛けが消えます。
+                <div style="display:flex; justify-content:space-between; align-items:flex-start; width:100%;">
+                    <div style="display:flex; align-items:flex-start; gap:10px;">
+                        <span style="font-size:1.4rem;">ℹ️</span>
+                        <div>
+                            <strong style="color:#1e3a8a;">障壁・制約違反箇所（薄いブルーの網掛けセル: ${conflictCells.length}箇所）を特定しました</strong>
+                            <div style="font-size:0.82rem; color:#2563eb; margin-top:2px;">
+                                該当セルをクリックして修正してください。条件が解決すると網掛けは自動的に消えます。（最終判断としてこのまま生成・終了することも可能です）
+                            </div>
+                            ${errList}
                         </div>
                     </div>
+                    <button class="btn btn-outline" style="font-size:0.75rem; padding:4px 10px; margin-left:12px; white-space:nowrap;" onclick="document.getElementById('conflictAlertBanner').classList.remove('show');">閉じる</button>
                 </div>
-                <button class="btn btn-outline" style="font-size:0.75rem; padding:4px 10px;" onclick="document.getElementById('conflictAlertBanner').classList.remove('show');">閉じる</button>
             `;
         }
 
@@ -522,14 +529,154 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     function clearConflictHighlights() {
-        document.querySelectorAll('.conflict-highlight').forEach(cell => {
+        document.querySelectorAll('#inputTableBody .conflict-highlight').forEach(cell => {
             cell.classList.remove('conflict-highlight');
             cell.removeAttribute('data-conflict-reason');
             const val = cell.textContent.trim();
             cell.title = val ? `事前固定枠: ${val}（自動上書きロック中）` : 'クリックで記号入力';
         });
         const banner = document.getElementById('conflictAlertBanner');
-        if (banner) banner.classList.remove('show');
+        if (banner) {
+            banner.classList.remove('show');
+            banner.innerHTML = '';
+        }
+    }
+
+    function checkInputConstraints(showToastOnSuccess = false) {
+        const term = getTermInfo();
+        const res = validateInitialState(staffList, {
+            dates: term.dates,
+            standardHolidays: 8.0
+        });
+
+        if (res.errors && res.errors.length > 0) {
+            applyConflictHighlights(res.conflictCells, res.errors);
+            if (showToastOnSuccess) {
+                showToast(`⚠️ 希望枠に${res.errors.length}件の制約矛盾があります。該当セルをブルー網掛けで表示しました。`);
+            }
+        } else {
+            clearConflictHighlights();
+            if (showToastOnSuccess) {
+                showToast('🎉 事前希望枠に制約矛盾はありません。');
+            }
+        }
+        return res;
+    }
+
+    // ==========================================
+    // 出力シート用 確定勤務表エラー＆網掛け制御
+    // ==========================================
+    let currentOutputConflicts = [];
+
+    function clearOutputConflictHighlights() {
+        document.querySelectorAll('#outputTableBody .conflict-highlight').forEach(cell => {
+            cell.classList.remove('conflict-highlight');
+            cell.removeAttribute('data-conflict-reason');
+        });
+        const banner = document.getElementById('outputConflictAlertBanner');
+        if (banner) {
+            banner.classList.remove('show');
+            banner.innerHTML = '';
+        }
+        currentOutputConflicts = [];
+    }
+
+    function applyOutputConflictHighlights(conflictCells, errors = []) {
+        // 既存の網掛けを解除
+        document.querySelectorAll('#outputTableBody .conflict-highlight').forEach(cell => {
+            cell.classList.remove('conflict-highlight');
+            cell.removeAttribute('data-conflict-reason');
+        });
+
+        currentOutputConflicts = conflictCells || [];
+
+        if (currentOutputConflicts.length > 0) {
+            currentOutputConflicts.forEach(item => {
+                const cell = document.querySelector(`#outputTableBody td[data-s="${item.staffIndex}"][data-d="${item.dayIndex}"]`);
+                if (cell) {
+                    cell.classList.add('conflict-highlight');
+                    cell.setAttribute('data-conflict-reason', item.reason || '制約違反');
+                    cell.title = `⚠️ 【制約違反】${item.reason || '制約が守られていません'}`;
+                }
+            });
+        }
+
+        const banner = document.getElementById('outputConflictAlertBanner');
+        if (banner) {
+            if (errors.length > 0) {
+                banner.classList.add('show');
+                const errorListHtml = errors.slice(0, 10).map(err => `<li style="margin-bottom:2px;">${err}</li>`).join('');
+                const moreMsg = errors.length > 10 ? `<li style="color:#64748b; font-style:italic;">...他 ${errors.length - 10} 件の指摘事項</li>` : '';
+                banner.innerHTML = `
+                    <div style="display:flex; justify-content:space-between; align-items:flex-start; width:100%;">
+                        <div style="display:flex; align-items:flex-start; gap:10px;">
+                            <span style="font-size:1.4rem;">⚠️</span>
+                            <div>
+                                <strong style="color:#1e3a8a; font-size:0.95rem;">
+                                    制約チェック結果: ${errors.length}件の指摘事項（薄いブルーの網掛けセル: ${currentOutputConflicts.length}箇所）
+                                </strong>
+                                <div style="font-size:0.82rem; color:#2563eb; margin: 3px 0 6px 0;">
+                                    該当セルをクリックして勤務や休日を修正してください。条件が解決すると網掛けは自動的に消えます。（最終判断としてこのまま保存・印刷することも可能です）
+                                </div>
+                                <ul style="font-size:0.8rem; color:#1e293b; margin:0; padding-left:18px; max-height:130px; overflow-y:auto;">
+                                    ${errorListHtml}
+                                    ${moreMsg}
+                                </ul>
+                            </div>
+                        </div>
+                        <button class="btn btn-outline" style="font-size:0.75rem; padding:4px 10px; margin-left:12px; white-space:nowrap;" onclick="document.getElementById('outputConflictAlertBanner').classList.remove('show');">閉じる</button>
+                    </div>
+                `;
+            } else {
+                banner.classList.remove('show');
+                banner.innerHTML = '';
+            }
+        }
+    }
+
+    function checkOutputConstraints(showToastOnSuccess = false) {
+        if (!lastSolveResult || !lastSolveResult.grid) {
+            if (showToastOnSuccess) showToast('勤務表がまだ生成されていません');
+            return null;
+        }
+
+        const term = getTermInfo();
+        const res = validateScheduleGrid(lastSolveResult.grid, staffList, {
+            dates: term.dates,
+            standardHolidays: 8.0,
+            isFinal: true
+        });
+
+        if (!res.isValid) {
+            applyOutputConflictHighlights(res.conflictCells, res.errors);
+            if (showToastOnSuccess) {
+                showToast(`⚠️ ${res.errors.length}件の制約指摘があります。該当セルをブルー網掛けで表示しました。`);
+            }
+        } else {
+            clearOutputConflictHighlights();
+            const banner = document.getElementById('outputConflictAlertBanner');
+            if (banner) {
+                banner.classList.add('show');
+                banner.innerHTML = `
+                    <div style="display:flex; justify-content:space-between; align-items:center; width:100%;">
+                        <div style="display:flex; align-items:center; gap:10px;">
+                            <span style="font-size:1.4rem;">🎉</span>
+                            <div>
+                                <strong style="color:#065f46; font-size:0.95rem;">すべての制約（ハード・ソフト制約）が100%遵守されています！</strong>
+                                <div style="font-size:0.82rem; color:#047857; margin-top:2px;">
+                                    連勤制限、週休2日、特殊勤務翌日休、各日の必要人数が完全に満たされた勤務表です。
+                                </div>
+                            </div>
+                        </div>
+                        <button class="btn btn-outline" style="font-size:0.75rem; padding:4px 10px;" onclick="document.getElementById('outputConflictAlertBanner').classList.remove('show');">閉じる</button>
+                    </div>
+                `;
+            }
+            if (showToastOnSuccess) {
+                showToast('🎉 すべての制約が完璧に遵守されています！');
+            }
+        }
+        return res;
     }
 
     let currentOutputSelectedSymbol = '休';
@@ -717,6 +864,7 @@ document.addEventListener('DOMContentLoaded', () => {
                     renderOutputTable(specialResult.grid, specialResult.stats);
                     renderStatsDashboard(specialResult.stats);
                     switchTab('outputTab');
+                    checkOutputConstraints(false);
                     showToast('✨ 特殊勤務（早3名・遅1名・E2名・8時1名）の割り振りが完了しました！');
                 } else {
                     showErrorModal(specialResult.errors);
@@ -923,6 +1071,9 @@ document.addEventListener('DOMContentLoaded', () => {
                 } else {
                     renderOutputTable(lastSolveResult.grid, lastSolveResult.stats);
                 }
+
+                // ★ リアルタイム制約チェック＆網掛け更新（解消されたセルは自動消去）
+                checkOutputConstraints(false);
             });
         });
     }
@@ -2078,12 +2229,135 @@ document.addEventListener('DOMContentLoaded', () => {
                 // ★ 要望対応2: 既存のサンプルデータを完全消去（replace）し、取り込んだ希望データのみをクリーンに反映！
                 applyScheduleImport(parseResult.items, 'replace');
 
+                // ★ 事前希望枠の制約矛盾を自動チェック（エラーがあればブルー網掛けで明示）
+                checkInputConstraints(false);
+
             } catch (err) {
                 console.error(err);
                 alert('ファイルの取り込みに失敗しました: ' + err.message);
             } finally {
                 importScheduleFileInput.value = '';
             }
+        });
+    }
+
+    // ==========================================
+    // 修正済み確定勤務表ファイル取り込み（.xlsx / .csv / .tsv）
+    // ==========================================
+    const importModifiedScheduleFileInput = document.getElementById('importModifiedScheduleFileInput');
+    if (importModifiedScheduleFileInput) {
+        importModifiedScheduleFileInput.addEventListener('change', async (e) => {
+            const file = e.target.files && e.target.files[0];
+            if (!file) return;
+
+            try {
+                let parseResult;
+                if (file.name.endsWith('.xlsx')) {
+                    const buf = await file.arrayBuffer();
+                    parseResult = await parseXlsxBuffer(buf);
+                } else {
+                    const text = await file.text();
+                    parseResult = parseCsvOrTsvText(text);
+                }
+
+                if (!parseResult || !parseResult.items || parseResult.items.length === 0) {
+                    alert('ファイルから有効な勤務データが読み取れませんでした。形式をご確認ください。');
+                    return;
+                }
+
+                // 取り込み前状態を履歴に保存（「↩ 戻る」で取り消し可能）
+                pushHistory();
+
+                // 日付同期
+                if (parseResult.startDate) {
+                    const startDateInput = document.getElementById('termStartDate');
+                    if (startDateInput) {
+                        startDateInput.value = parseResult.startDate;
+                        getTermInfo();
+                    }
+                }
+
+                // 確定グリッドを初期化・更新
+                const term = getTermInfo();
+                const stdHolidayVal = parseFloat(document.getElementById('standardHolidaySelect')?.value || '8.0');
+
+                if (!lastScheduler) {
+                    lastScheduler = new ShiftScheduler(staffList, {
+                        standardHolidays: stdHolidayVal,
+                        dates: term.dates
+                    });
+                }
+
+                // 50×28 のグリッドを構築（事前希望枠があるセルは isFixed: true）
+                const newGrid = [];
+                for (let s = 0; s < NUM_STAFF; s++) {
+                    const row = [];
+                    for (let d = 0; d < NUM_DAYS; d++) {
+                        const originalWish = staffList[s].days[d] || '';
+                        row.push({
+                            symbol: originalWish ? originalWish : '',
+                            isFixed: (originalWish !== '')
+                        });
+                    }
+                    newGrid.push(row);
+                }
+
+                // ファイルから読み取った記号を反映
+                let count = 0;
+                parseResult.items.forEach(item => {
+                    const { staffIdx, dayIdx, symbol } = item;
+                    if (staffIdx >= 0 && staffIdx < NUM_STAFF && dayIdx >= 0 && dayIdx < NUM_DAYS) {
+                        const norm = normalizeSymbol(symbol);
+                        if (norm) {
+                            newGrid[staffIdx][dayIdx].symbol = norm;
+                            count++;
+                        }
+                    }
+                });
+
+                lastScheduler.grid = newGrid;
+                const newStats = lastScheduler.calculateStats();
+                lastSolveResult = {
+                    success: true,
+                    grid: newGrid,
+                    stats: newStats,
+                    errors: []
+                };
+
+                // 出力テーブル描画・ダッシュボード更新・タブ切り替え
+                renderOutputTable(newGrid, newStats);
+                renderStatsDashboard(newStats);
+                switchTab('outputTab');
+
+                // ★ 自動全制約検証を実行し、エラーセルをブルー網掛け表示！
+                const checkRes = checkOutputConstraints(false);
+                if (checkRes && !checkRes.isValid) {
+                    showToast(`📂 修正済み勤務表を取り込みました（${checkRes.errors.length}件の制約指摘をブルー網掛けで表示中）`);
+                } else {
+                    showToast(`📂 修正済み勤務表を取り込みました（全制約が完全遵守されています！）`);
+                }
+
+            } catch (err) {
+                console.error(err);
+                alert('修正済み勤務表の取り込みに失敗しました: ' + err.message);
+            } finally {
+                importModifiedScheduleFileInput.value = '';
+            }
+        });
+    }
+
+    // ボタンのイベントリスナー
+    const validateOutputBtn = document.getElementById('validateOutputBtn');
+    if (validateOutputBtn) {
+        validateOutputBtn.addEventListener('click', () => {
+            checkOutputConstraints(true);
+        });
+    }
+
+    const validateInputBtn = document.getElementById('validateInputBtn');
+    if (validateInputBtn) {
+        validateInputBtn.addEventListener('click', () => {
+            checkInputConstraints(true);
         });
     }
 
