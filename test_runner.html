@@ -1,13 +1,324 @@
 <!DOCTYPE html>
-<html>
+<html lang="ja">
 <head>
-    <meta charset="utf-8">
-    <title>Solver Test</title>
+    <meta charset="UTF-8">
+    <title>シフト自動生成エンジン 厳格検証テスト</title>
 </head>
 <body>
-    <div id="result">RUNNING</div>
+    <h1>テスト実行結果</h1>
+    <div id="output" style="white-space: pre; font-family: monospace;"></div>
+
     <script src="solver.js"></script>
-    <script src="test_runner.js"></script>
-    <script src="test_formula.js"></script>
+    <script>
+        const out = document.getElementById('output');
+        function log(msg) {
+            out.textContent += msg + '\n';
+        }
+
+        function runAllTests() {
+            log('=== 勤務表自動生成システム 厳格検証テスト開始 ===\n');
+            let allPassed = true;
+            let testCount = 0;
+            let passCount = 0;
+
+            function assert(desc, condition) {
+                testCount++;
+                if (condition) {
+                    passCount++;
+                    log(`[PASS] ${desc}`);
+                } else {
+                    allPassed = false;
+                    log(`[FAIL] ${desc}`);
+                }
+            }
+
+            // サンプルスタッフデータ生成ヘルパー
+            function createTestStaff(numStaff = 50) {
+                const list = [];
+                const patterns = [
+                    ['○', '○', '休', '○', '○'],
+                    ['休', '休', '○', '○', '○'],
+                    ['○', '休', '○', '○', '休'],
+                    ['○', '○', '○', '○', '休'],
+                    ['休', '○', '○', '○', '○']
+                ];
+                for (let i = 1; i <= numStaff; i++) {
+                    list.push({
+                        id: i,
+                        name: `スタッフ ${String(i).padStart(2, '0')}`,
+                        can8: (i <= 9),       // 1〜9番目8時可
+                        noEarly: (i === 13), // 13番早不可
+                        noLate: (i === 13),  // 13番遅不可
+                        noEve: (i === 13 || i === 15 || i === 16), // 13,15,16番E不可
+                        canSched: (i <= 8),  // 1〜8番スケ可
+                        isRole: (i <= 6),    // 1〜6番役職
+                        isFullTime: (i <= 10), // 1〜10番専従
+                        allow6Consec: (i === 20 || i === 21), // 20,21番6連勤可
+                        prevDays: [...patterns[(i - 1) % patterns.length]],
+                        days: new Array(28).fill('')
+                    });
+                }
+                // 事前希望の投入
+                list[0].days[3] = '休';
+                list[1].days[4] = '有'; list[1].days[8] = '休';
+                list[2].days[13] = '休';
+                list[5].days[0] = '休';
+                list[5].days[9] = '上1'; list[5].days[10] = '上2'; list[5].days[11] = '上3'; list[5].days[12] = '上4'; list[5].days[13] = '上5';
+                list[10].days[13] = '出'; list[10].days[14] = '出';
+                // 新記号ハヤ・オソ・イブの希望テスト
+                list[3].days[10] = 'ハヤ';
+                list[4].days[15] = 'オソ';
+                list[6].days[20] = 'イブ';
+
+                return list;
+            }
+
+            let scheduler = null;
+            let baseResult = null;
+            try {
+                const staffList = createTestStaff();
+                log('スタッフリスト作成完了: ' + staffList.length + '名');
+                scheduler = new ShiftScheduler(staffList, { standardHolidays: 8.0 });
+                log('ShiftScheduler初期化完了');
+
+                // テスト1: 第1段階 (solveBaseSchedule) の実行
+                baseResult = scheduler.solveBaseSchedule();
+                log('solveBaseSchedule完了: ' + JSON.stringify(baseResult ? { success: baseResult.success, errCount: (baseResult.errors || []).length } : null));
+                if (!baseResult || !baseResult.success) {
+                    log('第1段階エラー詳細 (' + (baseResult.errors ? baseResult.errors.length : 0) + '件):');
+                    (baseResult.errors || []).forEach(e => log('  * ' + e));
+                    const row6 = scheduler.grid[5].map((c, idx) => (idx + 1) + ':' + c.symbol).join(', ');
+                    log('スタッフ06グリッド: ' + row6);
+                }
+                assert('テスト1: 第1段階 (基本勤務表生成) が成功すること', baseResult && baseResult.success === true);
+            } catch (err) {
+                log('実行時エラー発生: ' + err.message + '\n' + err.stack);
+                assert('テスト1: 第1段階 (基本勤務表生成) が成功すること', false);
+            }
+
+            if (baseResult && baseResult.success) {
+                // テスト2: 第1段階では自動割当の特殊勤務が存在せず、希望以外は「○」になっていること
+                let autoSpecials = 0;
+                for (let s = 0; s < 50; s++) {
+                    for (let d = 0; d < 28; d++) {
+                        const cell = scheduler.grid[s][d];
+                        if (!cell.isFixed && [SYMBOLS.EARLY, SYMBOLS.LATE, SYMBOLS.EVE, SYMBOLS.H8].includes(cell.symbol)) {
+                            autoSpecials++;
+                        }
+                    }
+                }
+                assert('テスト2: 第1段階では自動特殊勤務が配置されていないこと (すべて○)', autoSpecials === 0);
+
+                // テスト3: 第1段階の基本制約検証 (verifyBaseHardConstraints)
+                const baseErrors = scheduler.verifyBaseHardConstraints();
+                assert(`テスト3: 第1段階の基本ハード制約が100%充足されていること (エラー数: ${baseErrors.length})`, baseErrors.length === 0);
+                if (baseErrors.length > 0) log('  -> ' + baseErrors.slice(0, 3).join('\n  -> '));
+            }
+
+            // 診断ログ: 1日目のスタッフ状況
+            log('\n--- 1日目のスタッフ状況診断 ---');
+            let d0Work = 0, d0WorkD1Off = 0;
+            const reasons = [];
+            for (let s = 0; s < 50; s++) {
+                const s0 = scheduler.grid[s][0].symbol;
+                const s1 = scheduler.grid[s][1].symbol;
+                if (s0 === SYMBOLS.WORK) {
+                    d0Work++;
+                    if (isHolidaySymbol(s1)) d0WorkD1Off++;
+                }
+            }
+            // 診断ログ: 各日の出勤人数
+            const dailyCounts = [];
+            for (let d = 0; d < 28; d++) {
+                let cnt = 0;
+                for (let s = 0; s < 50; s++) {
+                    if (isWorkSymbol(scheduler.grid[s][d].symbol)) cnt++;
+                }
+                dailyCounts.push((d + 1) + '日:' + cnt);
+            }
+            log('各日の出勤人数: ' + dailyCounts.join(', '));
+
+            // テスト4: 第2段階 (assignSpecialDutiesToGrid) の実行
+            const finalResult = scheduler.assignSpecialDutiesToGrid();
+            if (!finalResult.success) {
+                log('第2段階エラー詳細: ' + JSON.stringify(finalResult.errors));
+            }
+            assert('テスト4: 第2段階 (特殊勤務を入れる) が成功すること', finalResult.success === true);
+
+            if (finalResult.success) {
+                // テスト5: 各日の特殊勤務定員充足チェック (早3, 遅1, E2, 8時1)
+                let specialCountValid = true;
+                for (let d = 0; d < 28; d++) {
+                    let early = 0, late = 0, eve = 0, h8 = 0;
+                    for (let s = 0; s < 50; s++) {
+                        const sym = scheduler.grid[s][d].symbol;
+                        if (sym === SYMBOLS.EARLY || sym === SYMBOLS.NO_ALLOW_EARLY) early++;
+                        if (sym === SYMBOLS.LATE || sym === SYMBOLS.NO_ALLOW_LATE) late++;
+                        if (sym === SYMBOLS.EVE || sym === SYMBOLS.NO_ALLOW_EVE) eve++;
+                        if (sym === SYMBOLS.H8) h8++;
+                    }
+                    if (early !== 3 || late !== 1 || eve !== 2 || h8 !== 1) {
+                        specialCountValid = false;
+                        log(`  [定員エラー] ${d+1}日目: 早=${early}(要3), 遅=${late}(要1), E=${eve}(要2), 8時=${h8}(要1)`);
+                    }
+                }
+                assert('テスト5: 28日間全日において特殊勤務（早3, 遅1, E2, 8時1）が毎日完全に配置されていること', specialCountValid);
+
+                // テスト6: 早・遅・E・ハヤ・オソ・イブの翌日休日（休・有・リフ等）チェック
+                let nextDayOffValid = true;
+                for (let s = 0; s < 50; s++) {
+                    for (let d = 0; d < 27; d++) {
+                        const sym = scheduler.grid[s][d].symbol;
+                        if ([SYMBOLS.EARLY, SYMBOLS.LATE, SYMBOLS.EVE, SYMBOLS.NO_ALLOW_EARLY, SYMBOLS.NO_ALLOW_LATE, SYMBOLS.NO_ALLOW_EVE].includes(sym)) {
+                            const nextSym = scheduler.grid[s][d + 1].symbol;
+                            if (!isHolidaySymbol(nextSym)) {
+                                nextDayOffValid = false;
+                                log(`  [翌日休エラー] スタッフ${s+1} ${d+1}日目(${sym})の翌日(${d+2}日目)が「${nextSym}」`);
+                            }
+                        }
+                    }
+                }
+                assert('テスト6: 早・遅・E・ハヤ・オソ・イブの翌日が例外なく休日（休・有・リフ）であること', nextDayOffValid);
+
+                // テスト7: 各スタッフの公休日数が厳密に8.0日であること
+                let offDaysValid = true;
+                for (let s = 0; s < 50; s++) {
+                    let off = 0;
+                    for (let d = 0; d < 28; d++) {
+                        const sym = scheduler.grid[s][d].symbol;
+                        if (sym === SYMBOLS.OFF) off += 1.0;
+                        else if (sym === SYMBOLS.HALF_WORK_OFF || sym === SYMBOLS.HALF_OFF_WORK) off += 0.5;
+                    }
+                    if (Math.abs(off - 8.0) > 0.01) {
+                        offDaysValid = false;
+                        log(`  [公休エラー] スタッフ${s+1}の公休日数が${off}日（要件: 8.0日）`);
+                    }
+                }
+                assert('テスト7: 全スタッフの公休日数が厳密に8.0日（4週8休）を維持していること', offDaysValid);
+
+                // テスト8: 週（日〜土）出勤制限（週休2日以上、出張・半休除く、allow6Consec以外）
+                let weekLimitValid = true;
+                const weekSpans = scheduler.weekSpans;
+                for (let s = 0; s < 50; s++) {
+                    if (scheduler.staffList[s].allow6Consec) continue;
+                    weekSpans.forEach((wSpan, wIdx) => {
+                        let wCount = 0;
+                        wSpan.forEach(d => {
+                            const sym = scheduler.grid[s][d].symbol;
+                            if (sym && isWorkSymbol(sym) && sym !== SYMBOLS.TRIP && !isHalfDuty(sym)) {
+                                wCount++;
+                            }
+                        });
+                        if (wCount > 5) {
+                            weekLimitValid = false;
+                            log(`  [週出勤エラー] スタッフ${s+1} 第${wIdx+1}週で出勤${wCount}日（出張・半休除く上限5日）`);
+                        }
+                    });
+                }
+                assert('テスト8: 日〜土の週出勤制限（最大5出勤、週休2日保証）が遵守されていること', weekLimitValid);
+
+                // テスト9: 5連勤後の2連休保証（allow6Consec以外）
+                let streakAfterOffValid = true;
+                for (let s = 0; s < 50; s++) {
+                    if (scheduler.staffList[s].allow6Consec) continue;
+                    const seq = [];
+                    for (let p = 0; p < 5; p++) seq.push(scheduler.staffList[s].prevDays[p]);
+                    for (let d = 0; d < 28; d++) seq.push(scheduler.grid[s][d].symbol);
+
+                    let workStreak = 0;
+                    for (let idx = 0; idx < seq.length; idx++) {
+                        if (isWorkSymbol(seq[idx])) {
+                            workStreak++;
+                            if (workStreak === 5) {
+                                for (let offOffset = 1; offOffset <= 2; offOffset++) {
+                                    const checkIdx = idx + offOffset;
+                                    if (checkIdx < seq.length) {
+                                        const sym = seq[checkIdx];
+                                        if (sym !== '' && !isHolidaySymbol(sym)) {
+                                            streakAfterOffValid = false;
+                                            log(`  [5連勤後2連休エラー] スタッフ${s+1} 5連勤直後の${checkIdx-4}日目が「${sym}」`);
+                                        }
+                                    }
+                                }
+                            }
+                        } else {
+                            workStreak = 0;
+                        }
+                    }
+                }
+                assert('テスト9: 5連勤直後に必ず2連休（休・有・リフ）が配置されていること', streakAfterOffValid);
+
+                // テスト10: 各日の「スケ可」が日勤（○）で2名以上
+                let schedValid = true;
+                for (let d = 0; d < 28; d++) {
+                    let cnt = 0;
+                    for (let s = 0; s < 50; s++) {
+                        if (scheduler.staffList[s].canSched && scheduler.grid[s][d].symbol === SYMBOLS.WORK) {
+                            cnt++;
+                        }
+                    }
+                    if (cnt < 2) {
+                        schedValid = false;
+                        log(`  [スケ可エラー] ${d+1}日目: スケ可の日勤(○)が${cnt}名（要件: 2名以上）`);
+                    }
+                }
+                assert('テスト10: 毎日「スケ可」スタッフの日勤（○）が2名以上出勤していること', schedValid);
+
+                // テスト11: 各日の「役職」が出勤（出張除く）で2名以上
+                let roleValid = true;
+                for (let d = 0; d < 28; d++) {
+                    let cnt = 0;
+                    for (let s = 0; s < 50; s++) {
+                        const sym = scheduler.grid[s][d].symbol;
+                        if (scheduler.staffList[s].isRole && isWorkSymbol(sym) && sym !== SYMBOLS.TRIP) {
+                            cnt++;
+                        }
+                    }
+                    if (cnt < 2) {
+                        roleValid = false;
+                        log(`  [役職エラー] ${d+1}日目: 役職スタッフの出勤が${cnt}名（要件: 2名以上、出張除く）`);
+                    }
+                }
+                assert('テスト11: 毎日「役職」スタッフの出勤（出張除く）が2名以上確保されていること', roleValid);
+
+                // テスト12: 各日の「専従」が出勤（出張除く）で3名以上
+                let fullTimeValid = true;
+                for (let d = 0; d < 28; d++) {
+                    let cnt = 0;
+                    for (let s = 0; s < 50; s++) {
+                        const sym = scheduler.grid[s][d].symbol;
+                        if (scheduler.staffList[s].isFullTime && isWorkSymbol(sym) && sym !== SYMBOLS.TRIP) {
+                            cnt++;
+                        }
+                    }
+                    if (cnt < 3) {
+                        fullTimeValid = false;
+                        log(`  [専従エラー] ${d+1}日目: 専従スタッフの出勤が${cnt}名（要件: 3名以上、出張除く）`);
+                    }
+                }
+                assert('テスト12: 毎日「専従」スタッフの出勤（出張除く）が3名以上確保されていること', fullTimeValid);
+
+                // テスト13: 最終全ハード制約の自動検証メソッド (verifyAllHardConstraints)
+                const finalErrors = scheduler.verifyAllHardConstraints();
+                assert(`テスト13: verifyAllHardConstraints() が完全合格すること (エラー数: ${finalErrors.length})`, finalErrors.length === 0);
+                if (finalErrors.length > 0) log('  -> ' + finalErrors.slice(0, 3).join('\n  -> '));
+            }
+
+            log(`\n=== テスト結果サマリー: ${passCount} / ${testCount} PASSED ===`);
+            if (allPassed) {
+                log('🎉 すべての厳格検証テストに完全合格しました！');
+            } else {
+                log('❌ 一部のテストが失敗しました。');
+            }
+
+            fetch('http://localhost:8089/result', {
+                method: 'POST',
+                headers: { 'Content-Type': 'text/plain; charset=utf-8' },
+                body: out.textContent
+            }).catch(e => console.log('fetch error:', e));
+        }
+
+        window.onload = runAllTests;
+    </script>
 </body>
 </html>

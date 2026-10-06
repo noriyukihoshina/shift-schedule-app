@@ -639,3 +639,16 @@ input:checked + .toggle-slider:before {
     background: #065f46;
     border: 1px solid #10b981;
 }
+
+/* 出力シート編集可能セルのスタイル */
+#outputTableBody .day-cell {
+    cursor: pointer;
+    transition: background-color 0.15s, outline 0.15s;
+}
+
+#outputTableBody .day-cell:hover {
+    background-color: #e2e8f0 !important;
+    outline: 2px solid var(--primary);
+    z-index: 5;
+}
+

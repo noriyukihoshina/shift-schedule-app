@@ -34,6 +34,9 @@
             <button class="btn btn-primary btn-lg" id="solveBtn">
                 ⚡ 勤務表を自動生成する
             </button>
+            <button class="btn btn-success btn-lg" id="assignSpecialBtn" style="background: #059669; border-color: #059669; color: white; font-weight: 700;" title="基本勤務表の「○」から、早3名・遅1名・E2名・8時1名を割り当てて最終完成させます">
+                ✨ 特殊勤務を入れる
+            </button>
         </div>
     </header>
 
@@ -88,6 +91,9 @@
                     <button class="palette-btn" data-sym="遅" title="遅番 (11:00〜19:30)">遅</button>
                     <button class="palette-btn" data-sym="E" title="イブニング (13:00〜21:30)">E</button>
                     <button class="palette-btn" data-sym="8時" title="8:00開始勤務">8時</button>
+                    <button class="palette-btn" data-sym="ハヤ" title="手当なし早番 (7:00〜15:30)" style="background:#fff7ed; border-color:#fdba74; color:#c2410c;">ハヤ</button>
+                    <button class="palette-btn" data-sym="オソ" title="手当なし遅番 (11:00〜19:30)" style="background:#f0f9ff; border-color:#7dd3fc; color:#0369a1;">オソ</button>
+                    <button class="palette-btn" data-sym="イブ" title="手当なしイブニング (13:00〜21:30)" style="background:#faf5ff; border-color:#d8b4fe; color:#7e22ce;">イブ</button>
                     <span style="color: #cbd5e1; margin: 0 4px;">|</span>
                     <!-- ★ 半日勤務記号（数か月に一度の希望） -->
                     <button class="palette-btn" data-sym="○/休" title="半日出勤 + 半日公休 (各0.5日)" style="background:#f0fdf4; border-color:#86efac; color:#166534;">○/休</button>
@@ -142,23 +148,59 @@
 
         <!-- 2. 出力シートタブ -->
         <section id="outputTab" class="tab-panel">
-            <div class="toolbar-card">
-                <div style="display: flex; align-items: center; gap: 0.75rem;">
-                    <span id="outputTitleDisplay" style="font-weight: 800; color: #1e293b; font-size: 1.05rem;">4/1～4/28勤務表</span>
-                    <span style="font-size: 0.8rem; color: #64748b;">
-                        （<span style="color: #dc2626; font-weight: 800;">赤字セル</span>: 事前手動入力枠 / 黒字セル: システム自動割当）
-                    </span>
+            <div class="toolbar-card" style="flex-direction: column; align-items: stretch; gap: 8px;">
+                <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 10px;">
+                    <div style="display: flex; align-items: center; gap: 0.75rem;">
+                        <span id="outputTitleDisplay" style="font-weight: 800; color: #1e293b; font-size: 1.05rem;">4/1～4/28勤務表</span>
+                        <span style="font-size: 0.8rem; color: #64748b;">
+                            （<span style="color: #dc2626; font-weight: 800;">赤字セル</span>: 事前手動入力枠 / 黒字セル: システム自動割当）
+                        </span>
+                    </div>
+                    <div class="action-group" style="display: flex; gap: 8px; flex-wrap: wrap;">
+                        <button class="btn btn-success" id="outputAssignSpecialBtn" style="background: #059669; border-color: #059669; color: white; font-weight: 700;" title="基本勤務表の「○」から、早3名・遅1名・E2名・8時1名を割り当てて最終完成させます">
+                            ✨ 特殊勤務を入れる
+                        </button>
+                        <button class="btn btn-primary" id="copyForExcelBtn" title="警告やブロックなしでExcelに直接貼り付け可能！事前希望枠の赤字太字・罫線・自動計算数式を保持してクリップボードにコピーします">
+                            📋 Excelへ一発貼り付け用コピー（赤字・数式付き）
+                        </button>
+                        <button class="btn btn-outline" id="exportExcelBtn" title="書式付きスプレッドシート形式でダウンロード（UTF-8 BOM付き）">
+                            📊 スプレッドシート保存 (.xls)
+                        </button>
+                        <button class="btn btn-outline" onclick="window.print();">
+                            🖨 印刷 / PDF保存
+                        </button>
+                    </div>
                 </div>
-                <div class="action-group" style="display: flex; gap: 8px; flex-wrap: wrap;">
-                    <button class="btn btn-primary" id="copyForExcelBtn" title="警告やブロックなしでExcelに直接貼り付け可能！事前希望枠の赤字太字・罫線・自動計算数式を保持してクリップボードにコピーします">
-                        📋 Excelへ一発貼り付け用コピー（赤字・数式付き）
-                    </button>
-                    <button class="btn btn-outline" id="exportExcelBtn" title="書式付きスプレッドシート形式でダウンロード（UTF-8 BOM付き）">
-                        📊 スプレッドシート保存 (.xls)
-                    </button>
-                    <button class="btn btn-outline" onclick="window.print();">
-                        🖨 印刷 / PDF保存
-                    </button>
+                <!-- ★ 出力シート確定勤務の調整パレット -->
+                <div class="palette-group" style="display: flex; flex-wrap: wrap; gap: 4px; align-items: center; padding-top: 6px; border-top: 1px solid #e2e8f0;">
+                    <span class="palette-label" style="font-size: 0.82rem; font-weight: 700; color: #475569;">✏️ 確定勤務の調整パレット:</span>
+                    <button class="palette-btn output-palette-btn selected" data-sym="休" title="公休">休</button>
+                    <button class="palette-btn output-palette-btn" data-sym="有" title="有給休暇">有</button>
+                    <button class="palette-btn output-palette-btn" data-sym="○" title="日勤（基本勤務）">○</button>
+                    <button class="palette-btn output-palette-btn" data-sym="出" title="出張">出</button>
+                    <button class="palette-btn output-palette-btn" data-sym="早" title="早番 (7:00〜15:30)">早</button>
+                    <button class="palette-btn output-palette-btn" data-sym="遅" title="遅番 (11:00〜19:30)">遅</button>
+                    <button class="palette-btn output-palette-btn" data-sym="E" title="イブニング (13:00〜21:30)">E</button>
+                    <button class="palette-btn output-palette-btn" data-sym="8時" title="8:00開始勤務">8時</button>
+                    <button class="palette-btn output-palette-btn" data-sym="ハヤ" title="手当なし早番" style="background:#fff7ed; border-color:#fdba74; color:#c2410c;">ハヤ</button>
+                    <button class="palette-btn output-palette-btn" data-sym="オソ" title="手当なし遅番" style="background:#f0f9ff; border-color:#7dd3fc; color:#0369a1;">オソ</button>
+                    <button class="palette-btn output-palette-btn" data-sym="イブ" title="手当なしイブニング" style="background:#faf5ff; border-color:#d8b4fe; color:#7e22ce;">イブ</button>
+                    <span style="color: #cbd5e1; margin: 0 4px;">|</span>
+                    <button class="palette-btn output-palette-btn" data-sym="○/休" title="半日出勤 + 半日公休">○/休</button>
+                    <button class="palette-btn output-palette-btn" data-sym="休/○" title="半日公休 + 半日出勤">休/○</button>
+                    <button class="palette-btn output-palette-btn" data-sym="○/有" title="半日出勤 + 半日有休">○/有</button>
+                    <button class="palette-btn output-palette-btn" data-sym="有/○" title="半日有休 + 半日出勤">有/○</button>
+                    <span style="color: #cbd5e1; margin: 0 4px;">|</span>
+                    <button class="palette-btn output-palette-btn" data-sym="上1">上1</button>
+                    <button class="palette-btn output-palette-btn" data-sym="上2">上2</button>
+                    <button class="palette-btn output-palette-btn" data-sym="上3">上3</button>
+                    <button class="palette-btn output-palette-btn" data-sym="上4">上4</button>
+                    <button class="palette-btn output-palette-btn" data-sym="上5">上5</button>
+                    <span style="color: #cbd5e1; margin: 0 4px;">|</span>
+                    <button class="palette-btn output-palette-btn" data-sym="下1">下1</button>
+                    <button class="palette-btn output-palette-btn" data-sym="下2">下2</button>
+                    <button class="palette-btn output-palette-btn" data-sym="下3">下3</button>
+                    <span style="font-size: 0.78rem; color: #64748b; margin-left: 8px;">💡 勤務表のセルをクリックすると選択記号に変更され、集計が即座に連動します</span>
                 </div>
             </div>
 
