@@ -22,9 +22,6 @@
             <button class="btn btn-outline" id="headerUndoBtn" disabled title="直前の操作を1つ元に戻します (Ctrl+Z)" style="opacity: 0.5;">
                 ↩ 戻る
             </button>
-            <button class="btn btn-danger" id="clearAllBtn" title="すべての事前入力枠をクリア">
-                🧹 全消去
-            </button>
             <button class="btn btn-primary btn-lg" id="solveBtn">
                 ⚡ 勤務表を自動生成する
             </button>
@@ -84,12 +81,6 @@
                         </span>
                     </div>
                     <div class="action-group" style="display: flex; gap: 8px; flex-wrap: wrap; align-items: center;">
-                        <button class="btn btn-primary" id="inputSolveBtn" style="font-weight: 700;" title="入力された事前希望と全制約に基づいて、基本勤務表を自動生成します">
-                            ⚡ 勤務表を自動生成する
-                        </button>
-                        <button class="btn btn-outline" id="validateInputBtn" style="font-size: 0.82rem; padding: 5px 12px; color: #1e40af; border-color: #93c5fd; background: #eff6ff; font-weight: 700;" title="入力された事前希望の制約違反（6連勤、週休2日不足、特殊勤務翌日休など）を即座にチェックし、該当セルを青い網掛けで表示します">
-                            🔍 希望の制約チェック
-                        </button>
                         <button class="btn btn-outline" id="downloadBlankTemplateBtn" title="スタッフに配布して希望勤務をPC入力してもらうためのプルダウン付きExcel勤務表をダウンロード" style="font-size: 0.82rem; padding: 5px 12px; color: #166534; border-color: #86efac; background: #f0fdf4; font-weight: 700;">
                             📄 スタッフ入力用 空白勤務表 (.xlsx)
                         </button>
@@ -97,8 +88,11 @@
                             📂 希望シート取込 (.xlsx / .csv)
                             <input type="file" id="importScheduleFileInput" accept=".xlsx,.csv,.tsv,.txt" style="display: none;">
                         </label>
-                        <button class="btn btn-outline" id="inputClearBtn" title="すべての事前入力枠をクリア" style="font-size: 0.82rem; padding: 5px 12px; color: #dc2626; border-color: #fca5a5; background: #fff5f5; font-weight: 700;">
-                            🧹 全消去
+                        <button class="btn btn-outline" id="validateInputBtn" style="font-size: 0.82rem; padding: 5px 12px; color: #1e40af; border-color: #93c5fd; background: #eff6ff; font-weight: 700;" title="入力された事前希望の制約違反（6連勤、週休2日不足、特殊勤務翌日休など）を即座にチェックし、該当セルを青い網掛けで表示します">
+                            🔍 希望の制約チェック
+                        </button>
+                        <button class="btn btn-primary" id="inputSolveBtn" style="font-weight: 700; font-size: 0.85rem; padding: 5px 14px;" title="入力された事前希望と全制約に基づいて、基本勤務表を自動生成します">
+                            ⚡ 勤務表を自動生成する
                         </button>
                     </div>
                 </div>
