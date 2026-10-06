@@ -170,11 +170,13 @@ document.addEventListener('DOMContentLoaded', () => {
         const undoBtns = [
             document.getElementById('undoBtn'),
             document.getElementById('headerUndoBtn'),
-            document.getElementById('outputUndoBtn')
+            document.getElementById('outputUndoBtn'),
+            document.getElementById('checkUndoBtn')
         ];
         const redoBtns = [
             document.getElementById('redoBtn'),
-            document.getElementById('outputRedoBtn')
+            document.getElementById('outputRedoBtn'),
+            document.getElementById('checkRedoBtn')
         ];
 
         undoBtns.forEach(btn => {
@@ -569,21 +571,23 @@ document.addEventListener('DOMContentLoaded', () => {
     let currentOutputConflicts = [];
 
     function clearOutputConflictHighlights() {
-        document.querySelectorAll('#outputTableBody .conflict-highlight').forEach(cell => {
+        document.querySelectorAll('#outputTableBody .conflict-highlight, #checkTableBody .conflict-highlight').forEach(cell => {
             cell.classList.remove('conflict-highlight');
             cell.removeAttribute('data-conflict-reason');
         });
-        const banner = document.getElementById('outputConflictAlertBanner');
-        if (banner) {
-            banner.classList.remove('show');
-            banner.innerHTML = '';
-        }
+        ['outputConflictAlertBanner', 'checkConflictAlertBanner'].forEach(id => {
+            const banner = document.getElementById(id);
+            if (banner) {
+                banner.classList.remove('show');
+                banner.innerHTML = '';
+            }
+        });
         currentOutputConflicts = [];
     }
 
     function applyOutputConflictHighlights(conflictCells, errors = []) {
         // 既存の網掛けを解除
-        document.querySelectorAll('#outputTableBody .conflict-highlight').forEach(cell => {
+        document.querySelectorAll('#outputTableBody .conflict-highlight, #checkTableBody .conflict-highlight').forEach(cell => {
             cell.classList.remove('conflict-highlight');
             cell.removeAttribute('data-conflict-reason');
         });
@@ -592,46 +596,48 @@ document.addEventListener('DOMContentLoaded', () => {
 
         if (currentOutputConflicts.length > 0) {
             currentOutputConflicts.forEach(item => {
-                const cell = document.querySelector(`#outputTableBody td[data-s="${item.staffIndex}"][data-d="${item.dayIndex}"]`);
-                if (cell) {
+                const cells = document.querySelectorAll(`#outputTableBody td[data-s="${item.staffIndex}"][data-d="${item.dayIndex}"], #checkTableBody td[data-s="${item.staffIndex}"][data-d="${item.dayIndex}"]`);
+                cells.forEach(cell => {
                     cell.classList.add('conflict-highlight');
                     cell.setAttribute('data-conflict-reason', item.reason || '制約違反');
                     cell.title = `⚠️ 【制約違反】${item.reason || '制約が守られていません'}`;
-                }
+                });
             });
         }
 
-        const banner = document.getElementById('outputConflictAlertBanner');
-        if (banner) {
-            if (errors.length > 0) {
-                banner.classList.add('show');
-                const errorListHtml = errors.slice(0, 10).map(err => `<li style="margin-bottom:2px;">${err}</li>`).join('');
-                const moreMsg = errors.length > 10 ? `<li style="color:#64748b; font-style:italic;">...他 ${errors.length - 10} 件の指摘事項</li>` : '';
-                banner.innerHTML = `
-                    <div style="display:flex; justify-content:space-between; align-items:flex-start; width:100%;">
-                        <div style="display:flex; align-items:flex-start; gap:10px;">
-                            <span style="font-size:1.4rem;">⚠️</span>
-                            <div>
-                                <strong style="color:#1e3a8a; font-size:0.95rem;">
-                                    制約チェック結果: ${errors.length}件の指摘事項（薄いブルーの網掛けセル: ${currentOutputConflicts.length}箇所）
-                                </strong>
-                                <div style="font-size:0.82rem; color:#2563eb; margin: 3px 0 6px 0;">
-                                    該当セルをクリックして勤務や休日を修正してください。条件が解決すると網掛けは自動的に消えます。（最終判断としてこのまま保存・印刷することも可能です）
+        ['outputConflictAlertBanner', 'checkConflictAlertBanner'].forEach(id => {
+            const banner = document.getElementById(id);
+            if (banner) {
+                if (errors.length > 0) {
+                    banner.classList.add('show');
+                    const errorListHtml = errors.slice(0, 10).map(err => `<li style="margin-bottom:2px;">${err}</li>`).join('');
+                    const moreMsg = errors.length > 10 ? `<li style="color:#64748b; font-style:italic;">...他 ${errors.length - 10} 件の指摘事項</li>` : '';
+                    banner.innerHTML = `
+                        <div style="display:flex; justify-content:space-between; align-items:flex-start; width:100%;">
+                            <div style="display:flex; align-items:flex-start; gap:10px;">
+                                <span style="font-size:1.4rem;">⚠️</span>
+                                <div>
+                                    <strong style="color:#1e3a8a; font-size:0.95rem;">
+                                        制約チェック結果: ${errors.length}件の指摘事項（薄いブルーの網掛けセル: ${currentOutputConflicts.length}箇所）
+                                    </strong>
+                                    <div style="font-size:0.82rem; color:#2563eb; margin: 3px 0 6px 0;">
+                                        該当セルをクリックして勤務や休日を修正してください。条件が解決すると網掛けは自動的に消えます。（最終判断としてこのまま保存・印刷することも可能です）
+                                    </div>
+                                    <ul style="font-size:0.8rem; color:#1e293b; margin:0; padding-left:18px; max-height:130px; overflow-y:auto;">
+                                        ${errorListHtml}
+                                        ${moreMsg}
+                                    </ul>
                                 </div>
-                                <ul style="font-size:0.8rem; color:#1e293b; margin:0; padding-left:18px; max-height:130px; overflow-y:auto;">
-                                    ${errorListHtml}
-                                    ${moreMsg}
-                                </ul>
                             </div>
+                            <button class="btn btn-outline" style="font-size:0.75rem; padding:4px 10px; margin-left:12px; white-space:nowrap;" onclick="document.getElementById('${id}').classList.remove('show');">閉じる</button>
                         </div>
-                        <button class="btn btn-outline" style="font-size:0.75rem; padding:4px 10px; margin-left:12px; white-space:nowrap;" onclick="document.getElementById('outputConflictAlertBanner').classList.remove('show');">閉じる</button>
-                    </div>
-                `;
-            } else {
-                banner.classList.remove('show');
-                banner.innerHTML = '';
+                    `;
+                } else {
+                    banner.classList.remove('show');
+                    banner.innerHTML = '';
+                }
             }
-        }
+        });
     }
 
     function checkOutputConstraints(showToastOnSuccess = false) {
@@ -683,9 +689,9 @@ document.addEventListener('DOMContentLoaded', () => {
     let lastScheduler = null;
 
     // 入力シート用パレット
-    document.querySelectorAll('.palette-btn:not(.output-palette-btn)').forEach(btn => {
+    document.querySelectorAll('.palette-btn:not(.output-palette-btn):not(.check-palette-btn)').forEach(btn => {
         btn.addEventListener('click', () => {
-            document.querySelectorAll('.palette-btn:not(.output-palette-btn)').forEach(b => b.classList.remove('selected'));
+            document.querySelectorAll('.palette-btn:not(.output-palette-btn):not(.check-palette-btn)').forEach(b => b.classList.remove('selected'));
             btn.classList.add('selected');
             currentSelectedSymbol = btn.dataset.sym;
         });
@@ -695,6 +701,15 @@ document.addEventListener('DOMContentLoaded', () => {
     document.querySelectorAll('.output-palette-btn').forEach(btn => {
         btn.addEventListener('click', () => {
             document.querySelectorAll('.output-palette-btn').forEach(b => b.classList.remove('selected'));
+            btn.classList.add('selected');
+            currentOutputSelectedSymbol = btn.dataset.sym;
+        });
+    });
+
+    // チェックシート用パレット
+    document.querySelectorAll('.check-palette-btn').forEach(btn => {
+        btn.addEventListener('click', () => {
+            document.querySelectorAll('.check-palette-btn').forEach(b => b.classList.remove('selected'));
             btn.classList.add('selected');
             currentOutputSelectedSymbol = btn.dataset.sym;
         });
@@ -756,6 +771,8 @@ document.addEventListener('DOMContentLoaded', () => {
         if (badge) badge.textContent = title;
         const outTitle = document.getElementById('outputTitleDisplay');
         if (outTitle) outTitle.textContent = title;
+        const checkTitle = document.getElementById('checkTitleDisplay');
+        if (checkTitle) checkTitle.textContent = `🔍 ${title}（制約検証・修正チェックシート）`;
 
         return { title, dates, first, last };
     }
@@ -772,7 +789,7 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     // 第1段階: 基本勤務表 自動生成ボタン（特殊勤務の自動割当は行わず、すべて○で保持）
-    const solveBtn = document.getElementById('solveBtn');
+    const solveBtn = document.getElementById('solveBtn') || document.getElementById('inputSolveBtn');
     function setSolveLoading(loading) {
         const btns = [document.getElementById('solveBtn'), document.getElementById('inputSolveBtn')];
         btns.forEach(btn => {
@@ -1049,12 +1066,21 @@ document.addEventListener('DOMContentLoaded', () => {
 
         tfoot.innerHTML = footHtml;
 
+        const checkThead = document.getElementById('checkTableHead');
+        const checkTbody = document.getElementById('checkTableBody');
+        const checkTfoot = document.getElementById('checkTableFoot');
+        if (checkThead && checkTbody && checkTfoot) {
+            checkThead.innerHTML = headHtml;
+            checkTbody.innerHTML = bodyHtml;
+            checkTfoot.innerHTML = footHtml;
+        }
+
         attachOutputTableEvents();
     }
 
-    // 出力シート（確定勤務表）でのセルクリックによる手動調整イベント
+    // 出力シートおよびチェックシートでのセルクリックによる手動調整イベント
     function attachOutputTableEvents() {
-        document.querySelectorAll('#outputTableBody .day-cell').forEach(cell => {
+        document.querySelectorAll('#outputTableBody .day-cell, #checkTableBody .day-cell').forEach(cell => {
             cell.style.cursor = 'pointer';
             cell.addEventListener('click', () => {
                 const s = parseInt(cell.dataset.s, 10);
@@ -1196,11 +1222,17 @@ document.addEventListener('DOMContentLoaded', () => {
     const outputUndoBtn = document.getElementById('outputUndoBtn');
     if (outputUndoBtn) outputUndoBtn.addEventListener('click', undo);
 
+    const checkUndoBtn = document.getElementById('checkUndoBtn');
+    if (checkUndoBtn) checkUndoBtn.addEventListener('click', undo);
+
     const redoBtn = document.getElementById('redoBtn');
     if (redoBtn) redoBtn.addEventListener('click', redo);
 
     const outputRedoBtn = document.getElementById('outputRedoBtn');
     if (outputRedoBtn) outputRedoBtn.addEventListener('click', redo);
+
+    const checkRedoBtn = document.getElementById('checkRedoBtn');
+    if (checkRedoBtn) checkRedoBtn.addEventListener('click', redo);
 
     // ★ 左右スクロールナビゲーションボタン（入力シート・出力シート共通）
     document.querySelectorAll('.scroll-btn').forEach(btn => {
@@ -1268,6 +1300,17 @@ document.addEventListener('DOMContentLoaded', () => {
         copyForExcelBtn.addEventListener('click', () => {
             if (!lastSolveResult) {
                 alert('先に勤務表を自動生成してください。');
+                return;
+            }
+            copyForExcel(lastSolveResult.grid, lastSolveResult.stats);
+        });
+    }
+
+    const checkCopyForExcelBtn = document.getElementById('checkCopyForExcelBtn');
+    if (checkCopyForExcelBtn) {
+        checkCopyForExcelBtn.addEventListener('click', () => {
+            if (!lastSolveResult) {
+                alert('先に勤務表を自動生成または取り込んでください。');
                 return;
             }
             copyForExcel(lastSolveResult.grid, lastSolveResult.stats);
@@ -2356,10 +2399,10 @@ document.addEventListener('DOMContentLoaded', () => {
                     errors: []
                 };
 
-                // 出力テーブル描画・ダッシュボード更新・タブ切り替え
+                // 出力テーブル描画・ダッシュボード更新・チェックシートへ自動遷移
                 renderOutputTable(newGrid, newStats);
                 renderStatsDashboard(newStats);
-                switchTab('outputTab');
+                switchTab('checkTab');
 
                 // ★ 自動全制約検証を実行し、エラーセルをブルー網掛け表示！
                 const checkRes = checkOutputConstraints(false);
@@ -2400,6 +2443,17 @@ document.addEventListener('DOMContentLoaded', () => {
         exportExcelBtn.addEventListener('click', () => {
             if (!lastSolveResult) {
                 alert('先に勤務表を自動生成してください。');
+                return;
+            }
+            exportExcelSpreadsheet(lastSolveResult.grid, lastSolveResult.stats);
+        });
+    }
+
+    const checkExportExcelBtn = document.getElementById('checkExportExcelBtn');
+    if (checkExportExcelBtn) {
+        checkExportExcelBtn.addEventListener('click', () => {
+            if (!lastSolveResult) {
+                alert('先に勤務表を自動生成または取り込んでください。');
                 return;
             }
             exportExcelSpreadsheet(lastSolveResult.grid, lastSolveResult.stats);
