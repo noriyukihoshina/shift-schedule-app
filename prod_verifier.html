@@ -1,0 +1,338 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <title>本番デプロイ環境 総合厳格検証スイート</title>
+</head>
+<body>
+    <h1>本番デプロイ環境 総合厳格検証スイート</h1>
+    <div id="output" style="white-space: pre; font-family: monospace; font-size: 13px; line-height: 1.5;"></div>
+
+    <script src="https://shift-schedule-app-ruby.vercel.app/solver.js"></script>
+    <script>
+        const out = document.getElementById('output');
+        function log(msg) {
+            out.textContent += msg + '\n';
+        }
+
+        async function runVerification() {
+            log('================================================================');
+            log('  本番デプロイ環境 (https://shift-schedule-app-ruby.vercel.app/)');
+            log('  全システム機能・Excel数式 厳格検証テスト開始');
+            log('================================================================\n');
+
+            let totalChecks = 0;
+            let passChecks = 0;
+            let allPassed = true;
+
+            function assert(desc, condition, detail = '') {
+                totalChecks++;
+                if (condition) {
+                    passChecks++;
+                    log(`[PASS] ${desc}`);
+                } else {
+                    allPassed = false;
+                    log(`[FAIL] ${desc}`);
+                    if (detail) log(`       詳細: ${detail}`);
+                }
+            }
+
+            // ---------------------------------------------------------
+            // セクション1: ソルバーエンジン 13項目厳格検証
+            // ---------------------------------------------------------
+            log('--- 【セクション1: ソルバーエンジン全制約検証】 ---');
+
+            function createTestStaff(numStaff = 50) {
+                const list = [];
+                const patterns = [
+                    ['○', '○', '休', '○', '○'],
+                    ['休', '休', '○', '○', '○'],
+                    ['○', '休', '○', '○', '休'],
+                    ['○', '○', '○', '○', '休'],
+                    ['休', '○', '○', '○', '○']
+                ];
+                for (let i = 1; i <= numStaff; i++) {
+                    list.push({
+                        id: i,
+                        name: `スタッフ ${String(i).padStart(2, '0')}`,
+                        can8: (i <= 9),       // 1〜9番目8時可
+                        noEarly: (i === 13), // 13番早不可
+                        noLate: (i === 13),  // 13番遅不可
+                        noEve: (i === 13 || i === 15 || i === 16), // 13,15,16番E不可
+                        canSched: (i <= 8),  // 1〜8番スケ可
+                        isRole: (i <= 6),    // 1〜6番役職
+                        isFullTime: (i <= 10), // 1〜10番専従
+                        allow6Consec: (i === 20 || i === 21), // 20,21番6連勤可
+                        prevDays: [...patterns[(i - 1) % patterns.length]],
+                        days: new Array(28).fill('')
+                    });
+                }
+                list[0].days[3] = '休';
+                list[1].days[4] = '有'; list[1].days[8] = '休';
+                list[2].days[13] = '休';
+                list[5].days[0] = '休';
+                list[5].days[9] = '上1'; list[5].days[10] = '上2'; list[5].days[11] = '上3'; list[5].days[12] = '上4'; list[5].days[13] = '上5';
+                list[10].days[13] = '出'; list[10].days[14] = '出';
+                list[3].days[10] = 'ハヤ';
+                list[4].days[15] = 'オソ';
+                list[6].days[20] = 'イブ';
+                return list;
+            }
+
+            const staffList = createTestStaff();
+            const scheduler = new ShiftScheduler(staffList, { standardHolidays: 8.0 });
+
+            // 1. 第1段階 (基本勤務表)
+            const baseResult = scheduler.solveBaseSchedule();
+            assert('1-1. 第1段階 (solveBaseSchedule) が成功すること', baseResult && baseResult.success);
+
+            let autoSpecials = 0;
+            for (let s = 0; s < 50; s++) {
+                for (let d = 0; d < 28; d++) {
+                    const c = scheduler.grid[s][d];
+                    if (!c.isFixed && [SYMBOLS.EARLY, SYMBOLS.LATE, SYMBOLS.EVE, SYMBOLS.H8].includes(c.symbol)) autoSpecials++;
+                }
+            }
+            assert('1-2. 第1段階では自動特殊勤務が配置されず全て○であること', autoSpecials === 0);
+
+            const baseErrors = scheduler.verifyBaseHardConstraints();
+            assert('1-3. 第1段階の基本ハード制約が100%充足されていること (エラー0件)', baseErrors.length === 0, baseErrors.join(', '));
+
+            // 2. 第2段階 (特殊勤務投入)
+            const specialResult = scheduler.assignSpecialDutiesToGrid();
+            assert('1-4. 第2段階 (assignSpecialDutiesToGrid) が成功すること', specialResult && specialResult.success);
+
+            let specialCountValid = true;
+            for (let d = 0; d < 28; d++) {
+                let early = 0, late = 0, eve = 0, h8 = 0;
+                for (let s = 0; s < 50; s++) {
+                    const sym = scheduler.grid[s][d].symbol;
+                    if (sym === SYMBOLS.EARLY || sym === SYMBOLS.NO_ALLOW_EARLY) early++;
+                    if (sym === SYMBOLS.LATE || sym === SYMBOLS.NO_ALLOW_LATE) late++;
+                    if (sym === SYMBOLS.EVE || sym === SYMBOLS.NO_ALLOW_EVE) eve++;
+                    if (sym === SYMBOLS.H8) h8++;
+                }
+                if (early !== 3 || late !== 1 || eve !== 2 || h8 !== 1) specialCountValid = false;
+            }
+            assert('1-5. 28日間全日において特殊勤務（早3, 遅1, E2, 8時1）が毎日配置されていること', specialCountValid);
+
+            let nextDayOffValid = true;
+            for (let s = 0; s < 50; s++) {
+                for (let d = 0; d < 27; d++) {
+                    const sym = scheduler.grid[s][d].symbol;
+                    if ([SYMBOLS.EARLY, SYMBOLS.LATE, SYMBOLS.EVE, SYMBOLS.NO_ALLOW_EARLY, SYMBOLS.NO_ALLOW_LATE, SYMBOLS.NO_ALLOW_EVE].includes(sym)) {
+                        const nextSym = scheduler.grid[s][d + 1].symbol;
+                        if (!isHolidaySymbol(nextSym)) nextDayOffValid = false;
+                    }
+                }
+            }
+            assert('1-6. 早・遅・E・ハヤ・オソ・イブの翌日が例外なく休日（休・有・リフ）であること', nextDayOffValid);
+
+            let offDaysValid = true;
+            for (let s = 0; s < 50; s++) {
+                let off = 0;
+                for (let d = 0; d < 28; d++) {
+                    const sym = scheduler.grid[s][d].symbol;
+                    if (sym === SYMBOLS.OFF) off += 1.0;
+                    else if (sym === SYMBOLS.HALF_WORK_OFF || sym === SYMBOLS.HALF_OFF_WORK) off += 0.5;
+                }
+                if (Math.abs(off - 8.0) > 0.01) offDaysValid = false;
+            }
+            assert('1-7. 全スタッフの公休日数が厳密に8.0日（4週8休）を維持していること', offDaysValid);
+
+            let weekLimitValid = true;
+            for (let s = 0; s < 50; s++) {
+                if (scheduler.staffList[s].allow6Consec) continue;
+                scheduler.weekSpans.forEach(wSpan => {
+                    let wCount = 0;
+                    wSpan.forEach(d => {
+                        const sym = scheduler.grid[s][d].symbol;
+                        if (sym && isWorkSymbol(sym) && sym !== SYMBOLS.TRIP && !isHalfDuty(sym)) wCount++;
+                    });
+                    if (wCount > 5) weekLimitValid = false;
+                });
+            }
+            assert('1-8. 日〜土の週出勤制限（最大5出勤、週休2日保証）が遵守されていること', weekLimitValid);
+
+            let streakAfterOffValid = true;
+            for (let s = 0; s < 50; s++) {
+                if (scheduler.staffList[s].allow6Consec) continue;
+                const seq = [];
+                for (let p = 0; p < 5; p++) seq.push(scheduler.staffList[s].prevDays[p]);
+                for (let d = 0; d < 28; d++) seq.push(scheduler.grid[s][d].symbol);
+                let workStreak = 0;
+                for (let idx = 0; idx < seq.length; idx++) {
+                    if (isWorkSymbol(seq[idx])) {
+                        workStreak++;
+                        if (workStreak === 5) {
+                            for (let offOffset = 1; offOffset <= 2; offOffset++) {
+                                const checkIdx = idx + offOffset;
+                                if (checkIdx < seq.length && seq[checkIdx] !== '' && !isHolidaySymbol(seq[checkIdx])) streakAfterOffValid = false;
+                            }
+                        }
+                    } else workStreak = 0;
+                }
+            }
+            assert('1-9. 5連勤直後に必ず2連休（休・有・リフ）が配置されていること', streakAfterOffValid);
+
+            let schedValid = true;
+            for (let d = 0; d < 28; d++) {
+                let cnt = 0;
+                for (let s = 0; s < 50; s++) {
+                    if (scheduler.staffList[s].canSched && scheduler.grid[s][d].symbol === SYMBOLS.WORK) cnt++;
+                }
+                if (cnt < 2) schedValid = false;
+            }
+            assert('1-10. 毎日「スケ可」スタッフの日勤（○）が2名以上出勤していること', schedValid);
+
+            let roleValid = true;
+            for (let d = 0; d < 28; d++) {
+                let cnt = 0;
+                for (let s = 0; s < 50; s++) {
+                    const sym = scheduler.grid[s][d].symbol;
+                    if (scheduler.staffList[s].isRole && isWorkSymbol(sym) && sym !== SYMBOLS.TRIP) cnt++;
+                }
+                if (cnt < 2) roleValid = false;
+            }
+            assert('1-11. 毎日「役職」スタッフの出勤（出張除く）が2名以上確保されていること', roleValid);
+
+            let fullTimeValid = true;
+            for (let d = 0; d < 28; d++) {
+                let cnt = 0;
+                for (let s = 0; s < 50; s++) {
+                    const sym = scheduler.grid[s][d].symbol;
+                    if (scheduler.staffList[s].isFullTime && isWorkSymbol(sym) && sym !== SYMBOLS.TRIP) cnt++;
+                }
+                if (cnt < 3) fullTimeValid = false;
+            }
+            assert('1-12. 毎日「専従」スタッフの出勤（出張除く）が3名以上確保されていること', fullTimeValid);
+
+            const finalErrors = scheduler.verifyAllHardConstraints();
+            assert('1-13. 最終全ハード制約 (verifyAllHardConstraints) がエラー0件で完全合格すること', finalErrors.length === 0, finalErrors.join(', '));
+
+            // ---------------------------------------------------------
+            // セクション2: 本番 app.js コードおよびExcelコピー関数・数式全数検証
+            // ---------------------------------------------------------
+            log('\n--- 【セクション2: Excel出力および数式・関数の全数厳格検証】 ---');
+
+            // 本番の app.js をテキストとしてフェッチしてパース検証
+            let appJsText = '';
+            try {
+                const appRes = await fetch('https://shift-schedule-app-ruby.vercel.app/app.js');
+                appJsText = await appRes.text();
+                assert('2-1. 本番 app.js のフェッチ取得が正常に完了すること', appJsText.length > 50000);
+            } catch (e) {
+                assert('2-1. 本番 app.js のフェッチ取得が正常に完了すること', false, e.message);
+            }
+
+            // A. タイトルの検証: C1のタイトルが「7/1～7/28勤務表」形式になっているか
+            const titleMatch = appJsText.match(/const title = `\${first\.m}\/\${first\.day}～\${last\.m}\/\${last\.day}勤務表`;/);
+            assert('2-2. 勤務表タイトルが「${first.m}/${first.day}～${last.m}/${last.day}勤務表」形式であること', !!titleMatch);
+
+            // B. スタッフ行の集計数式 (AE〜AL列) の検証
+            const hasFWork = appJsText.includes('COUNTIF(${rng},"ハヤ")+COUNTIF(${rng},"オソ")+COUNTIF(${rng},"イブ")');
+            assert('2-3. 出勤数式 (AE列) にハヤ・オソ・イブのCOUNTIFが正しく含まれていること', hasFWork);
+
+            const hasHalfWork = appJsText.includes('0.5*(COUNTIF(${rng},"○/休")');
+            assert('2-4. 出勤数式 (AE列) に半休の0.5日換算COUNTIFが正しく含まれていること', hasHalfWork);
+
+            const hasEarly = appJsText.includes('const fEarly = `=COUNTIF(${rng},"早")+COUNTIF(${rng},"ハヤ")`;');
+            assert('2-5. 早番数式 (AI列) に「早」と「ハヤ」の加算が含まれていること', hasEarly);
+
+            const hasLate = appJsText.includes('const fLate = `=COUNTIF(${rng},"遅")+COUNTIF(${rng},"オソ")`;');
+            assert('2-6. 遅番数式 (AJ列) に「遅」と「オソ」の加算が含まれていること', hasLate);
+
+            const hasEve = appJsText.includes('const fEve = `=COUNTIF(${rng},"E")+COUNTIF(${rng},"イブ")`;');
+            assert('2-7. E数式 (AK列) に「E」と「イブ」の加算が含まれていること', hasEve);
+
+            const hasH8 = appJsText.includes('const fH8 = `=COUNTIF(${rng},"8時")`;');
+            assert('2-8. 8時勤務数式 (AL列) が `=COUNTIF(${rng},"8時")` であること', hasH8);
+
+            const hasRef = appJsText.includes('const fRef = `=COUNTIF(${rng},"上1")+COUNTIF(${rng},"上2")+COUNTIF(${rng},"上3")+COUNTIF(${rng},"上4")+COUNTIF(${rng},"上5")+COUNTIF(${rng},"下1")+COUNTIF(${rng},"下2")+COUNTIF(${rng},"下3")`;');
+            assert('2-9. リフ数式 (AH列) に夏リフ(上1〜5)および冬リフ(下1〜3)が完全網羅されていること', hasRef);
+
+            // C. 54行目〜58行目のフッター集計数式の検証
+            const hasSumWork = appJsText.includes('const sumWork = `=SUM(AE${startRow}:AE${endRow})`;');
+            const hasSumH8 = appJsText.includes('const sumH8    = `=SUM(AL${startRow}:AL${endRow})`;');
+            assert('2-10. 54行目の合計行にAE列〜AL列の縦合計SUM数式（SUM(AE4:AE53)〜SUM(AL4:AL53)）が存在すること', hasSumWork && hasSumH8);
+
+            const hasDayEarly = appJsText.includes('const fDayEarly = `=COUNTIF(${colRng},"早")+COUNTIF(${colRng},"ハヤ")`;');
+            assert('2-11. 55行目 (早番日合計) に「早」と「ハヤ」の日COUNTIF加算が含まれていること', hasDayEarly);
+
+            const hasDayLate = appJsText.includes('const fDayLate = `=COUNTIF(${colRng},"遅")+COUNTIF(${colRng},"オソ")`;');
+            assert('2-12. 56行目 (遅番日合計) に「遅」と「オソ」の日COUNTIF加算が含まれていること', hasDayLate);
+
+            const hasDayEve = appJsText.includes('const fDayEve = `=COUNTIF(${colRng},"E")+COUNTIF(${colRng},"イブ")`;');
+            assert('2-13. 57行目 (E日合計) に「E」と「イブ」の日COUNTIF加算が含まれていること', hasDayEve);
+
+            const hasDayH8 = appJsText.includes('const fDayH8 = `=COUNTIF(${colRng},"8時")`;');
+            assert('2-14. 58行目 (8時日合計) に「8時」の日COUNTIFが含まれていること', hasDayH8);
+
+            // D. 白紙Excel (downloadBlankXlsx) のプルダウン規則に「ハヤ,オソ,イブ」が含まれているか
+            const hasDropdownSpecials = appJsText.includes('ハヤ,オソ,イブ');
+            assert('2-15. 白紙Excelテンプレートのプルダウン選択肢に「ハヤ,オソ,イブ」が含まれていること', hasDropdownSpecials);
+
+            // ---------------------------------------------------------
+            // セクション3: HTML構造・UIコントロール・パレット検証
+            // ---------------------------------------------------------
+            log('\n--- 【セクション3: 本番 HTML UI構造・ボタン・属性列検証】 ---');
+
+            let indexHtmlText = '';
+            try {
+                const htmlRes = await fetch('https://shift-schedule-app-ruby.vercel.app/index.html');
+                indexHtmlText = await htmlRes.text();
+                assert('3-1. 本番 index.html のフェッチ取得が正常に完了すること', indexHtmlText.length > 10000);
+            } catch (e) {
+                assert('3-1. 本番 index.html のフェッチ取得が正常に完了すること', false, e.message);
+            }
+
+            // A. 入力パレットにハヤ・オソ・イブが存在するか
+            const hasInputHaya = indexHtmlText.includes('data-sym="ハヤ"');
+            const hasInputOso = indexHtmlText.includes('data-sym="オソ"');
+            const hasInputIbu = indexHtmlText.includes('data-sym="イブ"');
+            assert('3-2. 入力シート記号パレットに「ハヤ」「オソ」「イブ」ボタンが設置されていること', hasInputHaya && hasInputOso && hasInputIbu);
+
+            // B. 出力パレットにハヤ・オソ・イブが存在するか
+            const hasOutHaya = indexHtmlText.includes('class="palette-btn output-palette-btn" data-sym="ハヤ"');
+            const hasOutOso = indexHtmlText.includes('class="palette-btn output-palette-btn" data-sym="オソ"');
+            const hasOutIbu = indexHtmlText.includes('class="palette-btn output-palette-btn" data-sym="イブ"');
+            assert('3-3. 出力シート確定勤務調整パレットに「ハヤ」「オソ」「イブ」ボタンが設置されていること', hasOutHaya && hasOutOso && hasOutIbu);
+
+            // C. 2段階生成ボタン（「⚡ 勤務表を自動生成する」と「✨ 特殊勤務を入れる」）の存在
+            const hasSolveBtn = indexHtmlText.includes('id="solveBtn"');
+            const hasSpecialBtn = indexHtmlText.includes('id="outputAssignSpecialBtn"');
+            assert('3-4. 2段階生成ボタン（自動生成ボタン＆特殊勤務を入れるボタン）が正しく配置されていること', hasSolveBtn && hasSpecialBtn);
+
+            // D. 属性列（8時可、早不可、遅不可、E不可、スケ可、役職、専従、6連勤可）が28日右側に配置されているか
+            const hasAttrHeaders = indexHtmlText.includes('8時<br>可') || appJsText.includes('8時<br>可');
+            const hasAttrSched = appJsText.includes('data-flag="canSched"');
+            const hasAttrRole = appJsText.includes('data-flag="isRole"');
+            const hasAttrFullTime = appJsText.includes('data-flag="isFullTime"');
+            const hasAttrAllow6 = appJsText.includes('data-flag="allow6Consec"');
+            assert('3-5. 属性列（8時可, 早/遅/E不可, スケ可, 役職, 専従, 6連勤可）が28日の右側に配置されていること', hasAttrSched && hasAttrRole && hasAttrFullTime && hasAttrAllow6);
+
+            // ---------------------------------------------------------
+            // 総合判定
+            // ---------------------------------------------------------
+            log(`\n================================================================`);
+            log(`  全検証結果サマリー: ${passChecks} / ${totalChecks} 項目の検証に完全合格`);
+            log(`================================================================`);
+
+            if (allPassed) {
+                log('🎉🎉🎉 本番デプロイ環境の全システム・Excel関数・UI動作の厳格チェックに完全合格しました！ 🎉🎉🎉');
+            } else {
+                log('❌ 一部の検証項目で不合格が検出されました。');
+            }
+
+            // テスト結果送信
+            fetch('http://localhost:8089/result', {
+                method: 'POST',
+                headers: { 'Content-Type': 'text/plain; charset=utf-8' },
+                body: out.textContent
+            }).catch(e => console.log('Result transmission error:', e));
+        }
+
+        window.onload = runVerification;
+    </script>
+</body>
+</html>

@@ -89,7 +89,8 @@ document.addEventListener('DOMContentLoaded', () => {
                 prevDays: [...s.prevDays],
                 days: [...s.days]
             })),
-            startDate: document.getElementById('termStartDate')?.value || '2026-04-01'
+            startDate: document.getElementById('termStartDate')?.value || '2026-04-01',
+            outputGrid: (lastSolveResult && lastSolveResult.grid) ? lastSolveResult.grid.map(row => row.map(c => ({ ...c }))) : null
         };
     }
 
@@ -121,27 +122,42 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     function restoreHistoryState(state) {
-        if (!state || !state.staffList) return;
-        state.staffList.forEach((s, idx) => {
-            if (staffList[idx]) {
-                staffList[idx].name = s.name;
-                staffList[idx].can8 = s.can8;
-                staffList[idx].noEarly = s.noEarly;
-                staffList[idx].noLate = s.noLate;
-                staffList[idx].noEve = s.noEve;
-                staffList[idx].canSched = s.canSched;
-                staffList[idx].isRole = s.isRole;
-                staffList[idx].isFullTime = s.isFullTime;
-                staffList[idx].allow6Consec = s.allow6Consec;
-                staffList[idx].prevDays = [...s.prevDays];
-                staffList[idx].days = [...s.days];
-            }
-        });
+        if (!state) return;
+        if (state.staffList) {
+            state.staffList.forEach((s, idx) => {
+                if (staffList[idx]) {
+                    staffList[idx].name = s.name;
+                    staffList[idx].can8 = s.can8;
+                    staffList[idx].noEarly = s.noEarly;
+                    staffList[idx].noLate = s.noLate;
+                    staffList[idx].noEve = s.noEve;
+                    staffList[idx].canSched = s.canSched;
+                    staffList[idx].isRole = s.isRole;
+                    staffList[idx].isFullTime = s.isFullTime;
+                    staffList[idx].allow6Consec = s.allow6Consec;
+                    staffList[idx].prevDays = [...s.prevDays];
+                    staffList[idx].days = [...s.days];
+                }
+            });
+        }
         if (state.startDate) {
             const startDateInput = document.getElementById('termStartDate');
             if (startDateInput && startDateInput.value !== state.startDate) {
                 startDateInput.value = state.startDate;
                 getTermInfo();
+            }
+        }
+        // 出力シートの復元
+        if (state.outputGrid && lastSolveResult) {
+            lastSolveResult.grid = state.outputGrid.map(row => row.map(c => ({ ...c })));
+            if (lastScheduler) {
+                lastScheduler.grid = lastSolveResult.grid;
+                const newStats = lastScheduler.calculateStats();
+                lastSolveResult.stats = newStats;
+                renderOutputTable(lastSolveResult.grid, newStats);
+                renderStatsDashboard(newStats);
+            } else {
+                renderOutputTable(lastSolveResult.grid, lastSolveResult.stats);
             }
         }
         clearConflictHighlights();
@@ -151,8 +167,15 @@ document.addEventListener('DOMContentLoaded', () => {
     function updateUndoRedoUI() {
         const undoDisabled = (undoStack.length === 0);
         const redoDisabled = (redoStack.length === 0);
-        const undoBtns = [document.getElementById('undoBtn'), document.getElementById('headerUndoBtn')];
-        const redoBtns = [document.getElementById('redoBtn')];
+        const undoBtns = [
+            document.getElementById('undoBtn'),
+            document.getElementById('headerUndoBtn'),
+            document.getElementById('outputUndoBtn')
+        ];
+        const redoBtns = [
+            document.getElementById('redoBtn'),
+            document.getElementById('outputRedoBtn')
+        ];
 
         undoBtns.forEach(btn => {
             if (btn) {
@@ -883,6 +906,12 @@ document.addEventListener('DOMContentLoaded', () => {
                 let newSym = currentOutputSelectedSymbol;
                 if (newSym === 'CLEAR') newSym = '';
 
+                // すでに同じ記号なら変更なし
+                if (lastSolveResult.grid[s][d].symbol === newSym) return;
+
+                // 履歴を保存（Undo可能にする）
+                pushHistory();
+
                 // グリッドのシンボルを更新
                 lastSolveResult.grid[s][d].symbol = newSym;
                 if (lastScheduler) {
@@ -981,8 +1010,30 @@ document.addEventListener('DOMContentLoaded', () => {
     const headerUndoBtn = document.getElementById('headerUndoBtn');
     if (headerUndoBtn) headerUndoBtn.addEventListener('click', undo);
 
+    const outputUndoBtn = document.getElementById('outputUndoBtn');
+    if (outputUndoBtn) outputUndoBtn.addEventListener('click', undo);
+
     const redoBtn = document.getElementById('redoBtn');
     if (redoBtn) redoBtn.addEventListener('click', redo);
+
+    const outputRedoBtn = document.getElementById('outputRedoBtn');
+    if (outputRedoBtn) outputRedoBtn.addEventListener('click', redo);
+
+    // ★ 左右スクロールナビゲーションボタン（入力シート・出力シート共通）
+    document.querySelectorAll('.scroll-btn').forEach(btn => {
+        btn.addEventListener('click', (e) => {
+            e.preventDefault();
+            const targetId = btn.dataset.target;
+            const dir = btn.dataset.dir;
+            const wrapper = document.getElementById(targetId);
+            if (!wrapper) return;
+            const scrollDistance = Math.max(320, Math.floor(wrapper.clientWidth * 0.65));
+            wrapper.scrollBy({
+                left: dir === 'left' ? -scrollDistance : scrollDistance,
+                behavior: 'smooth'
+            });
+        });
+    });
 
     // ★ キーボードショートカット (Ctrl+Z: 戻る / Ctrl+Y: やり直す)
     document.addEventListener('keydown', (e) => {

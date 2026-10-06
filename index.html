@@ -123,6 +123,15 @@
                 <div style="display: flex; justify-content: space-between; align-items: center; margin-top: 8px; font-size: 0.8rem; color: #64748b; flex-wrap: wrap; gap: 8px;">
                     <div>💡 セルをクリックすると選択中の記号が入力されます。入力枠は確定時に<strong style="color: #dc2626;">「赤字・太字」</strong>で保持されます。</div>
                     <div style="display: flex; gap: 8px; align-items: center; flex-wrap: wrap;">
+                        <div style="display: inline-flex; gap: 4px; align-items: center; background: #f8fafc; padding: 2px 6px; border-radius: 6px; border: 1px solid #cbd5e1;">
+                            <span style="font-size: 0.75rem; color: #334155; font-weight: 700;">左右スクロール:</span>
+                            <button type="button" class="scroll-btn" data-target="inputSheetWrapper" data-dir="left" title="表を左（1日〜）へスクロール">
+                                ◀ 左へ
+                            </button>
+                            <button type="button" class="scroll-btn" data-target="inputSheetWrapper" data-dir="right" title="表を右（〜28日・属性）へスクロール">
+                                右へ ▶
+                            </button>
+                        </div>
                         <button class="btn btn-outline" id="downloadBlankTemplateBtn" title="スタッフに配布して希望勤務をPC入力してもらうためのプルダウン付きExcel勤務表をダウンロード" style="font-size: 0.8rem; padding: 4px 10px; color: #166534; border-color: #86efac; background: #f0fdf4;">
                             📄 スタッフ入力用 空白勤務表 (.xlsx)
                         </button>
@@ -138,7 +147,7 @@
             <div id="conflictAlertBanner" class="conflict-alert-banner"></div>
 
             <!-- 入力用スプレッドシートテーブル -->
-            <div class="sheet-wrapper">
+            <div class="sheet-wrapper" id="inputSheetWrapper">
                 <table class="sheet-table">
                     <thead id="inputTableHead"></thead>
                     <tbody id="inputTableBody"></tbody>
@@ -200,12 +209,30 @@
                     <button class="palette-btn output-palette-btn" data-sym="下1">下1</button>
                     <button class="palette-btn output-palette-btn" data-sym="下2">下2</button>
                     <button class="palette-btn output-palette-btn" data-sym="下3">下3</button>
-                    <span style="font-size: 0.78rem; color: #64748b; margin-left: 8px;">💡 勤務表のセルをクリックすると選択記号に変更され、集計が即座に連動します</span>
+                    <span style="color: #cbd5e1; margin: 0 4px;">|</span>
+                    <button class="palette-btn output-palette-btn" data-sym="CLEAR" title="セルの記号を消去" style="color: #dc2626;">✕ 消去</button>
+                    <span style="color: #cbd5e1; margin: 0 4px;">|</span>
+                    <button class="btn btn-outline" id="outputUndoBtn" disabled title="直前の操作を1つ元に戻します (Ctrl+Z)" style="font-size: 0.82rem; padding: 4px 10px; opacity: 0.5; font-weight: 600;">
+                        ↩ 戻る
+                    </button>
+                    <button class="btn btn-outline" id="outputRedoBtn" disabled title="元に戻した操作をやり直します (Ctrl+Y)" style="font-size: 0.82rem; padding: 4px 10px; opacity: 0.5; font-weight: 600;">
+                        ↪ やり直す
+                    </button>
+                    <span style="color: #cbd5e1; margin: 0 4px;">|</span>
+                    <div style="display: inline-flex; gap: 4px; align-items: center; background: #f8fafc; padding: 2px 6px; border-radius: 6px; border: 1px solid #cbd5e1;">
+                        <span style="font-size: 0.75rem; color: #334155; font-weight: 700;">左右スクロール:</span>
+                        <button type="button" class="scroll-btn" data-target="outputSheetWrapper" data-dir="left" title="表を左（1日〜）へスクロール">
+                            ◀ 左へ
+                        </button>
+                        <button type="button" class="scroll-btn" data-target="outputSheetWrapper" data-dir="right" title="表を右（〜28日・集計）へスクロール">
+                            右へ ▶
+                        </button>
+                    </div>
                 </div>
             </div>
 
             <!-- 出力用スプレッドシートテーブル -->
-            <div class="sheet-wrapper">
+            <div class="sheet-wrapper" id="outputSheetWrapper">
                 <table class="sheet-table">
                     <thead id="outputTableHead"></thead>
                     <tbody id="outputTableBody"></tbody>
