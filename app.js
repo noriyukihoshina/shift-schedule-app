@@ -378,6 +378,13 @@ document.addEventListener('DOMContentLoaded', () => {
         const dateInput = document.getElementById('termStartDate');
         if (dateInput) dateInput.value = newStartDate;
         currentWorkingStartDate = newStartDate;
+
+        // ★ 公休枠制限を基本の「8.0 (4週8休)」に初期化
+        const stdHolidaySelect = document.getElementById('standardHolidaySelect');
+        if (stdHolidaySelect) {
+            stdHolidaySelect.value = '8.0';
+        }
+
         getTermInfo();
 
         // ★ 直前タームが存在すれば、その最終5日間の勤務実績を自動連携！
@@ -3490,6 +3497,8 @@ document.addEventListener('DOMContentLoaded', () => {
         currentWorkingStartDate = targetDate;
         const dateInput = document.getElementById('termStartDate');
         if (dateInput) dateInput.value = targetDate;
+        const stdHolidaySelect = document.getElementById('standardHolidaySelect');
+        if (stdHolidaySelect) stdHolidaySelect.value = '8.0';
         getTermInfo();
         renderInputTable();
         clearOutputTables();
