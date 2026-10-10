@@ -274,6 +274,99 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     }
 
+    // 直前ターム（終了日が新ターム開始日の前日、または直近の過去ターム）を検索
+    function findPreviousTerm(startDateStr) {
+        try {
+            const terms = getSavedTerms();
+            if (!terms || terms.length === 0) return null;
+
+            const curD = new Date(startDateStr + 'T00:00:00');
+            const prevEndD = new Date(curD);
+            prevEndD.setDate(prevEndD.getDate() - 1);
+            const prevEndYMD = `${prevEndD.getFullYear()}-${String(prevEndD.getMonth() + 1).padStart(2, '0')}-${String(prevEndD.getDate()).padStart(2, '0')}`;
+
+            // 1. 終了日（開始日+27日）が新タームの前日と完全に一致するタームを探す
+            for (const t of terms) {
+                if (t === startDateStr) continue;
+                const tD = new Date(t + 'T00:00:00');
+                tD.setDate(tD.getDate() + (NUM_DAYS - 1));
+                const tEndYMD = `${tD.getFullYear()}-${String(tD.getMonth() + 1).padStart(2, '0')}-${String(tD.getDate()).padStart(2, '0')}`;
+                if (tEndYMD === prevEndYMD) {
+                    return t;
+                }
+            }
+
+            // 2. フォールバック: startDateStr より過去で最新の保存ターム
+            const pastTerms = terms.filter(t => t < startDateStr).sort().reverse();
+            if (pastTerms.length > 0) {
+                return pastTerms[0];
+            }
+
+            return null;
+        } catch (e) {
+            console.error('直前タームの検索エラー:', e);
+            return null;
+        }
+    }
+
+    // 指定した直前タームから最終5日間の実績を staffList の prevDays に反映する
+    function applyPreviousTermHistory(prevStartDateStr, showToastMsg = true) {
+        try {
+            const raw = localStorage.getItem(`${STORAGE_KEY_PREFIX}${prevStartDateStr}`);
+            if (!raw) return false;
+            const prevData = JSON.parse(raw);
+            if (!prevData) return false;
+
+            let appliedCount = 0;
+
+            for (let s = 0; s < NUM_STAFF; s++) {
+                if (!staffList[s]) continue;
+                let last5 = ['', '', '', '', ''];
+
+                // 優先1: 作成済み勤務表（outputGrid）から最後の5日分を取得
+                if (prevData.outputGrid && prevData.outputGrid[s] && prevData.outputGrid[s].length >= NUM_DAYS) {
+                    const row = prevData.outputGrid[s];
+                    last5 = [
+                        row[NUM_DAYS - 5]?.symbol || '',
+                        row[NUM_DAYS - 4]?.symbol || '',
+                        row[NUM_DAYS - 3]?.symbol || '',
+                        row[NUM_DAYS - 2]?.symbol || '',
+                        row[NUM_DAYS - 1]?.symbol || ''
+                    ];
+                }
+                // 優先2: 事前希望入力枠（days）から最後の5日分を取得
+                else if (prevData.staffList && prevData.staffList[s] && prevData.staffList[s].days) {
+                    const days = prevData.staffList[s].days;
+                    last5 = [
+                        days[NUM_DAYS - 5] || '',
+                        days[NUM_DAYS - 4] || '',
+                        days[NUM_DAYS - 3] || '',
+                        days[NUM_DAYS - 2] || '',
+                        days[NUM_DAYS - 1] || ''
+                    ];
+                }
+
+                staffList[s].prevDays = [...last5];
+                if (last5.some(v => v !== '')) appliedCount++;
+            }
+
+            renderInputTable();
+            saveCurrentTermToStorage();
+
+            if (showToastMsg) {
+                const prevD = new Date(prevStartDateStr + 'T00:00:00');
+                const prevEndD = new Date(prevD);
+                prevEndD.setDate(prevEndD.getDate() + 27);
+                const titleStr = `${prevD.getMonth() + 1}/${prevD.getDate()}～${prevEndD.getMonth() + 1}/${prevEndD.getDate()}`;
+                showToast(`🔗 直前ターム（${titleStr}）の最終5日間実績を取り込みました（${appliedCount}名分反映）`);
+            }
+            return true;
+        } catch (e) {
+            console.error('前ターム実績の反映に失敗しました:', e);
+            return false;
+        }
+    }
+
     function initNewTerm(newStartDate) {
         staffList.forEach(s => {
             s.prevDays = ['', '', '', '', ''];
@@ -287,6 +380,12 @@ document.addEventListener('DOMContentLoaded', () => {
         currentWorkingStartDate = newStartDate;
         getTermInfo();
 
+        // ★ 直前タームが存在すれば、その最終5日間の勤務実績を自動連携！
+        const prevTerm = findPreviousTerm(newStartDate);
+        if (prevTerm) {
+            applyPreviousTermHistory(prevTerm, false);
+        }
+
         renderInputTable();
         clearOutputTables();
         switchTab('inputTab');
@@ -297,6 +396,14 @@ document.addEventListener('DOMContentLoaded', () => {
         clearConflictHighlights();
 
         saveCurrentTermToStorage();
+
+        if (prevTerm) {
+            const pD = new Date(prevTerm + 'T00:00:00');
+            const pEndD = new Date(pD);
+            pEndD.setDate(pEndD.getDate() + 27);
+            const pTitle = `${pD.getMonth() + 1}/${pD.getDate()}～${pEndD.getMonth() + 1}/${pEndD.getDate()}`;
+            showToast(`🆕 新規期間（${getTermInfo().title}）を開始しました（直前 ${pTitle} の最終5日実績を自動入力済）`);
+        }
     }
 
     // ==========================================
@@ -1273,6 +1380,28 @@ document.addEventListener('DOMContentLoaded', () => {
     if (standardHolidaySelect) {
         standardHolidaySelect.addEventListener('change', () => {
             saveCurrentTermToStorage();
+        });
+    }
+
+    // 前ターム実績を自動取込ボタン（直前の保存済み勤務表の最終5日間実績を反映）
+    const syncPrevTermHistoryBtn = document.getElementById('syncPrevTermHistoryBtn');
+    if (syncPrevTermHistoryBtn) {
+        syncPrevTermHistoryBtn.addEventListener('click', () => {
+            const curDate = document.getElementById('termStartDate')?.value || currentWorkingStartDate;
+            const prevTerm = findPreviousTerm(curDate);
+            if (!prevTerm) {
+                alert('直前の保存済み勤務表データが見つかりませんでした。\n先に前ターム（例: 4/1～4/28）を作成・保存してください。');
+                return;
+            }
+            const pD = new Date(prevTerm + 'T00:00:00');
+            const pEndD = new Date(pD);
+            pEndD.setDate(pEndD.getDate() + 27);
+            const pTitle = `${pD.getMonth() + 1}/${pD.getDate()}～${pEndD.getMonth() + 1}/${pEndD.getDate()}`;
+
+            if (confirm(`直前の勤務表【${pTitle}】の最終5日間の勤務実績を、この期間の「前ターム最終5日間実績」に取り込みますか？\n（※現在入力されている前実績は上書きされます）`)) {
+                pushHistory();
+                applyPreviousTermHistory(prevTerm, true);
+            }
         });
     }
 
