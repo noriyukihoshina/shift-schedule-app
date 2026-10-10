@@ -160,8 +160,17 @@ document.addEventListener('DOMContentLoaded', () => {
                 renderOutputTable(lastSolveResult.grid, lastSolveResult.stats);
             }
         }
-        clearConflictHighlights();
         renderInputTable();
+
+        // ★ 戻る / やり直す後に、現在開いているタブの制約チェックを自動実行して網掛けを完全に維持！
+        const activeTab = document.querySelector('.tab-panel.active')?.id;
+        if (activeTab === 'outputTab') {
+            checkWorkAreaConstraints(false);
+        } else if (activeTab === 'checkTab') {
+            checkFinalConstraints(false);
+        } else if (activeTab === 'inputTab') {
+            checkInputConstraints(false);
+        }
     }
 
     function updateUndoRedoUI() {
@@ -589,10 +598,13 @@ document.addEventListener('DOMContentLoaded', () => {
     let currentOutputConflicts = [];
 
     function clearOutputConflictHighlights() {
-        document.querySelectorAll('#outputTableBody .conflict-highlight, #checkTableBody .conflict-highlight').forEach(cell => {
+        document.querySelectorAll(
+            '#outputTableBody .conflict-highlight, #checkTableBody .conflict-highlight, ' +
+            '#outputTableFoot .conflict-highlight, #checkTableFoot .conflict-highlight'
+        ).forEach(cell => {
             cell.classList.remove('conflict-highlight');
             cell.removeAttribute('data-conflict-reason');
-            if (cell.dataset.stat) {
+            if (cell.dataset.stat || cell.dataset.footerStat) {
                 cell.removeAttribute('title');
             }
         });
@@ -614,8 +626,19 @@ document.addEventListener('DOMContentLoaded', () => {
 
         if (currentOutputConflicts.length > 0) {
             currentOutputConflicts.forEach(item => {
-                if (item.statType) {
-                    // ★ 集計列セル（例: 公休日数カウントエラー）のブルー網掛け
+                if (item.footerStat) {
+                    // ★ フッター特殊勤務集計セル（早番・遅番・E・8時など）のブルー網掛け
+                    const footCells = document.querySelectorAll(
+                        `#outputTableFoot td[data-d="${item.dayIndex}"][data-footer-stat="${item.footerStat}"], ` +
+                        `#checkTableFoot td[data-d="${item.dayIndex}"][data-footer-stat="${item.footerStat}"]`
+                    );
+                    footCells.forEach(cell => {
+                        cell.classList.add('conflict-highlight');
+                        cell.setAttribute('data-conflict-reason', item.reason || '特殊勤務人数不整合');
+                        cell.title = `⚠️ 【人数不整合】${item.reason || '必要人数と一致していません'}`;
+                    });
+                } else if (item.statType) {
+                    // ★ スタッフ行右側の集計列セル（例: 公休日数カウントエラー）のブルー網掛け
                     const statCells = document.querySelectorAll(
                         `#outputTableBody td[data-s="${item.staffIndex}"][data-stat="${item.statType}"], ` +
                         `#checkTableBody td[data-s="${item.staffIndex}"][data-stat="${item.statType}"]`
@@ -625,7 +648,7 @@ document.addEventListener('DOMContentLoaded', () => {
                         cell.setAttribute('data-conflict-reason', item.reason || '集計不整合');
                         cell.title = `⚠️ 【集計不整合】${item.reason || '集計値が基準と一致していません'}`;
                     });
-                } else if (item.dayIndex !== undefined) {
+                } else if (item.dayIndex !== undefined && item.staffIndex !== undefined) {
                     // 日付セルのブルー網掛け
                     const cells = document.querySelectorAll(
                         `#outputTableBody td[data-s="${item.staffIndex}"][data-d="${item.dayIndex}"], ` +
@@ -1237,7 +1260,7 @@ document.addEventListener('DOMContentLoaded', () => {
         for (let d = 0; d < NUM_DAYS; d++) {
             const dStat = stats.daily[d];
             const thickCls = ((d + 1) % 7 === 0) ? 'border-thick-right' : '';
-            footHtml += `<td class="${thickCls}" style="color:#c2410c; font-weight:700;">${dStat.early}</td>`;
+            footHtml += `<td class="${thickCls}" data-d="${d}" data-footer-stat="early" style="color:#c2410c; font-weight:700;">${dStat.early}</td>`;
         }
         footHtml += `<td colspan="8" style="color:#94a3b8;">-</td></tr>`;
 
@@ -1249,7 +1272,7 @@ document.addEventListener('DOMContentLoaded', () => {
         for (let d = 0; d < NUM_DAYS; d++) {
             const dStat = stats.daily[d];
             const thickCls = ((d + 1) % 7 === 0) ? 'border-thick-right' : '';
-            footHtml += `<td class="${thickCls}" style="color:#0369a1; font-weight:700;">${dStat.late}</td>`;
+            footHtml += `<td class="${thickCls}" data-d="${d}" data-footer-stat="late" style="color:#0369a1; font-weight:700;">${dStat.late}</td>`;
         }
         footHtml += `<td colspan="8" style="color:#94a3b8;">-</td></tr>`;
 
@@ -1261,7 +1284,7 @@ document.addEventListener('DOMContentLoaded', () => {
         for (let d = 0; d < NUM_DAYS; d++) {
             const dStat = stats.daily[d];
             const thickCls = ((d + 1) % 7 === 0) ? 'border-thick-right' : '';
-            footHtml += `<td class="${thickCls}" style="color:#7e22ce; font-weight:700;">${dStat.eve}</td>`;
+            footHtml += `<td class="${thickCls}" data-d="${d}" data-footer-stat="eve" style="color:#7e22ce; font-weight:700;">${dStat.eve}</td>`;
         }
         footHtml += `<td colspan="8" style="color:#94a3b8;">-</td></tr>`;
 
@@ -1273,7 +1296,7 @@ document.addEventListener('DOMContentLoaded', () => {
         for (let d = 0; d < NUM_DAYS; d++) {
             const dStat = stats.daily[d];
             const thickCls = ((d + 1) % 7 === 0) ? 'border-thick-right' : '';
-            footHtml += `<td class="${thickCls}" style="color:#0f766e; font-weight:700;">${dStat.h8}</td>`;
+            footHtml += `<td class="${thickCls} border-thick-bottom" data-d="${d}" data-footer-stat="h8" style="color:#0f766e; font-weight:700;">${dStat.h8}</td>`;
         }
         footHtml += `<td class="border-thick-bottom" colspan="8" style="color:#94a3b8;">-</td></tr>`;
 

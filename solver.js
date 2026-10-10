@@ -2122,12 +2122,55 @@ function validateScheduleGrid(grid, staffList, options = {}) {
             errors.push(`【${dayNum}日目】「専従」スタッフの出勤が${fullTimeWorkCount}名しかいません（要件: 3名以上、出張除く）。`);
         }
 
-        // 確定勤務表の場合の特殊勤務人数チェック
+        // 特殊勤務人数チェック（早番3名, 遅番1名, E2名, 8時1名）
         if (isFinal) {
-            if (earlyCount !== 3) errors.push(`【${dayNum}日目】早番（早・ハヤ）が${earlyCount}名です（要件: 3名）。`);
-            if (lateCount !== 1) errors.push(`【${dayNum}日目】遅番（遅・オソ）が${lateCount}名です（要件: 1名）。`);
-            if (eveCount !== 2) errors.push(`【${dayNum}日目】イブニング（E・イブ）が${eveCount}名です（要件: 2名）。`);
-            if (h8Count !== 1) errors.push(`【${dayNum}日目】8時開始が${h8Count}名です（要件: 1名）。`);
+            // 最終チェック＆完成: 完全充足を厳格チェック
+            if (earlyCount !== 3) {
+                const reason = `${dayNum}日目の早番（早・ハヤ）が${earlyCount}名です（要件: 3名）`;
+                errors.push(`【${dayNum}日目】${reason}。`);
+                conflictCells.push({ dayIndex: d, footerStat: 'early', reason: reason });
+            }
+            if (lateCount !== 1) {
+                const reason = `${dayNum}日目の遅番（遅・オソ）が${lateCount}名です（要件: 1名）`;
+                errors.push(`【${dayNum}日目】${reason}。`);
+                conflictCells.push({ dayIndex: d, footerStat: 'late', reason: reason });
+            }
+            if (eveCount !== 2) {
+                const reason = `${dayNum}日目のイブニング（E・イブ）が${eveCount}名です（要件: 2名）`;
+                errors.push(`【${dayNum}日目】${reason}。`);
+                conflictCells.push({ dayIndex: d, footerStat: 'eve', reason: reason });
+            }
+            if (h8Count !== 1) {
+                const reason = `${dayNum}日目の8時開始が${h8Count}名です（要件: 1名）`;
+                errors.push(`【${dayNum}日目】${reason}。`);
+                conflictCells.push({ dayIndex: d, footerStat: 'h8', reason: reason });
+            }
+        } else {
+            // 修正作業エリア: 全日0名は許容するが、既に特殊勤務が入っている日での不足または超過は指摘＆網掛け
+            if (earlyCount > 0 && earlyCount !== 3) {
+                const reason = `${dayNum}日目の早番（早・ハヤ）が${earlyCount}名です（要件: 3名）`;
+                errors.push(`【${dayNum}日目】${reason}。`);
+                conflictCells.push({ dayIndex: d, footerStat: 'early', reason: reason });
+            } else if (earlyCount > 3) {
+                const reason = `${dayNum}日目の早番（早・ハヤ）が${earlyCount}名で定員超過です（要件: 3名）`;
+                errors.push(`【${dayNum}日目】${reason}。`);
+                conflictCells.push({ dayIndex: d, footerStat: 'early', reason: reason });
+            }
+            if (lateCount > 1) {
+                const reason = `${dayNum}日目の遅番（遅・オソ）が${lateCount}名で定員超過です（要件: 1名）`;
+                errors.push(`【${dayNum}日目】${reason}。`);
+                conflictCells.push({ dayIndex: d, footerStat: 'late', reason: reason });
+            }
+            if (eveCount > 2) {
+                const reason = `${dayNum}日目のイブニング（E・イブ）が${eveCount}名で定員超過です（要件: 2名）`;
+                errors.push(`【${dayNum}日目】${reason}。`);
+                conflictCells.push({ dayIndex: d, footerStat: 'eve', reason: reason });
+            }
+            if (h8Count > 1) {
+                const reason = `${dayNum}日目の8時開始が${h8Count}名で定員超過です（要件: 1名）`;
+                errors.push(`【${dayNum}日目】${reason}。`);
+                conflictCells.push({ dayIndex: d, footerStat: 'h8', reason: reason });
+            }
         }
     }
 
