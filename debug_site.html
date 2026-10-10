@@ -1,0 +1,50 @@
+<!DOCTYPE html>
+<html>
+<head><title>Debug Console</title></head>
+<body>
+<div id="logs"></div>
+<script>
+    window.onerror = function(msg, url, line, col, error) {
+        document.getElementById('logs').innerHTML += '<div>ERROR: ' + msg + ' at line ' + line + ':' + col + '</div>';
+    };
+</script>
+<iframe id="testFrame" src="https://shift-schedule-app-ruby.vercel.app" style="width:1000px; height:800px;"></iframe>
+<script>
+    const frame = document.getElementById('testFrame');
+    frame.onload = async () => {
+        try {
+            const win = frame.contentWindow;
+            const doc = frame.contentDocument;
+            win.onerror = function(msg, url, line, col, error) {
+                document.getElementById('logs').innerHTML += '<div>FRAME ERROR: ' + msg + ' at ' + line + ':' + col + '</div>';
+            };
+
+            const dateInput = doc.getElementById('termStartDate');
+            document.getElementById('logs').innerHTML += '<div>Initial date: ' + (dateInput ? dateInput.value : 'null') + '</div>';
+            
+            // 日付を 2026-04-29 に変更してみる
+            if (dateInput) {
+                dateInput.value = '2026-04-29';
+                dateInput.dispatchEvent(new win.Event('change'));
+            }
+
+            await new Promise(r => setTimeout(r, 1000));
+            const endDisplay = doc.getElementById('termEndDateDisplay');
+            document.getElementById('logs').innerHTML += '<div>After change endDisplay: ' + (endDisplay ? endDisplay.textContent : 'null') + '</div>';
+
+            // 空白勤務表ボタンをクリックしてみる
+            const blankBtn = doc.getElementById('downloadBlankTemplateBtn');
+            document.getElementById('logs').innerHTML += '<div>blankBtn found: ' + (blankBtn ? 'yes' : 'no') + '</div>';
+            if (blankBtn) {
+                blankBtn.click();
+            }
+
+            await new Promise(r => setTimeout(r, 1000));
+            document.getElementById('logs').innerHTML += '<div>TEST FINISHED</div>';
+        } catch(e) {
+            document.getElementById('logs').innerHTML += '<div>CATCH: ' + e.message + '</div>';
+        }
+    };
+</script>
+</body>
+</html>
