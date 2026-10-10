@@ -85,8 +85,32 @@ document.addEventListener('DOMContentLoaded', () => {
 
     function getSavedTerms() {
         try {
+            const termSet = new Set();
+            // 1. 記録された一覧
             const raw = localStorage.getItem(STORAGE_KEY_SAVED_TERMS);
-            return raw ? JSON.parse(raw) : [];
+            if (raw) {
+                const arr = JSON.parse(raw);
+                if (Array.isArray(arr)) arr.forEach(t => termSet.add(t));
+            }
+            // 2. localStorage全体の shift_schedule_term_ キーを自動スキャンして取りこぼしを完全防止
+            for (let i = 0; i < localStorage.length; i++) {
+                const k = localStorage.key(i);
+                if (k && k.startsWith(STORAGE_KEY_PREFIX)) {
+                    const datePart = k.replace(STORAGE_KEY_PREFIX, '');
+                    if (datePart && /^\d{4}-\d{2}-\d{2}$/.test(datePart)) {
+                        termSet.add(datePart);
+                    }
+                }
+            }
+            // 3. 現在日付（未保存でもスロットとして追加）
+            const curDate = document.getElementById('termStartDate')?.value || currentWorkingStartDate;
+            if (curDate && /^\d{4}-\d{2}-\d{2}$/.test(curDate)) {
+                termSet.add(curDate);
+            }
+
+            const sorted = Array.from(termSet).sort();
+            localStorage.setItem(STORAGE_KEY_SAVED_TERMS, JSON.stringify(sorted));
+            return sorted;
         } catch (e) {
             return [];
         }
@@ -112,7 +136,7 @@ document.addEventListener('DOMContentLoaded', () => {
         const terms = getSavedTerms();
         const curDate = document.getElementById('termStartDate')?.value || currentWorkingStartDate;
 
-        let html = '<option value="">(保存済み期間の呼出)</option>';
+        let html = '<option value="" selected>(保存済み期間の呼出)</option>';
         terms.forEach(t => {
             const d = new Date(t + 'T00:00:00');
             const dEnd = new Date(d);
@@ -122,10 +146,11 @@ document.addEventListener('DOMContentLoaded', () => {
             const mEnd = dEnd.getMonth() + 1;
             const dayEnd = dEnd.getDate();
             const isCurrent = (t === curDate);
-            const label = `${t} (${mStart}/${dayStart}～${mEnd}/${dayEnd})${isCurrent ? ' 【作業中】' : ''}`;
-            html += `<option value="${t}" ${isCurrent ? 'selected' : ''}>${label}</option>`;
+            const label = `${t} (${mStart}/${dayStart}～${mEnd}/${dayEnd})${isCurrent ? ' 【現在作業中】' : ''}`;
+            html += `<option value="${t}">${label}</option>`;
         });
         select.innerHTML = html;
+        select.value = ''; // 常に「(保存済み期間の呼出)」を選択状態にしておく（同じ期間でも何度でも再呼出可能に）
     }
 
     function clearOutputTables() {
@@ -200,10 +225,11 @@ document.addEventListener('DOMContentLoaded', () => {
             const data = JSON.parse(raw);
             if (!data || !data.staffList) return false;
 
-            // 1. 公休日数
-            if (data.standardHolidays !== undefined) {
-                const stdSel = document.getElementById('standardHolidaySelect');
-                if (stdSel) stdSel.value = String(data.standardHolidays);
+            // 1. 公休日数（基本は8.0、明示的に8.5が指定されている場合のみ8.5）
+            const stdSel = document.getElementById('standardHolidaySelect');
+            if (stdSel) {
+                const valNum = parseFloat(data.standardHolidays);
+                stdSel.value = (valNum === 8.5) ? '8.5' : '8.0';
             }
 
             // 2. スタッフ復元
@@ -411,6 +437,7 @@ document.addEventListener('DOMContentLoaded', () => {
             const pTitle = `${pD.getMonth() + 1}/${pD.getDate()}～${pEndD.getMonth() + 1}/${pEndD.getDate()}`;
             showToast(`🆕 新規期間（${getTermInfo().title}）を開始しました（直前 ${pTitle} の最終5日実績を自動入力済）`);
         }
+        renderSavedTermsSelect();
     }
 
     // ==========================================
@@ -1354,6 +1381,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 initNewTerm(newDate);
                 showToast(`🆕 新規期間（${newDate}～）を開始しました（ブラウザ自動保存中）`);
             }
+            renderSavedTermsSelect();
         });
     }
 
@@ -1361,14 +1389,24 @@ document.addEventListener('DOMContentLoaded', () => {
     if (savedTermsSelect) {
         savedTermsSelect.addEventListener('change', () => {
             const selectedDate = savedTermsSelect.value;
-            if (!selectedDate || selectedDate === currentWorkingStartDate) return;
+            if (!selectedDate) return;
 
-            // 直前の期間データを保存
-            saveCurrentTermToStorage();
+            // 別の期間に切り替える場合のみ、直前の期間データを自動保存
+            if (selectedDate !== currentWorkingStartDate) {
+                saveCurrentTermToStorage();
+            }
 
             currentWorkingStartDate = selectedDate;
-            loadTermFromStorage(selectedDate);
-            showToast(`💾 保存済み期間（${selectedDate}～）に切り替えました`);
+            const loaded = loadTermFromStorage(selectedDate);
+            if (loaded) {
+                showToast(`💾 保存済み期間（${selectedDate}～）を呼び出しました`);
+            } else {
+                initNewTerm(selectedDate);
+                showToast(`🆕 期間（${selectedDate}～）を開きました`);
+            }
+
+            // 呼出後は選択肢を「(保存済み期間の呼出)」にリセット（次回も同じ期間を選択可能にする）
+            renderSavedTermsSelect();
         });
     }
 
