@@ -2066,7 +2066,14 @@ function validateScheduleGrid(grid, staffList, options = {}) {
             else if (sym === SYMBOLS.HALF_WORK_OFF || sym === SYMBOLS.HALF_OFF_WORK) offDays += 0.5;
         }
         if (Math.abs(offDays - standardHolidays) > 0.01) {
-            errors.push(`【スタッフ No.${staff.id} ${staff.name}】公休日数が${offDays}日です（標準要件: ${standardHolidays}日）。`);
+            const reason = `公休日数が${offDays}日です（標準要件: ${standardHolidays}日）`;
+            errors.push(`【スタッフ No.${staff.id} ${staff.name}】${reason}。`);
+            // ★ 集計列の公休カウントセルへの網掛け用 conflict を追加
+            conflictCells.push({
+                staffIndex: s,
+                statType: 'off',
+                reason: reason
+            });
         }
     }
 

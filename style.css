@@ -521,7 +521,8 @@ input:checked + .toggle-slider:before {
     padding: 1.5rem;
 }
 
-.modal-overlay.open {
+.modal-overlay.open,
+.modal-overlay.show {
     display: flex;
 }
 

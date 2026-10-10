@@ -456,23 +456,41 @@ document.addEventListener('DOMContentLoaded', () => {
                     }
                 } else if (type === 'day') {
                     const d = parseInt(cell.dataset.d, 10);
-                    if (staffList[s].days[d] !== newSym) {
-                        pushHistory();
-                        staffList[s].days[d] = newSym;
-                        cell.textContent = newSym;
+                    const oldSym = staffList[s].days[d];
+                    if (oldSym !== newSym) {
+                        const applyEdit = () => {
+                            pushHistory();
+                            staffList[s].days[d] = newSym;
+                            cell.textContent = newSym;
 
-                        if (newSym) {
-                            cell.classList.add('fixed-cell');
-                            cell.title = `事前固定枠: ${newSym}（自動上書きロック中）`;
+                            if (newSym) {
+                                cell.classList.add('fixed-cell');
+                                cell.title = `事前固定枠: ${newSym}（自動上書きロック中）`;
+                            } else {
+                                cell.classList.remove('fixed-cell');
+                                cell.title = 'クリックで記号入力';
+                            }
+
+                            const hasHighlights = document.querySelectorAll('#inputTableBody .conflict-highlight').length > 0;
+                            const hasBanner = document.getElementById('conflictAlertBanner')?.classList.contains('show');
+                            if (hasHighlights || hasBanner) {
+                                checkInputConstraints(false);
+                            }
+                        };
+
+                        if (oldSym && oldSym !== '') {
+                            const term = getTermInfo();
+                            const dateInfo = term.dates[d];
+                            const staff = staffList[s];
+                            showConfirmEditFixedModal({
+                                staffId: staff.id,
+                                staffName: staff.name,
+                                dateLabel: `${dateInfo.label} (${dateInfo.weekday})`,
+                                oldSym: oldSym,
+                                newSym: newSym || '（消去）'
+                            }, applyEdit);
                         } else {
-                            cell.classList.remove('fixed-cell');
-                            cell.title = 'クリックで記号入力';
-                        }
-
-                        const hasHighlights = document.querySelectorAll('#inputTableBody .conflict-highlight').length > 0;
-                        const hasBanner = document.getElementById('conflictAlertBanner')?.classList.contains('show');
-                        if (hasHighlights || hasBanner) {
-                            checkInputConstraints(false);
+                            applyEdit();
                         }
                     }
                 }
@@ -574,6 +592,9 @@ document.addEventListener('DOMContentLoaded', () => {
         document.querySelectorAll('#outputTableBody .conflict-highlight, #checkTableBody .conflict-highlight').forEach(cell => {
             cell.classList.remove('conflict-highlight');
             cell.removeAttribute('data-conflict-reason');
+            if (cell.dataset.stat) {
+                cell.removeAttribute('title');
+            }
         });
         ['outputConflictAlertBanner', 'checkConflictAlertBanner'].forEach(id => {
             const banner = document.getElementById(id);
@@ -587,21 +608,35 @@ document.addEventListener('DOMContentLoaded', () => {
 
     function applyOutputConflictHighlights(conflictCells, errors = []) {
         // 既存の網掛けを解除
-        document.querySelectorAll('#outputTableBody .conflict-highlight, #checkTableBody .conflict-highlight').forEach(cell => {
-            cell.classList.remove('conflict-highlight');
-            cell.removeAttribute('data-conflict-reason');
-        });
+        clearOutputConflictHighlights();
 
         currentOutputConflicts = conflictCells || [];
 
         if (currentOutputConflicts.length > 0) {
             currentOutputConflicts.forEach(item => {
-                const cells = document.querySelectorAll(`#outputTableBody td[data-s="${item.staffIndex}"][data-d="${item.dayIndex}"], #checkTableBody td[data-s="${item.staffIndex}"][data-d="${item.dayIndex}"]`);
-                cells.forEach(cell => {
-                    cell.classList.add('conflict-highlight');
-                    cell.setAttribute('data-conflict-reason', item.reason || '制約違反');
-                    cell.title = `⚠️ 【制約違反】${item.reason || '制約が守られていません'}`;
-                });
+                if (item.statType) {
+                    // ★ 集計列セル（例: 公休日数カウントエラー）のブルー網掛け
+                    const statCells = document.querySelectorAll(
+                        `#outputTableBody td[data-s="${item.staffIndex}"][data-stat="${item.statType}"], ` +
+                        `#checkTableBody td[data-s="${item.staffIndex}"][data-stat="${item.statType}"]`
+                    );
+                    statCells.forEach(cell => {
+                        cell.classList.add('conflict-highlight');
+                        cell.setAttribute('data-conflict-reason', item.reason || '集計不整合');
+                        cell.title = `⚠️ 【集計不整合】${item.reason || '集計値が基準と一致していません'}`;
+                    });
+                } else if (item.dayIndex !== undefined) {
+                    // 日付セルのブルー網掛け
+                    const cells = document.querySelectorAll(
+                        `#outputTableBody td[data-s="${item.staffIndex}"][data-d="${item.dayIndex}"], ` +
+                        `#checkTableBody td[data-s="${item.staffIndex}"][data-d="${item.dayIndex}"]`
+                    );
+                    cells.forEach(cell => {
+                        cell.classList.add('conflict-highlight');
+                        cell.setAttribute('data-conflict-reason', item.reason || '制約違反');
+                        cell.title = `⚠️ 【制約違反】${item.reason || '制約が守られていません'}`;
+                    });
+                }
             });
         }
 
@@ -1152,14 +1187,14 @@ document.addEventListener('DOMContentLoaded', () => {
             }
 
             bodyHtml += `
-                <td style="font-weight:700; background:#f8fafc;">${staffStat.workDays}</td>
-                <td style="font-weight:700; color:#2563eb; background:#f8fafc;">${staffStat.offDays}</td>
-                <td style="font-weight:800; color:#b45309; background:#fffbeb;">${staffStat.paidDays}</td>
-                <td style="font-weight:600; color:#059669; background:#f8fafc;">${staffStat.refDays}</td>
-                <td style="font-weight:600; color:#d97706; background:#f8fafc;">${staffStat.early}</td>
-                <td style="font-weight:600; color:#0284c7; background:#f8fafc;">${staffStat.late}</td>
-                <td style="font-weight:600; color:#7c3aed; background:#f8fafc;">${staffStat.eve}</td>
-                <td style="font-weight:600; color:#0d9488; background:#f8fafc;">${staffStat.h8}</td>
+                <td class="stat-cell ${rowBottomCls}" data-s="${s}" data-stat="work" style="font-weight:700; background:#f8fafc;">${staffStat.workDays}</td>
+                <td class="stat-cell ${rowBottomCls}" data-s="${s}" data-stat="off" style="font-weight:700; color:#2563eb; background:#f8fafc;">${staffStat.offDays}</td>
+                <td class="stat-cell ${rowBottomCls}" data-s="${s}" data-stat="paid" style="font-weight:800; color:#b45309; background:#fffbeb;">${staffStat.paidDays}</td>
+                <td class="stat-cell ${rowBottomCls}" data-s="${s}" data-stat="ref" style="font-weight:600; color:#059669; background:#f8fafc;">${staffStat.refDays}</td>
+                <td class="stat-cell ${rowBottomCls}" data-s="${s}" data-stat="early" style="font-weight:600; color:#d97706; background:#f8fafc;">${staffStat.early}</td>
+                <td class="stat-cell ${rowBottomCls}" data-s="${s}" data-stat="late" style="font-weight:600; color:#0284c7; background:#f8fafc;">${staffStat.late}</td>
+                <td class="stat-cell ${rowBottomCls}" data-s="${s}" data-stat="eve" style="font-weight:600; color:#7c3aed; background:#f8fafc;">${staffStat.eve}</td>
+                <td class="stat-cell ${rowBottomCls}" data-s="${s}" data-stat="h8" style="font-weight:600; color:#0d9488; background:#f8fafc;">${staffStat.h8}</td>
             `;
             bodyHtml += `</tr>`;
         }
@@ -1268,31 +1303,54 @@ document.addEventListener('DOMContentLoaded', () => {
                 let newSym = currentOutputSelectedSymbol;
                 if (newSym === 'CLEAR') newSym = '';
 
+                const cellData = lastSolveResult.grid[s][d];
+                const oldSym = cellData.symbol || '';
+
                 // すでに同じ記号なら変更なし
-                if (lastSolveResult.grid[s][d].symbol === newSym) return;
+                if (oldSym === newSym) return;
 
-                // 履歴を保存（Undo可能にする）
-                pushHistory();
+                const applyEdit = () => {
+                    // 履歴を保存（Undo可能にする）
+                    pushHistory();
 
-                // グリッドのシンボルを更新
-                lastSolveResult.grid[s][d].symbol = newSym;
-                if (lastScheduler) {
-                    lastScheduler.grid[s][d].symbol = newSym;
-                    const newStats = lastScheduler.calculateStats();
-                    lastSolveResult.stats = newStats;
-                    renderOutputTable(lastSolveResult.grid, newStats);
-                    renderStatsDashboard(newStats);
-                } else {
-                    renderOutputTable(lastSolveResult.grid, lastSolveResult.stats);
+                    // グリッドのシンボルを更新
+                    cellData.symbol = newSym;
+                    if (lastScheduler) {
+                        lastScheduler.grid[s][d].symbol = newSym;
+                        const newStats = lastScheduler.calculateStats();
+                        lastSolveResult.stats = newStats;
+                        renderOutputTable(lastSolveResult.grid, newStats);
+                        renderStatsDashboard(newStats);
+                    } else {
+                        renderOutputTable(lastSolveResult.grid, lastSolveResult.stats);
+                    }
+
+                    // ★ リアルタイム制約チェック＆網掛け更新（現在開いているタブに合わせてチェック）
+                    const activeTab = document.querySelector('.tab-panel.active')?.id;
+                    if (activeTab === 'outputTab') {
+                        checkWorkAreaConstraints(false);
+                    } else {
+                        checkFinalConstraints(false);
+                    }
+                };
+
+                // ★ 事前固定希望枠（赤字）を修正する場合はポップアップで確認
+                if (cellData.isFixed) {
+                    const term = getTermInfo();
+                    const dateInfo = term.dates[d];
+                    const staff = staffList[s];
+                    showConfirmEditFixedModal({
+                        staffId: staff.id,
+                        staffName: staff.name,
+                        dateLabel: `${dateInfo.label} (${dateInfo.weekday})`,
+                        oldSym: oldSym,
+                        newSym: newSym || '（消去）'
+                    }, applyEdit);
+                    return;
                 }
 
-                // ★ リアルタイム制約チェック＆網掛け更新（現在開いているタブに合わせてチェック）
-                const activeTab = document.querySelector('.tab-panel.active')?.id;
-                if (activeTab === 'outputTab') {
-                    checkWorkAreaConstraints(false);
-                } else {
-                    checkFinalConstraints(false);
-                }
+                // 通常セル（自動配置枠）はそのまま即座に適用
+                applyEdit();
             });
         });
     }
@@ -1382,6 +1440,65 @@ document.addEventListener('DOMContentLoaded', () => {
     if (closeModalBtn) {
         closeModalBtn.addEventListener('click', () => {
             errorModal.classList.remove('open');
+        });
+    }
+
+    // ==========================================
+    // 事前希望事項（赤字）修正確認ポップアップ制御
+    // ==========================================
+    let pendingFixedEdit = null;
+
+    function showConfirmEditFixedModal(info, onProceed) {
+        const modal = document.getElementById('confirmEditFixedModal');
+        if (!modal) {
+            onProceed();
+            return;
+        }
+        const staffEl = document.getElementById('confirmEditStaffName');
+        const dateEl = document.getElementById('confirmEditDateLabel');
+        const oldEl = document.getElementById('confirmEditOldSym');
+        const newEl = document.getElementById('confirmEditNewSym');
+
+        if (staffEl) staffEl.textContent = info.staffName || `スタッフ No.${info.staffId}`;
+        if (dateEl) dateEl.textContent = info.dateLabel || `${info.dayIndex + 1}日目`;
+        if (oldEl) oldEl.textContent = info.oldSym || '(空欄)';
+        if (newEl) newEl.textContent = info.newSym || '(消去)';
+
+        pendingFixedEdit = onProceed;
+        modal.classList.add('open');
+    }
+
+    function closeConfirmEditFixedModal() {
+        const modal = document.getElementById('confirmEditFixedModal');
+        if (modal) modal.classList.remove('open');
+        pendingFixedEdit = null;
+    }
+
+    const confirmEditProceedBtn = document.getElementById('confirmEditProceedBtn');
+    if (confirmEditProceedBtn) {
+        confirmEditProceedBtn.addEventListener('click', () => {
+            if (pendingFixedEdit) {
+                const fn = pendingFixedEdit;
+                pendingFixedEdit = null;
+                fn();
+            }
+            closeConfirmEditFixedModal();
+        });
+    }
+
+    const confirmEditCancelBtn = document.getElementById('confirmEditCancelBtn');
+    if (confirmEditCancelBtn) {
+        confirmEditCancelBtn.addEventListener('click', () => {
+            closeConfirmEditFixedModal();
+        });
+    }
+
+    const confirmEditModalEl = document.getElementById('confirmEditFixedModal');
+    if (confirmEditModalEl) {
+        confirmEditModalEl.addEventListener('click', (e) => {
+            if (e.target === confirmEditModalEl) {
+                closeConfirmEditFixedModal();
+            }
         });
     }
 
