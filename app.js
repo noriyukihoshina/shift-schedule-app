@@ -328,9 +328,9 @@ document.addEventListener('DOMContentLoaded', () => {
 
         for (let d = 0; d < NUM_DAYS; d++) {
             const di = term.dates[d];
-            const cls = di.wIdx === 5 ? 'header-sat' : (di.wIdx === 6 ? 'header-sun' : '');
+            const cls = di.wIdx === 5 ? 'header-sat' : ((di.wIdx === 6 || di.isHoliday) ? 'header-sun' : '');
             const thickCls = ((d + 1) % 7 === 0) ? 'border-thick-right' : '';
-            headHtml += `<th class="${cls} ${thickCls}" title="${di.label} (${di.weekday})">${di.label}<br><small>${di.weekday}</small></th>`;
+            headHtml += `<th class="${cls} ${thickCls}" title="${di.label} (${di.weekday})${di.isHoliday ? ' 祝日' : ''}">${di.label}<br><small>${di.weekday}</small></th>`;
         }
         headHtml += `</tr>`;
         thead.innerHTML = headHtml;
@@ -640,23 +640,31 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     }
 
-    function checkOutputConstraints(showToastOnSuccess = false) {
+    // ステージ2: 修正作業エリア用の制約チェック（※特殊勤務が入っていないことはエラーとしない）
+    function checkWorkAreaConstraints(showModalOnError = true, showToastOnSuccess = false) {
         if (!lastSolveResult || !lastSolveResult.grid) {
             if (showToastOnSuccess) showToast('勤務表がまだ生成されていません');
             return null;
         }
 
         const term = getTermInfo();
+        const stdHolidayVal = parseFloat(document.getElementById('standardHolidaySelect')?.value || '8.0');
         const res = validateScheduleGrid(lastSolveResult.grid, staffList, {
             dates: term.dates,
-            standardHolidays: 8.0,
-            isFinal: true
+            standardHolidays: stdHolidayVal,
+            isFinal: false // ★ 特殊勤務なしはエラー外
         });
 
         if (!res.isValid) {
             applyOutputConflictHighlights(res.conflictCells, res.errors);
-            if (showToastOnSuccess) {
-                showToast(`⚠️ ${res.errors.length}件の制約指摘があります。該当セルをブルー網掛けで表示しました。`);
+            if (showModalOnError) {
+                showErrorModal(res.errors, {
+                    title: '修正作業エリア: 制約の指摘・エラー検知',
+                    subtitle: `勤務表に${res.errors.length}件の制約指摘があります（該当セルは青い網掛けで表示中）。`,
+                    desc: '※この段階では特殊勤務が入っていないことはエラーになりません。内容をご確認の上修正してください。'
+                });
+            } else if (showToastOnSuccess) {
+                showToast(`⚠️ ${res.errors.length}件の制約指摘があります（青い網掛け表示中）`);
             }
         } else {
             clearOutputConflictHighlights();
@@ -668,9 +676,9 @@ document.addEventListener('DOMContentLoaded', () => {
                         <div style="display:flex; align-items:center; gap:10px;">
                             <span style="font-size:1.4rem;">🎉</span>
                             <div>
-                                <strong style="color:#065f46; font-size:0.95rem;">すべての制約（ハード・ソフト制約）が100%遵守されています！</strong>
+                                <strong style="color:#065f46; font-size:0.95rem;">基本制約（連勤・週休・属性人数等）が100%遵守されています！</strong>
                                 <div style="font-size:0.82rem; color:#047857; margin-top:2px;">
-                                    連勤制限、週休2日、特殊勤務翌日休、各日の必要人数が完全に満たされた勤務表です。
+                                    修正が完了しましたら「✨ 特殊勤務を入れる」ボタンで完成へお進みください。
                                 </div>
                             </div>
                         </div>
@@ -679,10 +687,68 @@ document.addEventListener('DOMContentLoaded', () => {
                 `;
             }
             if (showToastOnSuccess) {
+                showToast('🎉 基本制約が完璧に遵守されています！');
+            }
+        }
+        return res;
+    }
+
+    // ステージ3: 最終チェック&完成用の制約チェック（※特殊勤務の配置過不足も厳格にチェック）
+    function checkFinalConstraints(showModalOnError = true, showToastOnSuccess = false) {
+        if (!lastSolveResult || !lastSolveResult.grid) {
+            if (showToastOnSuccess) showToast('勤務表がまだ生成されていません');
+            return null;
+        }
+
+        const term = getTermInfo();
+        const stdHolidayVal = parseFloat(document.getElementById('standardHolidaySelect')?.value || '8.0');
+        const res = validateScheduleGrid(lastSolveResult.grid, staffList, {
+            dates: term.dates,
+            standardHolidays: stdHolidayVal,
+            isFinal: true // ★ 特殊勤務の過不足も含めてチェック
+        });
+
+        if (!res.isValid) {
+            applyOutputConflictHighlights(res.conflictCells, res.errors);
+            if (showModalOnError) {
+                showErrorModal(res.errors, {
+                    title: '最終チェック&完成: 制約の指摘・エラー検知',
+                    subtitle: `完成勤務表に${res.errors.length}件の制約指摘があります（該当セルは青い網掛けで表示中）。`,
+                    desc: '連勤制限や週休2日、日別の特殊勤務人数（早3/遅1/E2/8時1）をご確認の上、必要に応じて修正してください。'
+                });
+            } else if (showToastOnSuccess) {
+                showToast(`⚠️ ${res.errors.length}件の制約指摘があります（青い網掛け表示中）`);
+            }
+        } else {
+            clearOutputConflictHighlights();
+            const banner = document.getElementById('checkConflictAlertBanner');
+            if (banner) {
+                banner.classList.add('show');
+                banner.innerHTML = `
+                    <div style="display:flex; justify-content:space-between; align-items:center; width:100%;">
+                        <div style="display:flex; align-items:center; gap:10px;">
+                            <span style="font-size:1.4rem;">🎉</span>
+                            <div>
+                                <strong style="color:#065f46; font-size:0.95rem;">すべての制約（連勤・週休・属性・特殊勤務配置）が100%遵守されています！</strong>
+                                <div style="font-size:0.82rem; color:#047857; margin-top:2px;">
+                                    すべてのハード制約・ソフト制約が完全クリアされた完璧な勤務表です。
+                                </div>
+                            </div>
+                        </div>
+                        <button class="btn btn-outline" style="font-size:0.75rem; padding:4px 10px;" onclick="document.getElementById('checkConflictAlertBanner').classList.remove('show');">閉じる</button>
+                    </div>
+                `;
+            }
+            if (showToastOnSuccess) {
                 showToast('🎉 すべての制約が完璧に遵守されています！');
             }
         }
         return res;
+    }
+
+    // 後方互換性エイリアス
+    function checkOutputConstraints(showToastOnSuccess = false) {
+        return checkFinalConstraints(false, showToastOnSuccess);
     }
 
     let currentOutputSelectedSymbol = '休';
@@ -733,6 +799,85 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     });
 
+    // ==========================================
+    // ★ 日本の祝日判定ロジック（国民の祝日・振替休日・国民の休日）
+    // ==========================================
+    function isJapaneseHoliday(year, month, day) {
+        // month: 1〜12, day: 1〜31
+        const fixedHolidays = {
+            '1-1': '元日',
+            '2-11': '建国記念の日',
+            '2-23': '天皇誕生日',
+            '4-29': '昭和の日',
+            '5-3': '憲法記念日',
+            '5-4': 'みどりの日',
+            '5-5': 'こどもの日',
+            '8-11': '山の日',
+            '11-3': '文化の日',
+            '11-23': '勤労感謝の日'
+        };
+
+        const calcVernalEquinox = (y) => Math.floor(20.8431 + 0.242194 * (y - 1980) - Math.floor((y - 1980) / 4));
+        const calcAutumnEquinox = (y) => Math.floor(23.2488 + 0.242194 * (y - 1980) - Math.floor((y - 1980) / 4));
+
+        const vernalDay = calcVernalEquinox(year);
+        const autumnDay = calcAutumnEquinox(year);
+
+        const getNthMonday = (y, m, n) => {
+            const firstDay = new Date(y, m - 1, 1).getDay(); // 0=日, 1=月
+            const firstMonday = (1 - firstDay + 7) % 7 + 1;
+            return firstMonday + (n - 1) * 7;
+        };
+
+        const adultDay = getNthMonday(year, 1, 2);      // 1月第2月曜: 成人の日
+        const oceanDay = getNthMonday(year, 7, 3);      // 7月第3月曜: 海の日
+        const eldersDay = getNthMonday(year, 9, 3);     // 9月第3月曜: 敬老の日
+        const sportsDay = getNthMonday(year, 10, 2);    // 10月第2月曜: スポーツの日
+
+        const isBaseHoliday = (y, m, d) => {
+            const key = `${m}-${d}`;
+            if (fixedHolidays[key]) return true;
+            if (m === 3 && d === vernalDay) return true;
+            if (m === 9 && d === autumnDay) return true;
+            if (m === 1 && d === adultDay) return true;
+            if (m === 7 && d === oceanDay) return true;
+            if (m === 9 && d === eldersDay) return true;
+            if (m === 10 && d === sportsDay) return true;
+            return false;
+        };
+
+        if (isBaseHoliday(year, month, day)) return true;
+
+        // 振替休日判定（日曜日に重なった祝日の翌日以降の最初の平日）
+        const checkDate = new Date(year, month - 1, day);
+        if (checkDate.getDay() !== 0) {
+            let cur = new Date(checkDate);
+            while (true) {
+                cur.setDate(cur.getDate() - 1);
+                const curY = cur.getFullYear();
+                const curM = cur.getMonth() + 1;
+                const curD = cur.getDate();
+                if (isBaseHoliday(curY, curM, curD)) {
+                    if (cur.getDay() === 0) {
+                        return true; // 日曜日の祝日に対する振替休日
+                    }
+                } else {
+                    break;
+                }
+            }
+        }
+
+        // 国民の休日判定（祝日と祝日に挟まれた平日）
+        const prevDate = new Date(year, month - 1, day - 1);
+        const nextDate = new Date(year, month - 1, day + 1);
+        if (isBaseHoliday(prevDate.getFullYear(), prevDate.getMonth() + 1, prevDate.getDate()) &&
+            isBaseHoliday(nextDate.getFullYear(), nextDate.getMonth() + 1, nextDate.getDate())) {
+            return true;
+        }
+
+        return false;
+    }
+
     // ★ ターム期間・タイトル情報の取得（※/※※～※/※※勤務表）
     function getTermInfo() {
         const input = document.getElementById('termStartDate');
@@ -743,15 +888,19 @@ document.addEventListener('DOMContentLoaded', () => {
         const dates = [];
         for (let i = 0; i < NUM_DAYS; i++) {
             const d = new Date(startDate.getFullYear(), startDate.getMonth(), startDate.getDate() + i);
+            const y = d.getFullYear();
             const m = d.getMonth() + 1;
             const day = d.getDate();
             const wIdx = (d.getDay() + 6) % 7; // 月曜=0, 日曜=6
+            const isHoliday = isJapaneseHoliday(y, m, day);
             dates.push({
+                y,
                 m,
                 day,
                 weekday: WEEKDAYS[wIdx],
                 label: `${m}/${day}`,
                 wIdx,
+                isHoliday,
                 dateObj: d
             });
         }
@@ -770,9 +919,9 @@ document.addEventListener('DOMContentLoaded', () => {
         const badge = document.getElementById('termTitleBadge');
         if (badge) badge.textContent = title;
         const outTitle = document.getElementById('outputTitleDisplay');
-        if (outTitle) outTitle.textContent = title;
+        if (outTitle) outTitle.textContent = `✏️ ${title}（修正作業エリア）`;
         const checkTitle = document.getElementById('checkTitleDisplay');
-        if (checkTitle) checkTitle.textContent = `🔍 ${title}（制約検証・修正チェックシート）`;
+        if (checkTitle) checkTitle.textContent = `🔍 ${title}（最終チェック&完成）`;
 
         return { title, dates, first, last };
     }
@@ -816,9 +965,10 @@ document.addEventListener('DOMContentLoaded', () => {
             setTimeout(() => {
                 try {
                     const stdHolidayVal = parseFloat(document.getElementById('standardHolidaySelect')?.value || '8.0');
+                    const term = getTermInfo();
                     const scheduler = new ShiftScheduler(staffList, {
                         standardHolidays: stdHolidayVal,
-                        dates: getTermInfo().dates
+                        dates: term.dates
                     });
                     const result = scheduler.solveBaseSchedule();
 
@@ -831,10 +981,24 @@ document.addEventListener('DOMContentLoaded', () => {
                         renderOutputTable(result.grid, result.stats);
                         renderStatsDashboard(result.stats);
                         switchTab('outputTab');
-                        showToast('⚡ 基本勤務表を生成しました（特殊勤務は「○」で保持されています。「✨ 特殊勤務を入れる」ボタンで最終確定してください）');
+                        showToast('⚡ 基本勤務表を生成しました（修正作業エリアで微調整を行ってください）');
                     } else {
                         applyConflictHighlights(result.conflictCells);
-                        showErrorModal(result.errors);
+                        showErrorModal(result.errors, {
+                            title: '事前希望の制約指摘・エラー検知',
+                            subtitle: '事前入力枠に制約違反や物理的衝突があります（該当セルを青い網掛けで表示中）。',
+                            desc: '内容をご確認の上修正するか、あえて無視して基本勤務表の自動生成を進めることができます。',
+                            onForceSolve: () => {
+                                // エラーを無視して基本勤務表を強制生成！
+                                const forceResult = scheduler.solveBaseSchedule({ force: true });
+                                lastScheduler = scheduler;
+                                lastSolveResult = forceResult;
+                                renderOutputTable(forceResult.grid, forceResult.stats);
+                                renderStatsDashboard(forceResult.stats);
+                                switchTab('outputTab');
+                                showToast('⚡ エラーを無視して基本勤務表を生成しました（修正作業エリアで微調整してください）');
+                            }
+                        });
                     }
                 } catch (err) {
                     setSolveLoading(false);
@@ -890,11 +1054,25 @@ document.addEventListener('DOMContentLoaded', () => {
                     lastSolveResult = specialResult;
                     renderOutputTable(specialResult.grid, specialResult.stats);
                     renderStatsDashboard(specialResult.stats);
-                    switchTab('outputTab');
-                    checkOutputConstraints(false);
-                    showToast('✨ 特殊勤務（早3名・遅1名・E2名・8時1名）の割り振りが完了しました！');
+                    switchTab('checkTab');
+                    checkFinalConstraints(false);
+                    showToast('✨ 特殊勤務（早3名・遅1名・E2名・8時1名）を割り当て、「最終チェック&完成」を表示しました！');
                 } else {
-                    showErrorModal(specialResult.errors);
+                    showErrorModal(specialResult.errors, {
+                        title: '特殊勤務割当の指摘・エラー検知',
+                        subtitle: '特殊勤務の候補者不足や制約との衝突があります。',
+                        desc: '内容をご確認の上修正するか、あえて無視して可能な限り特殊勤務を割り当てて「最終チェック&完成」へ進むことができます。',
+                        onForceSpecial: () => {
+                            // エラーを無視して特殊勤務を割り当て！
+                            const forcedResult = lastScheduler.assignSpecialDutiesToGrid({ force: true });
+                            lastSolveResult = forcedResult;
+                            renderOutputTable(forcedResult.grid, forcedResult.stats);
+                            renderStatsDashboard(forcedResult.stats);
+                            switchTab('checkTab');
+                            checkFinalConstraints(false);
+                            showToast('✨ エラーを無視して特殊勤務を割り当て、「最終チェック&完成」へ進みました（該当箇所はブルー網掛けで表示中）');
+                        }
+                    });
                 }
             } catch (err) {
                 btns.forEach(b => {
@@ -934,10 +1112,10 @@ document.addEventListener('DOMContentLoaded', () => {
         `;
         for (let d = 0; d < NUM_DAYS; d++) {
             const dateInfo = term.dates[d];
-            const cls = dateInfo.wIdx === 5 ? 'header-sat' : (dateInfo.wIdx === 6 ? 'header-sun' : '');
+            const cls = dateInfo.wIdx === 5 ? 'header-sat' : ((dateInfo.wIdx === 6 || dateInfo.isHoliday) ? 'header-sun' : '');
             // 7日ごと（週区切り）および28日目に太線
             const thickCls = ((d + 1) % 7 === 0) ? 'border-thick-right' : '';
-            headHtml += `<th class="${cls} ${thickCls} border-thick-bottom">${dateInfo.label}<br><small>${dateInfo.weekday}</small></th>`;
+            headHtml += `<th class="${cls} ${thickCls} border-thick-bottom" title="${dateInfo.label} (${dateInfo.weekday})${dateInfo.isHoliday ? ' 祝日' : ''}">${dateInfo.label}<br><small>${dateInfo.weekday}</small></th>`;
         }
         headHtml += `
                 <th title="出勤日数" class="border-thick-bottom" style="background:#f1f5f9;">出勤</th>
@@ -1108,8 +1286,13 @@ document.addEventListener('DOMContentLoaded', () => {
                     renderOutputTable(lastSolveResult.grid, lastSolveResult.stats);
                 }
 
-                // ★ リアルタイム制約チェック＆網掛け更新（解消されたセルは自動消去）
-                checkOutputConstraints(false);
+                // ★ リアルタイム制約チェック＆網掛け更新（現在開いているタブに合わせてチェック）
+                const activeTab = document.querySelector('.tab-panel.active')?.id;
+                if (activeTab === 'outputTab') {
+                    checkWorkAreaConstraints(false);
+                } else {
+                    checkFinalConstraints(false);
+                }
             });
         });
     }
@@ -1151,11 +1334,47 @@ document.addEventListener('DOMContentLoaded', () => {
     const errorListEl = document.getElementById('errorList');
     const closeModalBtn = document.getElementById('closeModalBtn');
 
-    function showErrorModal(errors) {
+    function showErrorModal(errors, options = {}) {
         if (!errorModal || !errorListEl) {
             alert(errors.join('\n'));
             return;
         }
+        const titleEl = document.getElementById('errorModalTitle');
+        const subtitleEl = document.getElementById('errorModalSubtitle');
+        const descEl = document.getElementById('errorModalDesc');
+        const forceSolveBtn = document.getElementById('forceSolveBtn');
+        const forceAssignSpecialBtn = document.getElementById('forceAssignSpecialBtn');
+
+        if (titleEl) titleEl.textContent = options.title || '制約の指摘・エラー検知';
+        if (subtitleEl) subtitleEl.textContent = options.subtitle || '制約条件または入力枠に違反・指摘箇所があります。該当セルは青い網掛けで表示されています。';
+        if (descEl) descEl.textContent = options.desc || '内容をご確認の上、勤務表を修正してください。あえてこのまま進める場合は「無視して進む」ボタンを選択できます。';
+
+        if (forceSolveBtn) {
+            if (options.onForceSolve) {
+                forceSolveBtn.style.display = 'inline-block';
+                forceSolveBtn.onclick = () => {
+                    errorModal.classList.remove('open');
+                    options.onForceSolve();
+                };
+            } else {
+                forceSolveBtn.style.display = 'none';
+                forceSolveBtn.onclick = null;
+            }
+        }
+
+        if (forceAssignSpecialBtn) {
+            if (options.onForceSpecial) {
+                forceAssignSpecialBtn.style.display = 'inline-block';
+                forceAssignSpecialBtn.onclick = () => {
+                    errorModal.classList.remove('open');
+                    options.onForceSpecial();
+                };
+            } else {
+                forceAssignSpecialBtn.style.display = 'none';
+                forceAssignSpecialBtn.onclick = null;
+            }
+        }
+
         errorListEl.innerHTML = errors.map(err => `<li class="error-item">⚠️ ${err}</li>`).join('');
         errorModal.classList.add('open');
     }
@@ -2317,118 +2536,150 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     // ==========================================
-    // 修正済み確定勤務表ファイル取り込み（.xlsx / .csv / .tsv）
+    // 修正済み確定勤務表ファイル取り込み共通処理
     // ==========================================
-    const importModifiedScheduleFileInput = document.getElementById('importModifiedScheduleFileInput');
-    if (importModifiedScheduleFileInput) {
-        importModifiedScheduleFileInput.addEventListener('change', async (e) => {
-            const file = e.target.files && e.target.files[0];
-            if (!file) return;
+    async function handleImportSchedule(file, isFinalStage) {
+        if (!file) return;
 
-            try {
-                let parseResult;
-                if (file.name.endsWith('.xlsx')) {
-                    const buf = await file.arrayBuffer();
-                    parseResult = await parseXlsxBuffer(buf);
-                } else {
-                    const text = await file.text();
-                    parseResult = parseCsvOrTsvText(text);
+        try {
+            let parseResult;
+            if (file.name.endsWith('.xlsx')) {
+                const buf = await file.arrayBuffer();
+                parseResult = await parseXlsxBuffer(buf);
+            } else {
+                const text = await file.text();
+                parseResult = parseCsvOrTsvText(text);
+            }
+
+            if (!parseResult || !parseResult.items || parseResult.items.length === 0) {
+                alert('ファイルから有効な勤務データが読み取れませんでした。形式をご確認ください。');
+                return;
+            }
+
+            // 取り込み前状態を履歴に保存（「↩ 戻る」で取り消し可能）
+            pushHistory();
+
+            // 日付同期
+            if (parseResult.startDate) {
+                const startDateInput = document.getElementById('termStartDate');
+                if (startDateInput) {
+                    startDateInput.value = parseResult.startDate;
+                    getTermInfo();
                 }
+            }
 
-                if (!parseResult || !parseResult.items || parseResult.items.length === 0) {
-                    alert('ファイルから有効な勤務データが読み取れませんでした。形式をご確認ください。');
-                    return;
-                }
+            // 確定グリッドを初期化・更新
+            const term = getTermInfo();
+            const stdHolidayVal = parseFloat(document.getElementById('standardHolidaySelect')?.value || '8.0');
 
-                // 取り込み前状態を履歴に保存（「↩ 戻る」で取り消し可能）
-                pushHistory();
+            if (!lastScheduler) {
+                lastScheduler = new ShiftScheduler(staffList, {
+                    standardHolidays: stdHolidayVal,
+                    dates: term.dates
+                });
+            }
 
-                // 日付同期
-                if (parseResult.startDate) {
-                    const startDateInput = document.getElementById('termStartDate');
-                    if (startDateInput) {
-                        startDateInput.value = parseResult.startDate;
-                        getTermInfo();
-                    }
-                }
-
-                // 確定グリッドを初期化・更新
-                const term = getTermInfo();
-                const stdHolidayVal = parseFloat(document.getElementById('standardHolidaySelect')?.value || '8.0');
-
-                if (!lastScheduler) {
-                    lastScheduler = new ShiftScheduler(staffList, {
-                        standardHolidays: stdHolidayVal,
-                        dates: term.dates
+            // 50×28 のグリッドを構築（事前希望枠があるセルは isFixed: true）
+            const newGrid = [];
+            for (let s = 0; s < NUM_STAFF; s++) {
+                const row = [];
+                for (let d = 0; d < NUM_DAYS; d++) {
+                    const originalWish = staffList[s].days[d] || '';
+                    row.push({
+                        symbol: originalWish ? originalWish : '',
+                        isFixed: (originalWish !== '')
                     });
                 }
+                newGrid.push(row);
+            }
 
-                // 50×28 のグリッドを構築（事前希望枠があるセルは isFixed: true）
-                const newGrid = [];
-                for (let s = 0; s < NUM_STAFF; s++) {
-                    const row = [];
-                    for (let d = 0; d < NUM_DAYS; d++) {
-                        const originalWish = staffList[s].days[d] || '';
-                        row.push({
-                            symbol: originalWish ? originalWish : '',
-                            isFixed: (originalWish !== '')
-                        });
+            // ファイルから読み取った記号を反映
+            parseResult.items.forEach(item => {
+                const { staffIdx, dayIdx, symbol } = item;
+                if (staffIdx >= 0 && staffIdx < NUM_STAFF && dayIdx >= 0 && dayIdx < NUM_DAYS) {
+                    const norm = normalizeSymbol(symbol);
+                    if (norm) {
+                        newGrid[staffIdx][dayIdx].symbol = norm;
                     }
-                    newGrid.push(row);
                 }
+            });
 
-                // ファイルから読み取った記号を反映
-                let count = 0;
-                parseResult.items.forEach(item => {
-                    const { staffIdx, dayIdx, symbol } = item;
-                    if (staffIdx >= 0 && staffIdx < NUM_STAFF && dayIdx >= 0 && dayIdx < NUM_DAYS) {
-                        const norm = normalizeSymbol(symbol);
-                        if (norm) {
-                            newGrid[staffIdx][dayIdx].symbol = norm;
-                            count++;
-                        }
-                    }
-                });
+            lastScheduler.grid = newGrid;
+            const newStats = lastScheduler.calculateStats();
+            lastSolveResult = {
+                success: true,
+                grid: newGrid,
+                stats: newStats,
+                errors: []
+            };
 
-                lastScheduler.grid = newGrid;
-                const newStats = lastScheduler.calculateStats();
-                lastSolveResult = {
-                    success: true,
-                    grid: newGrid,
-                    stats: newStats,
-                    errors: []
-                };
+            // テーブル描画＆ダッシュボード更新
+            renderOutputTable(newGrid, newStats);
+            renderStatsDashboard(newStats);
 
-                // 出力テーブル描画・ダッシュボード更新・チェックシートへ自動遷移
-                renderOutputTable(newGrid, newStats);
-                renderStatsDashboard(newStats);
+            if (isFinalStage) {
                 switchTab('checkTab');
-
-                // ★ 自動全制約検証を実行し、エラーセルをブルー網掛け表示！
-                const checkRes = checkOutputConstraints(false);
+                // 最終チェック（特殊勤務の配置過不足もチェック）
+                const checkRes = checkFinalConstraints(true);
                 if (checkRes && !checkRes.isValid) {
                     showToast(`📂 修正済み勤務表を取り込みました（${checkRes.errors.length}件の制約指摘をブルー網掛けで表示中）`);
                 } else {
                     showToast(`📂 修正済み勤務表を取り込みました（全制約が完全遵守されています！）`);
                 }
-
-            } catch (err) {
-                console.error(err);
-                alert('修正済み勤務表の取り込みに失敗しました: ' + err.message);
-            } finally {
-                importModifiedScheduleFileInput.value = '';
+            } else {
+                switchTab('outputTab');
+                // 修正作業エリアチェック（特殊勤務未割当はエラー外）
+                const checkRes = checkWorkAreaConstraints(true);
+                if (checkRes && !checkRes.isValid) {
+                    showToast(`📂 修正済み勤務表を取り込みました（${checkRes.errors.length}件の制約指摘をブルー網掛けで表示中）`);
+                } else {
+                    showToast(`📂 修正済み勤務表を取り込みました（基本制約が完全遵守されています！）`);
+                }
             }
+
+        } catch (err) {
+            console.error(err);
+            alert('修正済み勤務表の取り込みに失敗しました: ' + err.message);
+        }
+    }
+
+    // 修正作業エリア（ステージ2）のファイル取り込み
+    const importModifiedWorkAreaFileInput = document.getElementById('importModifiedWorkAreaFileInput');
+    if (importModifiedWorkAreaFileInput) {
+        importModifiedWorkAreaFileInput.addEventListener('change', async (e) => {
+            const file = e.target.files && e.target.files[0];
+            await handleImportSchedule(file, false);
+            importModifiedWorkAreaFileInput.value = '';
         });
     }
 
-    // ボタンのイベントリスナー
+    // 最終チェック&完成（ステージ3）のファイル取り込み
+    const importModifiedScheduleFileInput = document.getElementById('importModifiedScheduleFileInput');
+    if (importModifiedScheduleFileInput) {
+        importModifiedScheduleFileInput.addEventListener('change', async (e) => {
+            const file = e.target.files && e.target.files[0];
+            await handleImportSchedule(file, true);
+            importModifiedScheduleFileInput.value = '';
+        });
+    }
+
+    // 修正作業エリア（ステージ2）のチェックボタン
+    const validateWorkAreaBtn = document.getElementById('validateWorkAreaBtn');
+    if (validateWorkAreaBtn) {
+        validateWorkAreaBtn.addEventListener('click', () => {
+            checkWorkAreaConstraints(true, true);
+        });
+    }
+
+    // 最終チェック&完成（ステージ3）のチェックボタン
     const validateOutputBtn = document.getElementById('validateOutputBtn');
     if (validateOutputBtn) {
         validateOutputBtn.addEventListener('click', () => {
-            checkOutputConstraints(true);
+            checkFinalConstraints(true, true);
         });
     }
 
+    // 希望入力（ステージ1）のチェックボタン
     const validateInputBtn = document.getElementById('validateInputBtn');
     if (validateInputBtn) {
         validateInputBtn.addEventListener('click', () => {
@@ -2668,7 +2919,7 @@ document.addEventListener('DOMContentLoaded', () => {
         showToast('📊 Excelファイルをダウンロードしました！');
     }
 
-    // 初期起動
+    // 初期起動（全スタッフ6勤可OFF、全日程完全空欄で初期化）
     initStaffData();
-    loadSampleData();
+    renderInputTable();
 });

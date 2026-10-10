@@ -71,6 +71,80 @@ function isRestrictedSpecial(sym) {
     return [SYMBOLS.EARLY, SYMBOLS.LATE, SYMBOLS.EVE, SYMBOLS.NO_ALLOW_EARLY, SYMBOLS.NO_ALLOW_LATE, SYMBOLS.NO_ALLOW_EVE].includes(sym);
 }
 
+// 日本の祝日判定
+function isJapaneseHoliday(year, month, day) {
+    const fixedHolidays = {
+        '1-1': '元日',
+        '2-11': '建国記念の日',
+        '2-23': '天皇誕生日',
+        '4-29': '昭和の日',
+        '5-3': '憲法記念日',
+        '5-4': 'みどりの日',
+        '5-5': 'こどもの日',
+        '8-11': '山の日',
+        '11-3': '文化の日',
+        '11-23': '勤労感謝の日'
+    };
+
+    const calcVernalEquinox = (y) => Math.floor(20.8431 + 0.242194 * (y - 1980) - Math.floor((y - 1980) / 4));
+    const calcAutumnEquinox = (y) => Math.floor(23.2488 + 0.242194 * (y - 1980) - Math.floor((y - 1980) / 4));
+
+    const vernalDay = calcVernalEquinox(year);
+    const autumnDay = calcAutumnEquinox(year);
+
+    const getNthMonday = (y, m, n) => {
+        const firstDay = new Date(y, m - 1, 1).getDay();
+        const firstMonday = (1 - firstDay + 7) % 7 + 1;
+        return firstMonday + (n - 1) * 7;
+    };
+
+    const adultDay = getNthMonday(year, 1, 2);
+    const oceanDay = getNthMonday(year, 7, 3);
+    const eldersDay = getNthMonday(year, 9, 3);
+    const sportsDay = getNthMonday(year, 10, 2);
+
+    const isBaseHoliday = (y, m, d) => {
+        const key = `${m}-${d}`;
+        if (fixedHolidays[key]) return true;
+        if (m === 3 && d === vernalDay) return true;
+        if (m === 9 && d === autumnDay) return true;
+        if (m === 1 && d === adultDay) return true;
+        if (m === 7 && d === oceanDay) return true;
+        if (m === 9 && d === eldersDay) return true;
+        if (m === 10 && d === sportsDay) return true;
+        return false;
+    };
+
+    if (isBaseHoliday(year, month, day)) return true;
+
+    // 振替休日判定
+    const checkDate = new Date(year, month - 1, day);
+    if (checkDate.getDay() !== 0) {
+        let cur = new Date(checkDate);
+        while (true) {
+            cur.setDate(cur.getDate() - 1);
+            const curY = cur.getFullYear();
+            const curM = cur.getMonth() + 1;
+            const curD = cur.getDate();
+            if (isBaseHoliday(curY, curM, curD)) {
+                if (cur.getDay() === 0) return true;
+            } else {
+                break;
+            }
+        }
+    }
+
+    // 国民の休日判定
+    const prevDate = new Date(year, month - 1, day - 1);
+    const nextDate = new Date(year, month - 1, day + 1);
+    if (isBaseHoliday(prevDate.getFullYear(), prevDate.getMonth() + 1, prevDate.getDate()) &&
+        isBaseHoliday(nextDate.getFullYear(), nextDate.getMonth() + 1, nextDate.getDate())) {
+        return true;
+    }
+
+    return false;
+}
+
 // 日曜日〜土曜日の各週スパンを抽出するヘルパー（28日間）
 function getSunToSatWeekSpans(dates, numDays = 28) {
     const weeks = [];
@@ -510,7 +584,7 @@ class ShiftScheduler {
      */
     canPlaceHoliday(s, d) {
         const staff = this.staffList[s];
-        // 1. スケ可保護：当日dに出勤できる「スケ可」スタッフを最低2名維持
+        // 1. スケ可保護：当日dに出勤できる「スケ可」スタッフを最低3名維持（8時等に割当後も○が2名残るように）
         if (staff.canSched) {
             let available = 0;
             for (let otherS = 0; otherS < this.numStaff; otherS++) {
@@ -520,7 +594,20 @@ class ShiftScheduler {
                 }
             }
             const totalSched = this.staffList.filter(st => st.canSched).length;
-            const minKeep = Math.min(2, totalSched);
+            const minKeep = Math.min(3, totalSched);
+            if (available < minKeep) return false;
+        }
+        // 1-2. 8時可保護：当日dに出勤できる「8時可」スタッフを最低3名維持（8時1名＋スケ可等のバックアップ）
+        if (staff.can8) {
+            let available = 0;
+            for (let otherS = 0; otherS < this.numStaff; otherS++) {
+                if (otherS === s) continue;
+                if (this.staffList[otherS].can8 && !isHolidaySymbol(this.grid[otherS][d].symbol)) {
+                    available++;
+                }
+            }
+            const totalCan8 = this.staffList.filter(st => st.can8).length;
+            const minKeep = Math.min(3, totalCan8);
             if (available < minKeep) return false;
         }
         // 2. 役職保護：当日dに出勤できる「役職」スタッフ（出張除く）を最低2名維持
@@ -556,15 +643,18 @@ class ShiftScheduler {
      * 第1段階: 基本勤務表の自動生成
      * （特殊勤務の自動割り振りは行わず、希望休・公休日数・連勤・週休・属性充足を満たして空き枠を「○」で確定）
      */
-    solveBaseSchedule() {
-        // 事前バリデーション
-        const validation = validateInitialState(this.staffList, this.options);
-        if (validation.errors.length > 0) {
-            return {
-                success: false,
-                errors: validation.errors,
-                conflictCells: validation.conflictCells
-            };
+    solveBaseSchedule(options = {}) {
+        const force = options && options.force === true;
+        // 事前バリデーション（forceでない場合のみ厳格チェック）
+        if (!force) {
+            const validation = validateInitialState(this.staffList, this.options);
+            if (validation.errors.length > 0) {
+                return {
+                    success: false,
+                    errors: validation.errors,
+                    conflictCells: validation.conflictCells
+                };
+            }
         }
 
         // ステップ1: 事前入力されている特殊勤務（早・遅・E・ハヤ・オソ・イブ）の翌日を自動的に「休」に設定
@@ -578,7 +668,7 @@ class ShiftScheduler {
 
         // 基本制約の検証
         const baseErrors = this.verifyBaseHardConstraints();
-        if (baseErrors.length > 0) {
+        if (baseErrors.length > 0 && !force) {
             return { success: false, errors: baseErrors };
         }
 
@@ -593,16 +683,18 @@ class ShiftScheduler {
      * 第2段階: 特殊勤務を入れる
      * （第1段階で組まれた基本勤務表の「○」から、早3、遅1、E2、8時1を割り振って最終完成させる）
      */
-    assignSpecialDutiesToGrid() {
+    assignSpecialDutiesToGrid(options = {}) {
+        const force = options && options.force === true;
+
         // ステップ1: 8時勤務（1名/日）を優先配置！（8時可フラグのある貴重なスタッフから均等に選出）
-        const h8Result = this.assign8ClockDuties();
-        if (!h8Result.success) {
+        const h8Result = this.assign8ClockDuties(options);
+        if (!h8Result.success && !force) {
             return h8Result;
         }
 
         // ステップ2: 毎日の特殊勤務（遅1, E2, 早3）を配置し、翌日を自動的に「休」に設定
-        const specialResult = this.assignSpecialDuties();
-        if (!specialResult.success) {
+        const specialResult = this.assignSpecialDuties(options);
+        if (!specialResult.success && !force) {
             return specialResult;
         }
 
@@ -611,7 +703,7 @@ class ShiftScheduler {
 
         // 最終全ハード制約の検証
         const finalErrors = this.verifyAllHardConstraints();
-        if (finalErrors.length > 0) {
+        if (finalErrors.length > 0 && !force) {
             return { success: false, errors: finalErrors };
         }
 
@@ -625,8 +717,8 @@ class ShiftScheduler {
     /**
      * ソルバーメイン実行（デフォルトは第1段階: 基本勤務表生成）
      */
-    solve() {
-        return this.solveBaseSchedule();
+    solve(options = {}) {
+        return this.solveBaseSchedule(options);
     }
 
     /**
@@ -648,7 +740,12 @@ class ShiftScheduler {
     /**
      * ステップ2: 毎日の特殊勤務（遅1, E2, 早3）を割り当て、翌日を自動的に「休」に設定
      */
-    assignSpecialDuties() {
+    /**
+     * 毎日の特殊勤務（遅1, E2, 早3）を配置し、翌日を自動的に「休」に設定
+     * ★要件: 出勤が公休などで挟まれ1日のみ勤務の場合は特殊勤務は入れない（8時は可能）
+     */
+    assignSpecialDuties(options = {}) {
+        const force = options && options.force === true;
         const counts = {
             early: new Array(this.numStaff).fill(0),
             late: new Array(this.numStaff).fill(0),
@@ -684,7 +781,7 @@ class ShiftScheduler {
                 const needed = req.count - assigned;
                 if (needed <= 0) continue;
 
-                const candidates = [];
+                let candidates = [];
                 for (let s = 0; s < this.numStaff; s++) {
                     // 当日dが非固定の○であること
                     if (this.grid[s][d].isFixed || this.grid[s][d].symbol !== SYMBOLS.WORK) continue;
@@ -772,6 +869,12 @@ class ShiftScheduler {
 
                     if (!canNextBeOff) continue;
 
+                    // ★ 要件: 出勤が公休などで挟まれ1日のみ勤務の場合は特殊勤務（早・遅・E）は入れない（8時は可能）
+                    // 前日(d-1)が休日か？
+                    const prevIsHoliday = (d > 0) && isHolidaySymbol(this.grid[s][d - 1].symbol);
+                    // 翌日(d+1)は特殊勤務割当により休日になるため、前日休日の場合は「休 - 勤務 - 休」の単発出勤となる
+                    const isSandwiched = prevIsHoliday;
+
                     // スコア計算:
                     // 既に翌日休ならスコアを大幅優遇（スワップ不要）
                     let score = counts.total[s] * 100 + counts[req.key][s] * 10;
@@ -785,19 +888,31 @@ class ShiftScheduler {
                     if (distFromLast < 3) {
                         score += 200; // 直近の特殊勤務を避ける
                     }
+                    if (isSandwiched) {
+                        score += 10000; // 単発勤務は極力除外するための高ペナルティ
+                    }
 
-                    candidates.push({ staffIndex: s, score, swapDay });
+                    candidates.push({ staffIndex: s, score, swapDay, isSandwiched });
+                }
+
+                // 単発挟まれ勤務でない候補者を最優先で抽出
+                const nonSandwichedCandidates = candidates.filter(c => !c.isSandwiched);
+                if (nonSandwichedCandidates.length >= needed) {
+                    candidates = nonSandwichedCandidates;
                 }
 
                 if (candidates.length < needed) {
-                    return {
-                        success: false,
-                        errors: [`【${dayNum}日目の特殊勤務割当】「${req.label}」の担当者が必要数（${req.count}名）に対し、配置可能なスタッフが不足しています（候補${candidates.length}名 / 不足${needed}名）。`]
-                    };
+                    if (!force) {
+                        return {
+                            success: false,
+                            errors: [`【${dayNum}日目の特殊勤務割当】「${req.label}」の担当者が必要数（${req.count}名）に対し、配置可能なスタッフが不足しています（候補${candidates.length}名 / 不足${needed}名）。`]
+                        };
+                    }
                 }
 
                 candidates.sort((a, b) => a.score - b.score);
-                for (let i = 0; i < needed; i++) {
+                const toAssign = Math.min(needed, candidates.length);
+                for (let i = 0; i < toAssign; i++) {
                     const cand = candidates[i];
                     const chosen = cand.staffIndex;
                     this.setSymbol(chosen, d, req.type, false);
@@ -1114,7 +1229,9 @@ class ShiftScheduler {
         // 2. 連勤制限（公休間隔カウント）
         let consec = 0;
         for (let i = 0; i < sequence.length; i++) {
-            if (!isFullOffSymbol(sequence[i])) {
+            if (sequence[i] === '') {
+                consec = 0;
+            } else if (!isFullOffSymbol(sequence[i])) {
                 consec++;
                 if (consec > maxConsec) return false;
             } else {
@@ -1163,7 +1280,8 @@ class ShiftScheduler {
     /**
      * ステップ2: 8時勤務（毎日1名）の配置（限定リソースを最優先で割り当て）
      */
-    assign8ClockDuties() {
+    assign8ClockDuties(options = {}) {
+        const force = options && options.force === true;
         const counts = new Array(this.numStaff).fill(0);
         const lastAssignedDay = new Array(this.numStaff).fill(-10);
 
@@ -1208,10 +1326,13 @@ class ShiftScheduler {
             }
 
             if (candidates.length === 0) {
-                return {
-                    success: false,
-                    errors: [`【${dayNum}日目】「8時開始勤務（1名）」を配置できるスタッフがいません（8時可スタッフの勤務またはスケ可制約をご確認ください）。`]
-                };
+                if (!force) {
+                    return {
+                        success: false,
+                        errors: [`【${dayNum}日目】「8時開始勤務（1名）」を配置できるスタッフがいません（8時可スタッフの勤務またはスケ可制約をご確認ください）。`]
+                    };
+                }
+                continue;
             }
 
             candidates.sort((a, b) => a.score - b.score);
@@ -1251,7 +1372,7 @@ class ShiftScheduler {
                         this.setSymbol(s, targetD, SYMBOLS.WORK, false);
                         this.setSymbol(s, d, SYMBOLS.OFF, false);
 
-                        if (this.isStaffHardValid(s)) {
+                        if (this.isStaffHardValid(s) && this.isGlobalAttributesValid()) {
                             resolved = true;
                             break;
                         } else {
@@ -1421,7 +1542,9 @@ class ShiftScheduler {
         const maxConsec = staff.allow6Consec ? 6 : 5;
         let consec = 0;
         for (let idx = 0; idx < sequence.length; idx++) {
-            if (!isFullOffSymbol(sequence[idx])) {
+            if (sequence[idx] === '') {
+                consec = 0;
+            } else if (!isFullOffSymbol(sequence[idx])) {
                 consec++;
                 if (consec > maxConsec) return false;
             } else {
@@ -1475,18 +1598,23 @@ class ShiftScheduler {
             let schedWork = 0;
             let roleWork = 0;
             let ftWork = 0;
-            let h8Cand = 0;
+            let totalH8Cand = 0;
+            let pureH8Cand = 0;
             for (let s = 0; s < this.numStaff; s++) {
                 const sym = this.grid[s][d].symbol;
                 if (this.staffList[s].canSched && sym === SYMBOLS.WORK) schedWork++;
                 if (this.staffList[s].isRole && isWorkSymbol(sym) && sym !== SYMBOLS.TRIP) roleWork++;
                 if (this.staffList[s].isFullTime && isWorkSymbol(sym) && sym !== SYMBOLS.TRIP) ftWork++;
-                if (this.staffList[s].can8 && isWorkSymbol(sym)) h8Cand++;
+                if (this.staffList[s].can8 && isWorkSymbol(sym)) {
+                    totalH8Cand++;
+                    if (!this.staffList[s].canSched) pureH8Cand++;
+                }
             }
             if (schedWork < 2) return false;
             if (roleWork < 2) return false;
             if (ftWork < 3) return false;
-            if (h8Cand < 1) return false;
+            if (totalH8Cand < 1) return false;
+            if (schedWork === 2 && pureH8Cand === 0) return false;
         }
         return true;
     }
@@ -1534,7 +1662,9 @@ class ShiftScheduler {
             let streak = 0;
             let startIdx = 0;
             for (let idx = 0; idx < sequence.length; idx++) {
-                if (!isFullOffSymbol(sequence[idx])) {
+                if (sequence[idx] === '') {
+                    streak = 0;
+                } else if (!isFullOffSymbol(sequence[idx])) {
                     if (streak === 0) startIdx = idx;
                     streak++;
                     if (streak > maxAllowed) {
@@ -1829,7 +1959,9 @@ function validateScheduleGrid(grid, staffList, options = {}) {
         let nonOffStreak = [];
         for (let idx = 0; idx < sequence.length; idx++) {
             const sym = sequence[idx];
-            if (!isFullOffSymbol(sym)) {
+            if (sym === '') {
+                nonOffStreak = [];
+            } else if (!isFullOffSymbol(sym)) {
                 nonOffStreak.push(idx);
                 if (nonOffStreak.length > maxAllowed) {
                     const sIdxSeq = nonOffStreak[0];
@@ -1974,11 +2106,12 @@ function validateScheduleGrid(grid, staffList, options = {}) {
 
 // エクスポート
 if (typeof module !== 'undefined' && module.exports) {
-    module.exports = { ShiftScheduler, validateInitialState, validateScheduleGrid, SYMBOLS };
+    module.exports = { ShiftScheduler, validateInitialState, validateScheduleGrid, SYMBOLS, isJapaneseHoliday };
 } else {
     window.ShiftScheduler = ShiftScheduler;
     window.validateInitialState = validateInitialState;
     window.validateScheduleGrid = validateScheduleGrid;
     window.SYMBOLS = SYMBOLS;
+    window.isJapaneseHoliday = isJapaneseHoliday;
 }
 
