@@ -582,9 +582,16 @@ class ShiftScheduler {
     /**
      * 当日dにスタッフsを休日にできるかの判定（属性充足の保護）
      */
-    canPlaceHoliday(s, d) {
+    canPlaceHoliday(s, d, strictLevel = 0) {
         const staff = this.staffList[s];
-        // 1. スケ可保護：当日dに出勤できる「スケ可」スタッフを最低3名維持（8時等に割当後も○が2名残るように）
+        if (strictLevel >= 2) return true; // 個人制約優先（属性人数不足より公休・週休2日を最優先）
+
+        const reqSched = strictLevel === 1 ? 2 : 3;
+        const reqCan8 = strictLevel === 1 ? 1 : 2;
+        const reqRole = strictLevel === 1 ? 1 : 2;
+        const reqFt = strictLevel === 1 ? 2 : 3;
+
+        // 1. スケ可保護：当日dに出勤できる「スケ可」スタッフを維持
         if (staff.canSched) {
             let available = 0;
             for (let otherS = 0; otherS < this.numStaff; otherS++) {
@@ -594,10 +601,10 @@ class ShiftScheduler {
                 }
             }
             const totalSched = this.staffList.filter(st => st.canSched).length;
-            const minKeep = Math.min(3, totalSched);
+            const minKeep = Math.min(reqSched, totalSched);
             if (available < minKeep) return false;
         }
-        // 1-2. 8時可保護：当日dに出勤できる「8時可」スタッフを最低3名維持（8時1名＋スケ可等のバックアップ）
+        // 1-2. 8時可保護：当日dに出勤できる「8時可」スタッフを維持
         if (staff.can8) {
             let available = 0;
             for (let otherS = 0; otherS < this.numStaff; otherS++) {
@@ -607,10 +614,10 @@ class ShiftScheduler {
                 }
             }
             const totalCan8 = this.staffList.filter(st => st.can8).length;
-            const minKeep = Math.min(3, totalCan8);
+            const minKeep = Math.min(reqCan8, totalCan8);
             if (available < minKeep) return false;
         }
-        // 2. 役職保護：当日dに出勤できる「役職」スタッフ（出張除く）を最低2名維持
+        // 2. 役職保護：当日dに出勤できる「役職」スタッフ（出張除く）を維持
         if (staff.isRole) {
             let available = 0;
             for (let otherS = 0; otherS < this.numStaff; otherS++) {
@@ -620,10 +627,10 @@ class ShiftScheduler {
                 }
             }
             const totalRole = this.staffList.filter(st => st.isRole).length;
-            const minKeep = Math.min(2, totalRole);
+            const minKeep = Math.min(reqRole, totalRole);
             if (available < minKeep) return false;
         }
-        // 3. 専従保護：当日dに出勤できる「専従」スタッフ（出張除く）を最低3名維持
+        // 3. 専従保護：当日dに出勤できる「専従」スタッフ（出張除く）を維持
         if (staff.isFullTime) {
             let available = 0;
             for (let otherS = 0; otherS < this.numStaff; otherS++) {
@@ -633,7 +640,7 @@ class ShiftScheduler {
                 }
             }
             const totalFullTime = this.staffList.filter(st => st.isFullTime).length;
-            const minKeep = Math.min(3, totalFullTime);
+            const minKeep = Math.min(reqFt, totalFullTime);
             if (available < minKeep) return false;
         }
         return true;
@@ -957,7 +964,31 @@ class ShiftScheduler {
                     }
                 }
             } else {
-                // フォールバック: 従来スワップ型で埋める
+                // 安全なフォールバック: 各週の未固定セルに公休を必ず割り振る（公休0日放置の完全排除）
+                let curOff = 0;
+                for (let d = 0; d < this.numDays; d++) {
+                    if (this.grid[s][d].isFixed && isHolidaySymbol(this.grid[s][d].symbol)) curOff += 1.0;
+                }
+                const neededMore = Math.max(0, Math.round(stdHolidays - curOff));
+
+                let added = 0;
+                for (let w = 0; w < this.weekSpans.length && added < neededMore; w++) {
+                    const wSpan = this.weekSpans[w];
+                    const blanks = wSpan.filter(d => !this.grid[s][d].isFixed && this.grid[s][d].symbol === '');
+                    const toAdd = Math.min(blanks.length, Math.min(neededMore - added, wSpan.length >= 6 ? 2 : 1));
+                    for (let b = 0; b < toAdd; b++) {
+                        this.setSymbol(s, blanks[b], SYMBOLS.OFF, false);
+                        added++;
+                    }
+                }
+                if (added < neededMore) {
+                    for (let d = 0; d < this.numDays && added < neededMore; d++) {
+                        if (!this.grid[s][d].isFixed && this.grid[s][d].symbol === '') {
+                            this.setSymbol(s, d, SYMBOLS.OFF, false);
+                            added++;
+                        }
+                    }
+                }
                 for (let d = 0; d < this.numDays; d++) {
                     if (this.grid[s][d].symbol === '') {
                         this.setSymbol(s, d, SYMBOLS.WORK, false);
@@ -971,9 +1002,19 @@ class ShiftScheduler {
      * スタッフ s のスケジュールを「週単位の休日配置バックトラッキング」で完全充足生成
      */
     solveStaffScheduleWeekly(s, targetOff, maxConsec) {
+        // strictLevel: 0 (属性厳格), 1 (属性緩和), 2 (個人ハード制約最優先) で多段階試行
+        for (let strictLevel = 0; strictLevel <= 2; strictLevel++) {
+            const res = this.solveStaffScheduleWeeklyInternal(s, targetOff, maxConsec, strictLevel);
+            if (res) return res;
+        }
+        return null;
+    }
+
+    solveStaffScheduleWeeklyInternal(s, targetOff, maxConsec, strictLevel) {
         const staff = this.staffList[s];
         const numDays = this.numDays;
         const weekSpans = this.weekSpans;
+        const totalWeeks = weekSpans.length;
         const self = this;
 
         // すでに固定されている公休日数（休: 1.0, 半休: 0.5）
@@ -1009,6 +1050,7 @@ class ShiftScheduler {
         }
 
         // 各週で週出勤5日以内に抑えるために最低限必要な公休日数を算出
+        const maxWorkAllowed = staff.allow6Consec ? 6 : 5;
         const minNeededPerWeek = [];
         weekSpans.forEach(wSpan => {
             let fixedHolidayCount = 0;
@@ -1018,7 +1060,7 @@ class ShiftScheduler {
                     fixedHolidayCount++;
                 }
             });
-            const needed = (!staff.allow6Consec) ? Math.max(0, 2 - fixedHolidayCount) : 0;
+            const needed = Math.max(0, wSpan.length - maxWorkAllowed - fixedHolidayCount);
             minNeededPerWeek.push(needed);
         });
 
@@ -1027,15 +1069,17 @@ class ShiftScheduler {
         const neededTargetInt = Math.round(neededOff);
 
         function genDistributions(wIdx, currentPattern, currentSum) {
-            if (wIdx === 4) {
+            if (wIdx === totalWeeks) {
                 if (currentSum === neededTargetInt) {
                     distributionPatterns.push([...currentPattern]);
                 }
                 return;
             }
             const minW = minNeededPerWeek[wIdx];
-            for (let c = minW; c <= 4; c++) {
-                if (currentSum + c <= neededTargetInt + (3 - wIdx) * 4) {
+            const maxW = Math.min(weekSpans[wIdx].length, 4);
+            const remainingWeeks = totalWeeks - 1 - wIdx;
+            for (let c = minW; c <= maxW; c++) {
+                if (currentSum + c <= neededTargetInt + remainingWeeks * 4) {
                     currentPattern.push(c);
                     genDistributions(wIdx + 1, currentPattern, currentSum + c);
                     currentPattern.pop();
@@ -1044,42 +1088,31 @@ class ShiftScheduler {
         }
         genDistributions(0, [], 0);
 
-        // 均等パターン（各週2日、分散が小さいもの）を優先ソート
+        // 均等パターン（7日の週は2日、端数週は日数相応、分散が小さいもの）を優先ソート
         distributionPatterns.sort((a, b) => {
-            const varA = a.reduce((sum, v) => sum + Math.pow(v - 2, 2), 0);
-            const varB = b.reduce((sum, v) => sum + Math.pow(v - 2, 2), 0);
+            let varA = 0, varB = 0;
+            for (let w = 0; w < totalWeeks; w++) {
+                const ideal = weekSpans[w].length >= 6 ? 2 : Math.round(weekSpans[w].length * (2 / 7));
+                varA += Math.pow(a[w] - ideal, 2);
+                varB += Math.pow(b[w] - ideal, 2);
+            }
             return varA - varB;
         });
 
-        // 選択された休日候補の平準化スコア計算ヘルパー
+        // 選択された休日候補のスコア計算ヘルパー
         function calcChoiceScore(days, isConsecutive = false) {
             let score = 0;
-            if (isConsecutive) score += 100; // 2連休以上は最優先
+            if (isConsecutive) score += 100;
 
             for (const d of days) {
-                // すでに休日が多い日を避け、休日が少ない日を休日にする（負荷分散）
-                // 平均休日数は約14名
                 const currentOff = dailyOffCounts[d];
                 score -= currentOff * 15;
 
-                // 8時可スタッフの場合、同じ日に8時可が休みすぎないように分散
-                if (staff.can8) {
-                    score -= dailyH8OffCounts[d] * 30;
-                }
-                // スケ可スタッフの場合、同じ日にスケ可が休みすぎないように分散（毎日日勤○を潤沢に残す）
-                if (staff.canSched) {
-                    score -= dailySchedOffCounts[d] * 35;
-                }
-                // 役職スタッフの場合、同じ日に役職が休みすぎないように分散
-                if (staff.isRole) {
-                    score -= dailyRoleOffCounts[d] * 30;
-                }
-                // 専従スタッフの場合、同じ日に専従が休みすぎないように分散
-                if (staff.isFullTime) {
-                    score -= dailyFullTimeOffCounts[d] * 25;
-                }
+                if (staff.can8) score -= dailyH8OffCounts[d] * 30;
+                if (staff.canSched) score -= dailySchedOffCounts[d] * 35;
+                if (staff.isRole) score -= dailyRoleOffCounts[d] * 30;
+                if (staff.isFullTime) score -= dailyFullTimeOffCounts[d] * 25;
 
-                // 前後の日との連続性（勤務の単発を避け、連休化）
                 const prev = (d === 0) ? staff.prevDays[4] : self.grid[s][d - 1].symbol;
                 const next = (d + 1 < numDays) ? self.grid[s][d + 1].symbol : '';
                 if (isHolidaySymbol(prev)) score += 20;
@@ -1093,7 +1126,7 @@ class ShiftScheduler {
             if (countNeeded === 0) return [[]];
 
             const wSpan = weekSpans[wIdx];
-            const blankDays = wSpan.filter(d => !self.grid[s][d].isFixed && self.canPlaceHoliday(s, d));
+            const blankDays = wSpan.filter(d => !self.grid[s][d].isFixed && self.canPlaceHoliday(s, d, strictLevel));
             if (blankDays.length < countNeeded) return [];
 
             const choices = [];
@@ -1107,21 +1140,17 @@ class ShiftScheduler {
             }
 
             if (countNeeded === 2) {
-                // 1. 2連休ペア
                 for (let i = 0; i < blankDays.length; i++) {
                     for (let j = i + 1; j < blankDays.length; j++) {
-                        const d1 = blankDays[i];
-                        const d2 = blankDays[j];
+                        const d1 = blankDays[i], d2 = blankDays[j];
                         if (d2 === d1 + 1) {
                             choices.push({ days: [d1, d2], score: calcChoiceScore([d1, d2], true) });
                         }
                     }
                 }
-                // 2. 離れた2日（2連休が組めない場合のフォールバック）
                 for (let i = 0; i < blankDays.length; i++) {
                     for (let j = i + 1; j < blankDays.length; j++) {
-                        const d1 = blankDays[i];
-                        const d2 = blankDays[j];
+                        const d1 = blankDays[i], d2 = blankDays[j];
                         if (d2 !== d1 + 1) {
                             choices.push({ days: [d1, d2], score: calcChoiceScore([d1, d2], false) });
                         }
@@ -1132,7 +1161,6 @@ class ShiftScheduler {
             }
 
             if (countNeeded === 3) {
-                // 3連休または2連休+1日、離れた3日
                 for (let i = 0; i < blankDays.length; i++) {
                     for (let j = i + 1; j < blankDays.length; j++) {
                         for (let k = j + 1; k < blankDays.length; k++) {
@@ -1167,12 +1195,11 @@ class ShiftScheduler {
 
         let bestSchedule = null;
 
-        // 各配分パターンについて探索
         for (const dist of distributionPatterns) {
             function searchWeek(wIdx, assignedOffDays) {
                 if (bestSchedule !== null) return;
 
-                if (wIdx === weekSpans.length) {
+                if (wIdx === totalWeeks) {
                     const gridSymbols = new Array(numDays);
                     let currentOff = 0;
                     for (let d = 0; d < numDays; d++) {
