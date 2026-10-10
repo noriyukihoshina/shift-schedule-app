@@ -16,6 +16,8 @@ document.addEventListener('DOMContentLoaded', () => {
     let staffList = [];
     let currentSelectedSymbol = '休';
     let lastSolveResult = null;
+    let lastScheduler = null;
+    let currentWorkingStartDate = '2026-04-01';
 
     // ★ Web Audio API による心地よい短い「ポン♪」通知音の再生
     function playNotificationSound() {
@@ -67,6 +69,237 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     // ==========================================
+    // ★ 期間別ローカルストレージ自動保存＆復元管理
+    // ==========================================
+    const STORAGE_KEY_PREFIX = 'shift_schedule_term_';
+    const STORAGE_KEY_LAST_ACTIVE = 'shift_schedule_last_active_start_date';
+    const STORAGE_KEY_SAVED_TERMS = 'shift_schedule_saved_terms';
+
+    function updateSaveStatusUI(savedDate) {
+        const badgeText = document.getElementById('autoSaveStatusText');
+        if (badgeText) {
+            const timeStr = savedDate.toLocaleTimeString('ja-JP', { hour: '2-digit', minute: '2-digit' });
+            badgeText.textContent = `💾 自動保存済 (${timeStr})`;
+        }
+    }
+
+    function getSavedTerms() {
+        try {
+            const raw = localStorage.getItem(STORAGE_KEY_SAVED_TERMS);
+            return raw ? JSON.parse(raw) : [];
+        } catch (e) {
+            return [];
+        }
+    }
+
+    function updateSavedTermsList(startDate) {
+        try {
+            let terms = getSavedTerms();
+            if (!terms.includes(startDate)) {
+                terms.push(startDate);
+                terms.sort();
+                localStorage.setItem(STORAGE_KEY_SAVED_TERMS, JSON.stringify(terms));
+            }
+            renderSavedTermsSelect();
+        } catch (e) {
+            console.error(e);
+        }
+    }
+
+    function renderSavedTermsSelect() {
+        const select = document.getElementById('savedTermsSelect');
+        if (!select) return;
+        const terms = getSavedTerms();
+        const curDate = document.getElementById('termStartDate')?.value || currentWorkingStartDate;
+
+        let html = '<option value="">(保存済み期間の呼出)</option>';
+        terms.forEach(t => {
+            const d = new Date(t + 'T00:00:00');
+            const dEnd = new Date(d);
+            dEnd.setDate(dEnd.getDate() + 27);
+            const mStart = d.getMonth() + 1;
+            const dayStart = d.getDate();
+            const mEnd = dEnd.getMonth() + 1;
+            const dayEnd = dEnd.getDate();
+            const isCurrent = (t === curDate);
+            const label = `${t} (${mStart}/${dayStart}～${mEnd}/${dayEnd})${isCurrent ? ' 【作業中】' : ''}`;
+            html += `<option value="${t}" ${isCurrent ? 'selected' : ''}>${label}</option>`;
+        });
+        select.innerHTML = html;
+    }
+
+    function clearOutputTables() {
+        const thead = document.getElementById('outputTableHead');
+        const tbody = document.getElementById('outputTableBody');
+        const tfoot = document.getElementById('outputTableFoot');
+        if (thead) thead.innerHTML = '';
+        if (tbody) tbody.innerHTML = `<tr><td colspan="38" style="text-align:center; padding: 40px; color: #94a3b8; font-size: 0.95rem;">💡 勤務表がまだ生成されていません。「希望入力」シートで希望を入力・確認し、【⚡ 勤務表を自動生成する】を実行してください。</td></tr>`;
+        if (tfoot) tfoot.innerHTML = '';
+
+        const checkThead = document.getElementById('checkTableHead');
+        const checkTbody = document.getElementById('checkTableBody');
+        const checkTfoot = document.getElementById('checkTableFoot');
+        if (checkThead) checkThead.innerHTML = '';
+        if (checkTbody) checkTbody.innerHTML = `<tr><td colspan="38" style="text-align:center; padding: 40px; color: #94a3b8; font-size: 0.95rem;">💡 勤務表がまだ完成していません。「修正作業エリア」で【✨ 特殊勤務を入れる】を実行するとここに完成版が表示されます。</td></tr>`;
+        if (checkTfoot) checkTfoot.innerHTML = '';
+    }
+
+    function saveCurrentTermToStorage() {
+        try {
+            const startDateInput = document.getElementById('termStartDate');
+            const startDate = startDateInput ? startDateInput.value : currentWorkingStartDate;
+            if (!startDate) return;
+
+            const stdHolidaySelect = document.getElementById('standardHolidaySelect');
+            const stdHolidays = stdHolidaySelect ? parseFloat(stdHolidaySelect.value) : 8.0;
+
+            const activeTabEl = document.querySelector('.tab-panel.active');
+            const activeTab = activeTabEl ? activeTabEl.id : 'inputTab';
+
+            const data = {
+                startDate: startDate,
+                standardHolidays: stdHolidays,
+                staffList: staffList.map(s => ({
+                    id: s.id,
+                    name: s.name,
+                    can8: s.can8,
+                    noEarly: s.noEarly,
+                    noLate: s.noLate,
+                    noEve: s.noEve,
+                    canSched: s.canSched,
+                    isRole: s.isRole,
+                    isFullTime: s.isFullTime,
+                    allow6Consec: s.allow6Consec,
+                    prevDays: [...s.prevDays],
+                    days: [...s.days]
+                })),
+                outputGrid: (lastSolveResult && lastSolveResult.grid) 
+                    ? lastSolveResult.grid.map(row => row.map(c => ({ ...c }))) 
+                    : null,
+                lastSolveStats: (lastSolveResult && lastSolveResult.stats) 
+                    ? lastSolveResult.stats 
+                    : null,
+                activeTab: activeTab,
+                updatedAt: new Date().toISOString()
+            };
+
+            localStorage.setItem(`${STORAGE_KEY_PREFIX}${startDate}`, JSON.stringify(data));
+            localStorage.setItem(STORAGE_KEY_LAST_ACTIVE, startDate);
+
+            updateSavedTermsList(startDate);
+            updateSaveStatusUI(new Date());
+        } catch (err) {
+            console.error('自動保存に失敗しました:', err);
+        }
+    }
+
+    function loadTermFromStorage(startDate) {
+        try {
+            const raw = localStorage.getItem(`${STORAGE_KEY_PREFIX}${startDate}`);
+            if (!raw) return false;
+            const data = JSON.parse(raw);
+            if (!data || !data.staffList) return false;
+
+            // 1. 公休日数
+            if (data.standardHolidays !== undefined) {
+                const stdSel = document.getElementById('standardHolidaySelect');
+                if (stdSel) stdSel.value = String(data.standardHolidays);
+            }
+
+            // 2. スタッフ復元
+            data.staffList.forEach((s, idx) => {
+                if (staffList[idx]) {
+                    staffList[idx].name = s.name;
+                    staffList[idx].can8 = s.can8;
+                    staffList[idx].noEarly = s.noEarly;
+                    staffList[idx].noLate = s.noLate;
+                    staffList[idx].noEve = s.noEve;
+                    staffList[idx].canSched = s.canSched;
+                    staffList[idx].isRole = s.isRole;
+                    staffList[idx].isFullTime = s.isFullTime;
+                    staffList[idx].allow6Consec = s.allow6Consec;
+                    staffList[idx].prevDays = Array.isArray(s.prevDays) ? [...s.prevDays] : ['', '', '', '', ''];
+                    staffList[idx].days = Array.isArray(s.days) ? [...s.days] : new Array(NUM_DAYS).fill('');
+                }
+            });
+
+            // 3. 日付セット & 期間タイトル更新
+            const dateInput = document.getElementById('termStartDate');
+            if (dateInput) dateInput.value = data.startDate;
+            currentWorkingStartDate = data.startDate;
+            const term = getTermInfo();
+
+            // 4. 入力テーブル描画
+            renderInputTable();
+
+            // 5. 出力テーブル復元
+            if (data.outputGrid && Array.isArray(data.outputGrid)) {
+                const stdVal = parseFloat(document.getElementById('standardHolidaySelect')?.value || '8.0');
+                const scheduler = new ShiftScheduler(staffList, {
+                    standardHolidays: stdVal,
+                    dates: term.dates
+                });
+                scheduler.grid = data.outputGrid.map(row => row.map(c => ({ ...c })));
+                const newStats = data.lastSolveStats || scheduler.calculateStats();
+                lastScheduler = scheduler;
+                lastSolveResult = {
+                    success: true,
+                    grid: scheduler.grid,
+                    stats: newStats
+                };
+                renderOutputTable(lastSolveResult.grid, newStats);
+                renderStatsDashboard(newStats);
+            } else {
+                lastSolveResult = null;
+                lastScheduler = null;
+                clearOutputTables();
+            }
+
+            // 6. タブ復元
+            if (data.activeTab && document.getElementById(data.activeTab)) {
+                switchTab(data.activeTab);
+            }
+
+            undoStack.length = 0;
+            redoStack.length = 0;
+            updateUndoRedoUI();
+            clearConflictHighlights();
+
+            updateSaveStatusUI(new Date(data.updatedAt || Date.now()));
+            renderSavedTermsSelect();
+            return true;
+        } catch (err) {
+            console.error('復元に失敗しました:', err);
+            return false;
+        }
+    }
+
+    function initNewTerm(newStartDate) {
+        staffList.forEach(s => {
+            s.prevDays = ['', '', '', '', ''];
+            s.days = new Array(NUM_DAYS).fill('');
+        });
+        lastSolveResult = null;
+        lastScheduler = null;
+
+        const dateInput = document.getElementById('termStartDate');
+        if (dateInput) dateInput.value = newStartDate;
+        currentWorkingStartDate = newStartDate;
+        getTermInfo();
+
+        renderInputTable();
+        clearOutputTables();
+        switchTab('inputTab');
+
+        undoStack.length = 0;
+        redoStack.length = 0;
+        updateUndoRedoUI();
+        clearConflictHighlights();
+
+        saveCurrentTermToStorage();
+    }
+
+    // ==========================================
     // ★ 戻る（Undo） / やり直す（Redo） 履歴管理
     // ==========================================
     const MAX_HISTORY = 50;
@@ -89,7 +322,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 prevDays: [...s.prevDays],
                 days: [...s.days]
             })),
-            startDate: document.getElementById('termStartDate')?.value || '2026-04-01',
+            startDate: document.getElementById('termStartDate')?.value || currentWorkingStartDate,
             outputGrid: (lastSolveResult && lastSolveResult.grid) ? lastSolveResult.grid.map(row => row.map(c => ({ ...c }))) : null
         };
     }
@@ -101,6 +334,7 @@ document.addEventListener('DOMContentLoaded', () => {
         }
         redoStack.length = 0; // 新規操作時はredoをクリア
         updateUndoRedoUI();
+        saveCurrentTermToStorage(); // ★ 操作直後にブラウザに自動保存！
     }
 
     function undo() {
@@ -109,6 +343,7 @@ document.addEventListener('DOMContentLoaded', () => {
         const prevState = undoStack.pop();
         restoreHistoryState(prevState);
         updateUndoRedoUI();
+        saveCurrentTermToStorage(); // ★ 戻した状態を保存
         showToast('↩ 直前の状態に戻しました');
     }
 
@@ -118,6 +353,7 @@ document.addEventListener('DOMContentLoaded', () => {
         const nextState = redoStack.pop();
         restoreHistoryState(nextState);
         updateUndoRedoUI();
+        saveCurrentTermToStorage(); // ★ やり直した状態を保存
         showToast('↪ やり直しました');
     }
 
@@ -849,6 +1085,7 @@ document.addEventListener('DOMContentLoaded', () => {
         tabPanels.forEach(panel => {
             panel.classList.toggle('active', panel.id === tabId);
         });
+        saveCurrentTermToStorage(); // ★ アクティブタブ状態も自動保存
     }
 
     tabBtns.forEach(btn => {
@@ -987,11 +1224,56 @@ document.addEventListener('DOMContentLoaded', () => {
     const termStartDateInput = document.getElementById('termStartDate');
     if (termStartDateInput) {
         termStartDateInput.addEventListener('change', () => {
-            getTermInfo();
-            renderInputTable();
-            if (lastSolveResult) {
-                renderOutputTable(lastSolveResult.grid, lastSolveResult.stats);
+            const newDate = termStartDateInput.value;
+            if (!newDate || newDate === currentWorkingStartDate) return;
+
+            // 1. 直前の期間データを自動保存
+            saveCurrentTermToStorage();
+
+            // 2. 新しい期間の保存データが存在するかチェック
+            const key = `${STORAGE_KEY_PREFIX}${newDate}`;
+            if (localStorage.getItem(key)) {
+                currentWorkingStartDate = newDate;
+                loadTermFromStorage(newDate);
+                showToast(`💾 保存済みデータ（${newDate}～）を復元しました`);
+            } else {
+                currentWorkingStartDate = newDate;
+                initNewTerm(newDate);
+                showToast(`🆕 新規期間（${newDate}～）を開始しました（ブラウザ自動保存中）`);
             }
+        });
+    }
+
+    const savedTermsSelect = document.getElementById('savedTermsSelect');
+    if (savedTermsSelect) {
+        savedTermsSelect.addEventListener('change', () => {
+            const selectedDate = savedTermsSelect.value;
+            if (!selectedDate || selectedDate === currentWorkingStartDate) return;
+
+            // 直前の期間データを保存
+            saveCurrentTermToStorage();
+
+            currentWorkingStartDate = selectedDate;
+            loadTermFromStorage(selectedDate);
+            showToast(`💾 保存済み期間（${selectedDate}～）に切り替えました`);
+        });
+    }
+
+    const resetCurrentTermBtn = document.getElementById('resetCurrentTermBtn');
+    if (resetCurrentTermBtn) {
+        resetCurrentTermBtn.addEventListener('click', () => {
+            const term = getTermInfo();
+            if (confirm(`【${term.title}】の作業内容（希望入力・作成済み勤務表）を初期状態（白紙）に戻しますか？`)) {
+                initNewTerm(currentWorkingStartDate);
+                showToast(`🗑️ 【${term.title}】を白紙に戻しました`);
+            }
+        });
+    }
+
+    const standardHolidaySelect = document.getElementById('standardHolidaySelect');
+    if (standardHolidaySelect) {
+        standardHolidaySelect.addEventListener('change', () => {
+            saveCurrentTermToStorage();
         });
     }
 
@@ -1039,6 +1321,7 @@ document.addEventListener('DOMContentLoaded', () => {
                         renderOutputTable(result.grid, result.stats);
                         renderStatsDashboard(result.stats);
                         switchTab('outputTab');
+                        saveCurrentTermToStorage(); // ★ 生成データをブラウザに自動保存
                         showToast('⚡ 基本勤務表を生成しました（修正作業エリアで微調整を行ってください）');
                     } else {
                         applyConflictHighlights(result.conflictCells);
@@ -1054,6 +1337,7 @@ document.addEventListener('DOMContentLoaded', () => {
                                 renderOutputTable(forceResult.grid, forceResult.stats);
                                 renderStatsDashboard(forceResult.stats);
                                 switchTab('outputTab');
+                                saveCurrentTermToStorage(); // ★ 強制生成データをブラウザに自動保存
                                 showToast('⚡ エラーを無視して基本勤務表を生成しました（修正作業エリアで微調整してください）');
                             }
                         });
@@ -1114,6 +1398,7 @@ document.addEventListener('DOMContentLoaded', () => {
                     renderStatsDashboard(specialResult.stats);
                     switchTab('checkTab');
                     checkFinalConstraints(false);
+                    saveCurrentTermToStorage(); // ★ 特殊勤務割当データを自動保存
                     showToast('✨ 特殊勤務（早3名・遅1名・E2名・8時1名）を割り当て、「最終チェック&完成」を表示しました！');
                 } else {
                     showErrorModal(specialResult.errors, {
@@ -1128,6 +1413,7 @@ document.addEventListener('DOMContentLoaded', () => {
                             renderStatsDashboard(forcedResult.stats);
                             switchTab('checkTab');
                             checkFinalConstraints(false);
+                            saveCurrentTermToStorage(); // ★ 強制特殊勤務割当データを自動保存
                             showToast('✨ エラーを無視して特殊勤務を割り当て、「最終チェック&完成」へ進みました（該当箇所はブルー網掛けで表示中）');
                         }
                     });
@@ -2288,6 +2574,7 @@ document.addEventListener('DOMContentLoaded', () => {
         renderInputTable();
         const term = getTermInfo();
         const modeText = mode === 'replace' ? '（既存枠クリア済み）' : '';
+        saveCurrentTermToStorage(); // ★ 希望取り込みデータをブラウザに自動保存
         if (updatedCount === 0) {
             showToast(`📄 【${term.title}】事前希望枠を全クリア（白紙）にしました`);
         } else {
@@ -2777,6 +3064,8 @@ document.addEventListener('DOMContentLoaded', () => {
                 }
             }
 
+            saveCurrentTermToStorage(); // ★ 取り込んだ確定勤務表をブラウザに自動保存
+
         } catch (err) {
             console.error(err);
             alert('修正済み勤務表の取り込みに失敗しました: ' + err.message);
@@ -3059,7 +3348,24 @@ document.addEventListener('DOMContentLoaded', () => {
         showToast('📊 Excelファイルをダウンロードしました！');
     }
 
-    // 初期起動（全スタッフ6勤可OFF、全日程完全空欄で初期化）
+    // 初期起動（直前に作業していた期間、または保存データを自動復元）
     initStaffData();
-    renderInputTable();
+
+    const lastActiveDate = localStorage.getItem(STORAGE_KEY_LAST_ACTIVE);
+    const defaultDate = document.getElementById('termStartDate')?.value || '2026-04-01';
+    const targetDate = lastActiveDate || defaultDate;
+
+    if (targetDate && localStorage.getItem(`${STORAGE_KEY_PREFIX}${targetDate}`)) {
+        currentWorkingStartDate = targetDate;
+        loadTermFromStorage(targetDate);
+    } else {
+        currentWorkingStartDate = targetDate;
+        const dateInput = document.getElementById('termStartDate');
+        if (dateInput) dateInput.value = targetDate;
+        getTermInfo();
+        renderInputTable();
+        clearOutputTables();
+        saveCurrentTermToStorage(); // 初期状態を自動保存
+    }
+    renderSavedTermsSelect();
 });

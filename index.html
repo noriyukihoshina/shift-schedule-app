@@ -9,10 +9,16 @@
 <body>
 
     <!-- アプリケーションヘッダー -->
-    <header class="app-header">
+    <header class="app-header" style="display: flex; justify-content: space-between; align-items: center;">
         <div class="header-title">
             <span style="font-size: 1.3rem;">📅</span>
             <h1 style="font-size: 1.15rem; font-weight: 700;">勤務予定表 自動作成システム</h1>
+        </div>
+        <div style="display: flex; align-items: center; gap: 10px; font-size: 0.82rem;">
+            <span id="autoSaveStatusBadge" style="display: inline-flex; align-items: center; gap: 5px; background: #ecfdf5; color: #047857; border: 1px solid #a7f3d0; padding: 4px 12px; border-radius: 9999px; font-weight: 600; box-shadow: 0 1px 2px rgba(0,0,0,0.05);">
+                <span style="width: 8px; height: 8px; background: #10b981; border-radius: 50%; display: inline-block;"></span>
+                <span id="autoSaveStatusText">💾 自動保存中 (ブラウザ完全保持)</span>
+            </span>
         </div>
     </header>
 
@@ -37,10 +43,10 @@
 
         <!-- 1. 入力シートタブ -->
         <section id="inputTab" class="tab-panel active">
-            <!-- ターム設定バー（期間・公休日数） -->
+            <!-- ターム設定バー（期間・公休日数・自動保存切替） -->
             <div class="toolbar-card" style="margin-bottom: 0.75rem; background: #f8fafc; border-left: 4px solid var(--primary);">
-                <div style="display: flex; flex-wrap: wrap; gap: 1.5rem; align-items: center; justify-content: space-between;">
-                    <div style="display: flex; align-items: center; gap: 0.75rem; font-size: 0.88rem;">
+                <div style="display: flex; flex-wrap: wrap; gap: 1rem; align-items: center; justify-content: space-between;">
+                    <div style="display: flex; align-items: center; gap: 0.75rem; font-size: 0.88rem; flex-wrap: wrap;">
                         <span style="font-weight: 700; color: #1e293b;">📅 対象期間:</span>
                         <label style="color: #64748b;">開始日:</label>
                         <input type="date" id="termStartDate" value="2026-04-01" style="padding: 4px 8px; border: 1px solid #cbd5e1; border-radius: 4px; font-weight: 600;">
@@ -48,12 +54,23 @@
                         <span id="termEndDateDisplay" style="font-weight: 700; color: #1e293b;">2026-04-28</span>
                         <span style="background: #e0f2fe; color: #0284c7; padding: 2px 8px; border-radius: 4px; font-weight: 700; font-size: 0.85rem;" id="termTitleBadge">4/1～4/28勤務表</span>
                     </div>
-                    <div style="display: flex; align-items: center; gap: 0.5rem; font-size: 0.88rem;">
-                        <span style="font-weight: 700; color: #1e293b;">🏖️ 公休枠制限:</span>
-                        <select id="standardHolidaySelect" style="padding: 4px 8px; border: 1px solid #cbd5e1; border-radius: 4px; font-weight: 600; background: white;">
-                            <option value="8.0" selected>通常月: 8.0日 (4週8休)</option>
-                            <option value="8.5">3月公休調整: 8.5日</option>
-                        </select>
+                    <div style="display: flex; align-items: center; gap: 0.75rem; font-size: 0.88rem; flex-wrap: wrap;">
+                        <div style="display: flex; align-items: center; gap: 0.4rem;">
+                            <span style="font-weight: 700; color: #1e293b;" title="ブラウザ内に自動保存された他の期間を呼び出します">📁 保存済み期間:</span>
+                            <select id="savedTermsSelect" style="padding: 4px 8px; border: 1px solid #cbd5e1; border-radius: 4px; font-weight: 600; background: white; font-size: 0.82rem;">
+                                <option value="">(保存済み期間の呼出)</option>
+                            </select>
+                        </div>
+                        <div style="display: flex; align-items: center; gap: 0.4rem;">
+                            <span style="font-weight: 700; color: #1e293b;">🏖️ 公休枠制限:</span>
+                            <select id="standardHolidaySelect" style="padding: 4px 8px; border: 1px solid #cbd5e1; border-radius: 4px; font-weight: 600; background: white; font-size: 0.82rem;">
+                                <option value="8.0" selected>通常月: 8.0日 (4週8休)</option>
+                                <option value="8.5">3月公休調整: 8.5日</option>
+                            </select>
+                        </div>
+                        <button type="button" id="resetCurrentTermBtn" class="btn btn-outline" style="font-size: 0.78rem; padding: 3px 8px; color: #dc2626; border-color: #fca5a5; background: #fff5f5;" title="現在表示している期間の希望入力・作成データを白紙（初期化）に戻します">
+                            🗑️ この期間を白紙化
+                        </button>
                     </div>
                 </div>
             </div>
