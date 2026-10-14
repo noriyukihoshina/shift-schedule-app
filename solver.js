@@ -2408,13 +2408,251 @@ function validateScheduleGrid(grid, staffList, options = {}) {
     };
 }
 
+/**
+ * リフレッシュ休暇設定
+ */
+const REFRESH_HOLIDAY_CONFIG = [
+    { symbol: '上1', month: 6, season: 'summer', name: '夏リフ1 (6月)' },
+    { symbol: '上2', month: 7, season: 'summer', name: '夏リフ2 (7月)' },
+    { symbol: '上3', month: 8, season: 'summer', name: '夏リフ3 (8月)' },
+    { symbol: '上4', month: 9, season: 'summer', name: '夏リフ4 (9月)' },
+    { symbol: '上5', month: 10, season: 'summer', name: '夏リフ5 (10月)' },
+    { symbol: '下1', month: 12, season: 'winter', name: '冬リフ1 (12月)' },
+    { symbol: '下2', month: 1,  season: 'winter', name: '冬リフ2 (1月)' },
+    { symbol: '下3', month: 2,  season: 'winter', name: '冬リフ3 (2月)' }
+];
+
+function getDaysInMonth(year, month) {
+    return new Date(year, month, 0).getDate();
+}
+
+function getTermRefreshGroups(dates) {
+    if (!Array.isArray(dates) || dates.length === 0) return [];
+    const groups = new Map();
+    dates.forEach((dObj, dIdx) => {
+        const m = dObj.month;
+        const conf = REFRESH_HOLIDAY_CONFIG.find(c => c.month === m);
+        if (conf) {
+            if (!groups.has(conf.symbol)) {
+                const totalMonthDays = getDaysInMonth(dObj.year, m);
+                groups.set(conf.symbol, {
+                    symbol: conf.symbol,
+                    month: m,
+                    season: conf.season,
+                    name: conf.name,
+                    year: dObj.year,
+                    totalMonthDays: totalMonthDays,
+                    dayIndices: []
+                });
+            }
+            groups.get(conf.symbol).dayIndices.push(dIdx);
+        }
+    });
+    return Array.from(groups.values());
+}
+
+/**
+ * リフレッシュ休暇（リフ）の自動均等配分エンジン
+ * @param {Array<Object>} staffList - スタッフ情報
+ * @param {Array<Object>} dates - タームの日付情報
+ * @param {Object} options - { obtainedHistory: Map/Object, allowOverride: boolean }
+ * @returns {Object} { success, assignedCount, groupResults, assignments, message }
+ */
+function autoAssignRefreshHolidaysCore(staffList, dates, options = {}) {
+    const groups = getTermRefreshGroups(dates);
+    if (groups.length === 0) {
+        return {
+            success: true,
+            assignedCount: 0,
+            groupResults: [],
+            assignments: [],
+            message: 'この期間（ターム）にはリフレッシュ休暇の対象月が含まれていません。'
+        };
+    }
+
+    const obtainedHistory = options.obtainedHistory || {}; // staffId -> Set of symbols or Array
+    const assignments = [];
+    const groupResults = [];
+    let totalAssigned = 0;
+
+    // 有効スタッフインデックス一覧
+    const activeStaffIndices = [];
+    staffList.forEach((st, idx) => {
+        if (!st.isUnused) activeStaffIndices.push(idx);
+    });
+    const activeStaffCount = activeStaffIndices.length;
+
+    // 日別の全体リフ配置人数カウント（平準化用）
+    const dailyRefCount = new Array(dates.length).fill(0);
+    // 既存の手動入力リフをカウント
+    staffList.forEach((st, sIdx) => {
+        if (st.isUnused) return;
+        for (let d = 0; d < dates.length; d++) {
+            const sym = st.days[d];
+            if (SYMBOLS.REF_SUMMER.includes(sym) || SYMBOLS.REF_WINTER.includes(sym)) {
+                dailyRefCount[d]++;
+            }
+        }
+    });
+
+    // 今タームで既にリフが割り振られているスタッフのSet（1人1ターム1リフの原則）
+    const staffWithRefInCurrentTerm = new Set();
+    staffList.forEach((st, sIdx) => {
+        if (st.isUnused) return;
+        for (let d = 0; d < dates.length; d++) {
+            const sym = st.days[d];
+            if (SYMBOLS.REF_SUMMER.includes(sym) || SYMBOLS.REF_WINTER.includes(sym)) {
+                staffWithRefInCurrentTerm.add(sIdx);
+                break;
+            }
+        }
+    });
+
+    // 各リフグループごとに均等配分
+    for (const grp of groups) {
+        const daysInTerm = grp.dayIndices.length;
+        const targetCount = Math.round(activeStaffCount * (daysInTerm / grp.totalMonthDays));
+
+        // 今タームで既に手動入力等でこのグループの記号を持っている人数
+        let alreadyInTermForThisGroup = 0;
+        staffList.forEach((st, sIdx) => {
+            if (st.isUnused) return;
+            for (const d of grp.dayIndices) {
+                if (st.days[d] === grp.symbol) {
+                    alreadyInTermForThisGroup++;
+                    break;
+                }
+            }
+        });
+
+        const needToAssign = Math.max(0, targetCount - alreadyInTermForThisGroup);
+
+        // 候補スタッフの抽出
+        const candidates = [];
+        for (const sIdx of activeStaffIndices) {
+            // 今タームですでにリフを持っているスタッフは除外
+            if (staffWithRefInCurrentTerm.has(sIdx)) continue;
+
+            const st = staffList[sIdx];
+            // 過去にこの記号を取得済みなら除外（二重取得防止！）
+            const history = obtainedHistory[st.id] || obtainedHistory[sIdx];
+            const hasObtained = (history instanceof Set) ? history.has(grp.symbol) : (Array.isArray(history) && history.includes(grp.symbol));
+            if (hasObtained) continue;
+
+            // 対象期間内に空欄セルがあるか
+            const freeDays = grp.dayIndices.filter(d => st.days[d] === '');
+            if (freeDays.length === 0) continue;
+
+            candidates.push({
+                sIdx,
+                staff: st,
+                freeDays
+            });
+        }
+
+        // 候補者を属性均等に並び替え（偏りを抑える）
+        candidates.sort((a, b) => {
+            const weightA = (a.staff.isRole ? 2 : 0) + (a.staff.isFullTime ? 2 : 0) + (a.staff.canSched ? 1 : 0);
+            const weightB = (b.staff.isRole ? 2 : 0) + (b.staff.isFullTime ? 2 : 0) + (b.staff.canSched ? 1 : 0);
+            if (weightA !== weightB) return weightA - weightB;
+            return a.staff.id - b.staff.id;
+        });
+
+        const toAssignCandidates = candidates.slice(0, needToAssign);
+        let groupAssigned = 0;
+
+        for (const cand of toAssignCandidates) {
+            const sIdx = cand.sIdx;
+            const st = cand.staff;
+
+            // 最適日のスコアリング
+            let bestDay = -1;
+            let bestScore = -999999;
+
+            for (const d of cand.freeDays) {
+                let score = 100;
+
+                // 1. 日別負荷平準化: すでにリフが入っている人数が多い日は減点
+                score -= dailyRefCount[d] * 25;
+
+                // 2. 連休ボーナス: 前後が休日なら加点
+                if (d - 1 >= 0 && isHolidaySymbol(st.days[d - 1])) score += 30;
+                if (d + 1 < dates.length && isHolidaySymbol(st.days[d + 1])) score += 30;
+                if (d - 2 >= 0 && isHolidaySymbol(st.days[d - 2]) && isHolidaySymbol(st.days[d - 1])) score += 15;
+                if (d + 2 < dates.length && isHolidaySymbol(st.days[d + 1]) && isHolidaySymbol(st.days[d + 2])) score += 15;
+
+                // 3. 土日祝日の適正分散（土日だけに偏らないように平日も同等に評価）
+                const dObj = dates[d];
+                if (dObj.isSun || dObj.isSat || dObj.isHol) {
+                    score += 5;
+                }
+
+                if (score > bestScore) {
+                    bestScore = score;
+                    bestDay = d;
+                }
+            }
+
+            if (bestDay !== -1) {
+                st.days[bestDay] = grp.symbol;
+                dailyRefCount[bestDay]++;
+                staffWithRefInCurrentTerm.add(sIdx);
+                assignments.push({
+                    staffId: st.id,
+                    staffIndex: sIdx,
+                    staffName: st.name,
+                    dayIndex: bestDay,
+                    dateStr: dates[bestDay].label,
+                    symbol: grp.symbol
+                });
+                groupAssigned++;
+                totalAssigned++;
+            }
+        }
+
+        groupResults.push({
+            symbol: grp.symbol,
+            month: grp.month,
+            name: grp.name,
+            daysInTerm: daysInTerm,
+            totalMonthDays: grp.totalMonthDays,
+            targetCount: targetCount,
+            alreadyInTerm: alreadyInTermForThisGroup,
+            assignedNow: groupAssigned,
+            totalActive: activeStaffCount
+        });
+    }
+
+    return {
+        success: true,
+        assignedCount: totalAssigned,
+        groupResults: groupResults,
+        assignments: assignments,
+        message: totalAssigned > 0 
+            ? `リフレッシュ休暇を ${totalAssigned} 名に日割り均等配分しました（重複なし・前ターム照合済）。`
+            : `リフレッシュ休暇は既に必要人数分が割り当て済みです。`
+    };
+}
+
 // エクスポート
 if (typeof module !== 'undefined' && module.exports) {
-    module.exports = { ShiftScheduler, validateInitialState, validateScheduleGrid, SYMBOLS, isJapaneseHoliday };
+    module.exports = {
+        ShiftScheduler,
+        validateInitialState,
+        validateScheduleGrid,
+        autoAssignRefreshHolidaysCore,
+        getTermRefreshGroups,
+        REFRESH_HOLIDAY_CONFIG,
+        SYMBOLS,
+        isJapaneseHoliday
+    };
 } else {
     window.ShiftScheduler = ShiftScheduler;
     window.validateInitialState = validateInitialState;
     window.validateScheduleGrid = validateScheduleGrid;
+    window.autoAssignRefreshHolidaysCore = autoAssignRefreshHolidaysCore;
+    window.getTermRefreshGroups = getTermRefreshGroups;
+    window.REFRESH_HOLIDAY_CONFIG = REFRESH_HOLIDAY_CONFIG;
     window.SYMBOLS = SYMBOLS;
     window.isJapaneseHoliday = isJapaneseHoliday;
 }

@@ -716,7 +716,26 @@ input:checked + .toggle-slider:before {
     color: #94a3b8 !important;
 }
 
-/* 日別出勤増減（オフセット）コントロール */
+/* 日付ヘッダーセルの縦積み＆横幅圧縮 */
+.header-day-col {
+    min-width: 34px !important;
+    max-width: 40px !important;
+    padding: 2px 1px !important;
+    text-align: center !important;
+}
+
+.day-label {
+    font-size: 0.8rem;
+    font-weight: 700;
+    line-height: 1.1;
+}
+
+.day-weekday {
+    font-size: 0.72rem;
+    line-height: 1.1;
+}
+
+/* 日別出勤増減（オフセット）コントロール - 超スリム縦積み対応 */
 .day-offset-ctrl {
     display: inline-flex;
     align-items: center;
@@ -724,25 +743,27 @@ input:checked + .toggle-slider:before {
     gap: 1px;
     background: #ffffff;
     border: 1px solid #cbd5e1;
-    border-radius: 4px;
-    padding: 1px 2px;
-    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);
+    border-radius: 2px;
+    padding: 0 1px;
+    box-shadow: 0 1px 1px rgba(0, 0, 0, 0.05);
     user-select: none;
-    font-size: 0.72rem;
-    margin-top: 2px;
+    font-size: 0.65rem;
+    margin-top: 1px;
+    height: 14px;
+    max-width: 32px;
 }
 
 .day-offset-btn {
     border: none;
     background: #f1f5f9;
     color: #475569;
-    font-size: 0.72rem;
+    font-size: 0.65rem;
     font-weight: 800;
-    width: 15px;
-    height: 15px;
-    line-height: 14px;
+    width: 9px;
+    height: 11px;
+    line-height: 10px;
     padding: 0;
-    border-radius: 2px;
+    border-radius: 1px;
     cursor: pointer;
     transition: all 0.1s;
     display: flex;
@@ -756,18 +777,19 @@ input:checked + .toggle-slider:before {
 }
 
 .day-offset-val {
-    min-width: 20px;
+    min-width: 12px;
     text-align: center;
     font-weight: 800;
-    font-size: 0.72rem;
+    font-size: 0.65rem;
     color: #64748b;
-    padding: 0 1px;
+    padding: 0;
+    line-height: 11px;
 }
 
 .day-offset-val.offset-pos {
     color: #1d4ed8;
     background: #dbeafe;
-    border-radius: 2px;
+    border-radius: 1px;
 }
 
 .day-offset-val.offset-neg {

@@ -799,9 +799,9 @@ document.addEventListener('DOMContentLoaded', () => {
             const di = term.dates[d];
             const cls = di.wIdx === 5 ? 'header-sat' : ((di.wIdx === 6 || di.isHoliday) ? 'header-sun' : '');
             const thickCls = ((d + 1) % 7 === 0) ? 'border-thick-right' : '';
-            headHtml += `<th class="${cls} ${thickCls}" title="${di.label} (${di.weekday})${di.isHoliday ? ' 祝日' : ''}">
-                <div>${di.label}</div>
-                <small>${di.weekday}</small>
+            headHtml += `<th class="${cls} ${thickCls} header-day-col" title="${di.label} (${di.weekday})${di.isHoliday ? ' 祝日' : ''}">
+                <div class="day-label">${di.label}</div>
+                <div class="day-weekday"><small>${di.weekday}</small></div>
                 ${renderDayOffsetCtrl(d)}
             </th>`;
         }
@@ -1515,6 +1515,8 @@ document.addEventListener('DOMContentLoaded', () => {
             dates.push({
                 y,
                 m,
+                year: y,
+                month: m,
                 day,
                 weekday: WEEKDAYS[wIdx],
                 label: `${m}/${day}`,
@@ -1541,6 +1543,10 @@ document.addEventListener('DOMContentLoaded', () => {
         if (outTitle) outTitle.textContent = `✏️ ${title}（修正作業エリア）`;
         const checkTitle = document.getElementById('checkTitleDisplay');
         if (checkTitle) checkTitle.textContent = `🔍 ${title}（最終チェック&完成）`;
+
+        if (typeof updateRefreshBadge === 'function') {
+            updateRefreshBadge(dates);
+        }
 
         return { title, dates, first, last };
     }
@@ -1634,6 +1640,305 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     }
 
+    // ==========================================
+    // ★ リフレッシュ休暇（リフ）自動配分・管理システム
+    // ==========================================
+    function updateRefreshBadge(dates) {
+        const badge = document.getElementById('refreshTermBadge');
+        if (!badge) return;
+        const curDates = dates || getTermInfo().dates;
+        const groups = (typeof getTermRefreshGroups === 'function') ? getTermRefreshGroups(curDates) : [];
+        if (groups && groups.length > 0) {
+            const grpTexts = groups.map(g => `${g.month}月分(${g.symbol}: ${g.dayIndices.length}日間)`).join(' + ');
+            badge.innerHTML = `🌴 リフ対象: ${grpTexts}`;
+            badge.style.display = 'inline-block';
+            badge.title = `この期間にはリフレッシュ休暇（${groups.map(g => g.symbol).join(', ')}）の対象日が含まれています`;
+        } else {
+            badge.style.display = 'none';
+        }
+    }
+
+    function getObtainedRefreshHistory(currentStartDate) {
+        const pastHistory = {};
+        const currentHistory = {};
+        const allHistoryDetails = [];
+
+        for (let i = 1; i <= NUM_STAFF; i++) {
+            pastHistory[i] = new Set();
+            currentHistory[i] = new Set();
+        }
+
+        try {
+            const terms = getSavedTerms();
+            terms.forEach(termDate => {
+                const isCurrent = (termDate === currentStartDate);
+                const raw = localStorage.getItem(`${STORAGE_KEY_PREFIX}${termDate}`);
+                if (!raw) return;
+                const data = JSON.parse(raw);
+                if (!data) return;
+
+                if (data.outputGrid && Array.isArray(data.outputGrid)) {
+                    data.outputGrid.forEach((row, sIdx) => {
+                        const staffId = sIdx + 1;
+                        if (!pastHistory[staffId]) pastHistory[staffId] = new Set();
+                        if (!currentHistory[staffId]) currentHistory[staffId] = new Set();
+
+                        row.forEach((cell, dIdx) => {
+                            const sym = (cell && cell.symbol) ? cell.symbol : cell;
+                            if (SYMBOLS.REF_SUMMER.includes(sym) || SYMBOLS.REF_WINTER.includes(sym)) {
+                                if (isCurrent) {
+                                    currentHistory[staffId].add(sym);
+                                } else {
+                                    pastHistory[staffId].add(sym);
+                                }
+                                allHistoryDetails.push({
+                                    staffId,
+                                    staffName: (data.staffList && data.staffList[sIdx]) ? data.staffList[sIdx].name : `スタッフ ${staffId}`,
+                                    termDate,
+                                    symbol: sym,
+                                    dayIndex: dIdx,
+                                    isCurrent
+                                });
+                            }
+                        });
+                    });
+                } else if (data.staffList && Array.isArray(data.staffList)) {
+                    data.staffList.forEach((st, sIdx) => {
+                        const staffId = st.id || (sIdx + 1);
+                        if (!pastHistory[staffId]) pastHistory[staffId] = new Set();
+                        if (!currentHistory[staffId]) currentHistory[staffId] = new Set();
+
+                        if (Array.isArray(st.days)) {
+                            st.days.forEach((sym, dIdx) => {
+                                if (SYMBOLS.REF_SUMMER.includes(sym) || SYMBOLS.REF_WINTER.includes(sym)) {
+                                    if (isCurrent) {
+                                        currentHistory[staffId].add(sym);
+                                    } else {
+                                        pastHistory[staffId].add(sym);
+                                    }
+                                    allHistoryDetails.push({
+                                        staffId,
+                                        staffName: st.name,
+                                        termDate,
+                                        symbol: sym,
+                                        dayIndex: dIdx,
+                                        isCurrent
+                                    });
+                                }
+                            });
+                        }
+                    });
+                }
+            });
+        } catch (e) {
+            console.error('リフ取得履歴のスキャン中にエラー:', e);
+        }
+
+        // 現在メモリ上の staffList.days にあるリフも当ターム取得として追加
+        staffList.forEach(st => {
+            if (st.isUnused) return;
+            const staffId = st.id;
+            if (!currentHistory[staffId]) currentHistory[staffId] = new Set();
+            if (Array.isArray(st.days)) {
+                st.days.forEach(sym => {
+                    if (SYMBOLS.REF_SUMMER.includes(sym) || SYMBOLS.REF_WINTER.includes(sym)) {
+                        currentHistory[staffId].add(sym);
+                    }
+                });
+            }
+        });
+
+        return { pastHistory, currentHistory, allHistoryDetails };
+    }
+
+    function handleAutoAssignRefreshHolidays(options = {}) {
+        const silent = !!options.silent;
+        const term = getTermInfo();
+        const groups = (typeof getTermRefreshGroups === 'function') ? getTermRefreshGroups(term.dates) : [];
+
+        if (!groups || groups.length === 0) {
+            if (!silent) {
+                showToast('ℹ️ 現在の期間（' + term.title + '）はリフレッシュ休暇の対象月ではありません（対象: 6〜10月, 12〜2月）');
+            }
+            return { success: false, assignedCount: 0, reason: 'not_refresh_month' };
+        }
+
+        const curStartDate = document.getElementById('termStartDate')?.value || currentWorkingStartDate;
+        const { pastHistory } = getObtainedRefreshHistory(curStartDate);
+
+        pushHistory();
+        const res = autoAssignRefreshHolidaysCore(staffList, term.dates, {
+            obtainedHistory: pastHistory
+        });
+
+        if (res.assignedCount > 0) {
+            renderInputTable();
+            saveCurrentTermToStorage();
+            playNotificationSound();
+
+            if (!silent) {
+                const modal = document.getElementById('refreshResultModal');
+                const detailsEl = document.getElementById('refreshResultDetails');
+                const subtitleEl = document.getElementById('refreshResultSubtitle');
+
+                if (subtitleEl) {
+                    subtitleEl.textContent = `🌴 リフレッシュ休暇を計 ${res.assignedCount} 名に自動配分しました（重複なし・前ターム照合済）`;
+                }
+
+                if (detailsEl) {
+                    let html = '<div style="display:flex; flex-direction:column; gap:8px;">';
+                    res.groupResults.forEach(grp => {
+                        html += `
+                            <div style="border-left: 3px solid #10b981; padding-left: 8px;">
+                                <strong>【${grp.symbol} (${grp.month}月分)】</strong>: 
+                                ターム内 ${grp.daysInTerm}日 / 月全${grp.totalMonthDays}日 ➔ 日割り目標: <strong>${grp.targetCount}名</strong><br>
+                                <span style="font-size:0.8rem; color:#475569;">
+                                    （既存希望: ${grp.alreadyInTerm}名 ＋ 今回自動配分: <strong style="color:#047857;">${grp.assignedNow}名</strong>）
+                                </span>
+                            </div>
+                        `;
+                    });
+                    html += '</div>';
+
+                    if (res.assignments.length > 0) {
+                        html += '<div style="margin-top:10px; max-height:140px; overflow-y:auto; border-top:1px dashed #cbd5e1; padding-top:6px; font-size:0.78rem; color:#334155;">';
+                        html += '<strong>配分詳細:</strong><br>';
+                        res.assignments.forEach(a => {
+                            html += `・No.${a.staffId} ${a.staffName} ➔ <strong>${a.dateStr}</strong> に【${a.symbol}】<br>`;
+                        });
+                        html += '</div>';
+                    }
+
+                    detailsEl.innerHTML = html;
+                }
+
+                if (modal) modal.classList.add('active');
+                showToast(`🌴 リフレッシュ休暇を ${res.assignedCount} 名に日割り均等配分しました`);
+            }
+        } else {
+            if (!silent) {
+                showToast('ℹ️ リフレッシュ休暇は既に必要人数分が割り当て済みです（または全員取得済みです）');
+            }
+        }
+
+        return res;
+    }
+
+    function openRefreshStatusModal() {
+        const modal = document.getElementById('refreshStatusModal');
+        const container = document.getElementById('refreshStatusTableContainer');
+        const summaryText = document.getElementById('refStatusSummaryText');
+        if (!modal || !container) return;
+
+        const curStartDate = document.getElementById('termStartDate')?.value || currentWorkingStartDate;
+        const { pastHistory, currentHistory } = getObtainedRefreshHistory(curStartDate);
+
+        const refSymbols = ['上1', '上2', '上3', '上4', '上5', '下1', '下2', '下3'];
+        const activeStaff = staffList.filter(s => !s.isUnused);
+
+        let html = `
+            <table class="sheet-table" style="width: 100%; font-size: 0.8rem; border-collapse: collapse;">
+                <thead>
+                    <tr style="background: #f1f5f9;">
+                        <th style="padding: 6px; border: 1px solid #cbd5e1; width: 45px;">No.</th>
+                        <th style="padding: 6px; border: 1px solid #cbd5e1; min-width: 100px;">氏名</th>
+        `;
+        refSymbols.forEach(sym => {
+            const isSummer = sym.startsWith('上');
+            const bg = isSummer ? '#ecfdf5' : '#f0f9ff';
+            const color = isSummer ? '#047857' : '#0369a1';
+            html += `<th style="padding: 6px; border: 1px solid #cbd5e1; background: ${bg}; color: ${color}; text-align: center; width: 65px;">${sym}</th>`;
+        });
+        html += `
+                        <th style="padding: 6px; border: 1px solid #cbd5e1; width: 75px; text-align: center;">消化数</th>
+                    </tr>
+                </thead>
+                <tbody>
+        `;
+
+        let totalObtainedAll = 0;
+
+        activeStaff.forEach(st => {
+            const sId = st.id;
+            const past = pastHistory[sId] || new Set();
+            const cur = currentHistory[sId] || new Set();
+            let staffCount = 0;
+
+            html += `<tr>`;
+            html += `<td style="padding: 4px 6px; border: 1px solid #e2e8f0; text-align: center; font-weight: 600;">${sId}</td>`;
+            html += `<td style="padding: 4px 6px; border: 1px solid #e2e8f0; font-weight: 700; color: #1e293b;">${st.name}</td>`;
+
+            refSymbols.forEach(sym => {
+                if (cur.has(sym)) {
+                    staffCount++;
+                    totalObtainedAll++;
+                    html += `<td style="padding: 4px; border: 1px solid #e2e8f0; text-align: center; background: #dcfce7; color: #15803d; font-weight: 800;" title="当タームで取得">🌴 当ターム</td>`;
+                } else if (past.has(sym)) {
+                    staffCount++;
+                    totalObtainedAll++;
+                    html += `<td style="padding: 4px; border: 1px solid #e2e8f0; text-align: center; background: #e0f2fe; color: #0369a1; font-weight: 700;" title="過去タームで取得済">✅ 済</td>`;
+                } else {
+                    html += `<td style="padding: 4px; border: 1px solid #e2e8f0; text-align: center; color: #94a3b8;">-</td>`;
+                }
+            });
+
+            html += `<td style="padding: 4px 6px; border: 1px solid #e2e8f0; text-align: center; font-weight: 700; background: #f8fafc;">${staffCount} / 8</td>`;
+            html += `</tr>`;
+        });
+
+        html += `</tbody></table>`;
+        container.innerHTML = html;
+
+        if (summaryText) {
+            summaryText.textContent = `有効スタッフ: ${activeStaff.length}名 ／ 全体リフ消化総数: ${totalObtainedAll}回`;
+        }
+
+        modal.classList.add('active');
+    }
+
+    // イベントリスナーの登録
+    const autoAssignRefBtn = document.getElementById('autoAssignRefBtn');
+    if (autoAssignRefBtn) {
+        autoAssignRefBtn.addEventListener('click', () => {
+            handleAutoAssignRefreshHolidays({ silent: false });
+        });
+    }
+
+    const viewRefStatusBtn = document.getElementById('viewRefStatusBtn');
+    if (viewRefStatusBtn) {
+        viewRefStatusBtn.addEventListener('click', openRefreshStatusModal);
+    }
+
+    const closeRefreshResultModalBtn = document.getElementById('closeRefreshResultModalBtn');
+    if (closeRefreshResultModalBtn) {
+        closeRefreshResultModalBtn.addEventListener('click', () => {
+            document.getElementById('refreshResultModal')?.classList.remove('active');
+        });
+    }
+
+    const refreshResultSolveBtn = document.getElementById('refreshResultSolveBtn');
+    if (refreshResultSolveBtn) {
+        refreshResultSolveBtn.addEventListener('click', () => {
+            document.getElementById('refreshResultModal')?.classList.remove('active');
+            const targetSolveBtn = document.getElementById('solveBtn') || document.getElementById('inputSolveBtn');
+            if (targetSolveBtn) targetSolveBtn.click();
+        });
+    }
+
+    const closeRefStatusModalBtn = document.getElementById('closeRefStatusModalBtn');
+    if (closeRefStatusModalBtn) {
+        closeRefStatusModalBtn.addEventListener('click', () => {
+            document.getElementById('refreshStatusModal')?.classList.remove('active');
+        });
+    }
+
+    const closeRefStatusModalCross = document.getElementById('closeRefStatusModalCross');
+    if (closeRefStatusModalCross) {
+        closeRefStatusModalCross.addEventListener('click', () => {
+            document.getElementById('refreshStatusModal')?.classList.remove('active');
+        });
+    }
+
     // 第1段階: 基本勤務表 自動生成ボタン（特殊勤務の自動割当は行わず、すべて○で保持）
     const solveBtn = document.getElementById('solveBtn') || document.getElementById('inputSolveBtn');
     function setSolveLoading(loading) {
@@ -1657,6 +1962,28 @@ document.addEventListener('DOMContentLoaded', () => {
 
     if (solveBtn) {
         solveBtn.addEventListener('click', () => {
+            // ★ リフレッシュ休暇自動配分連携:
+            // ターム内にリフ対象月が含まれており、かつまだリフが一切入っていない場合、自動配分を先に適用！
+            const term = getTermInfo();
+            const refGroups = (typeof getTermRefreshGroups === 'function') ? getTermRefreshGroups(term.dates) : [];
+            if (refGroups && refGroups.length > 0) {
+                let hasRef = false;
+                for (let s = 0; s < NUM_STAFF; s++) {
+                    if (staffList[s].isUnused) continue;
+                    for (let d = 0; d < NUM_DAYS; d++) {
+                        const sym = staffList[s].days[d];
+                        if (SYMBOLS.REF_SUMMER.includes(sym) || SYMBOLS.REF_WINTER.includes(sym)) {
+                            hasRef = true;
+                            break;
+                        }
+                    }
+                    if (hasRef) break;
+                }
+                if (!hasRef) {
+                    handleAutoAssignRefreshHolidays({ silent: true });
+                }
+            }
+
             setSolveLoading(true);
 
             setTimeout(() => {
@@ -1818,9 +2145,9 @@ document.addEventListener('DOMContentLoaded', () => {
             const cls = dateInfo.wIdx === 5 ? 'header-sat' : ((dateInfo.wIdx === 6 || dateInfo.isHoliday) ? 'header-sun' : '');
             // 7日ごと（週区切り）および28日目に太線
             const thickCls = ((d + 1) % 7 === 0) ? 'border-thick-right' : '';
-            headHtml += `<th class="${cls} ${thickCls} border-thick-bottom" title="${dateInfo.label} (${dateInfo.weekday})${dateInfo.isHoliday ? ' 祝日' : ''}">
-                <div>${dateInfo.label}</div>
-                <small>${dateInfo.weekday}</small>
+            headHtml += `<th class="${cls} ${thickCls} border-thick-bottom header-day-col" title="${dateInfo.label} (${dateInfo.weekday})${dateInfo.isHoliday ? ' 祝日' : ''}">
+                <div class="day-label">${dateInfo.label}</div>
+                <div class="day-weekday"><small>${dateInfo.weekday}</small></div>
                 ${renderDayOffsetCtrl(d)}
             </th>`;
         }
@@ -1887,6 +2214,7 @@ document.addEventListener('DOMContentLoaded', () => {
         const totalEveSum = validStaffStats.reduce((acc, s) => acc + s.eve, 0);
         const totalH8Sum = validStaffStats.reduce((acc, s) => acc + s.h8, 0);
 
+        // 1行目: 出勤人数合計（総出勤者数）
         let footHtml = `
             <tr style="background:#f8fafc; font-weight:bold;">
                 <th class="sticky-col-1" colspan="2">出勤人数合計</th>
@@ -1894,15 +2222,7 @@ document.addEventListener('DOMContentLoaded', () => {
         for (let d = 0; d < NUM_DAYS; d++) {
             const dStat = stats.daily[d];
             const thickCls = ((d + 1) % 7 === 0) ? 'border-thick-right' : '';
-            const offset = (dayOffsets && dayOffsets[d]) ? dayOffsets[d] : 0;
-            let cellContent = `<div style="font-size:0.95rem; font-weight:800; color:#1e293b;">${dStat.totalWork}</div>`;
-            if (offset !== 0) {
-                const real = dStat.totalWork - offset;
-                const sign = offset > 0 ? `+${offset}` : `${offset}`;
-                const offColor = offset > 0 ? '#1d4ed8' : '#b91c1c';
-                cellContent += `<div style="font-size:0.7rem; font-weight:700; color:#64748b; line-height:1.1;">実質${real}<br><span style="color:${offColor};">(${sign})</span></div>`;
-            }
-            footHtml += `<td class="${thickCls}" style="vertical-align:middle;">${cellContent}</td>`;
+            footHtml += `<td class="${thickCls}" style="font-weight:800; color:#1e293b; font-size:0.95rem;">${dStat.totalWork}</td>`;
         }
         footHtml += `
             <td style="font-weight:700;">${totalWorkSum}</td>
@@ -1914,6 +2234,27 @@ document.addEventListener('DOMContentLoaded', () => {
             <td style="font-weight:600;">${totalEveSum}</td>
             <td style="font-weight:600;">${totalH8Sum}</td>
         </tr>`;
+
+        // 2行目: 実数合計（リハビリ実働人数: 出勤人数合計 - 加減枠）
+        const totalRealSum = stats.daily.reduce((sum, dStat, d) => sum + (dStat.totalWork - ((dayOffsets && dayOffsets[d]) || 0)), 0);
+        footHtml += `
+            <tr style="background:#f0fdf4; font-weight:bold; font-size:0.85rem; border-bottom: 2px solid #86efac;">
+                <th class="sticky-col-1" colspan="2" style="color:#166534;" title="行事等の出勤加減枠を除いた実際のリハビリ業務稼働人数">実数合計</th>
+        `;
+        for (let d = 0; d < NUM_DAYS; d++) {
+            const dStat = stats.daily[d];
+            const thickCls = ((d + 1) % 7 === 0) ? 'border-thick-right' : '';
+            const offset = (dayOffsets && dayOffsets[d]) ? dayOffsets[d] : 0;
+            const real = dStat.totalWork - offset;
+            let cellText = `<span style="font-weight:800; color:#15803d; font-size:0.95rem;">${real}</span>`;
+            if (offset !== 0) {
+                const offColor = offset > 0 ? '#1d4ed8' : '#b91c1c';
+                const sign = offset > 0 ? `+${offset}` : `${offset}`;
+                cellText += `<small style="font-size:0.7rem; color:${offColor}; margin-left:2px; font-weight:700;">(${sign})</small>`;
+            }
+            footHtml += `<td class="${thickCls}" style="vertical-align:middle; background:#f0fdf4;">${cellText}</td>`;
+        }
+        footHtml += `<td style="font-weight:800; color:#15803d; background:#dcfce7;">${totalRealSum}</td><td colspan="7" style="color:#94a3b8; background:#f0fdf4;">-</td></tr>`;
 
         // ★ セクション別出勤人数（PT A, PT B, OT A, OT B）
         const secList = [
