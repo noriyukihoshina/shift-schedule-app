@@ -29,7 +29,10 @@ document.addEventListener('DOMContentLoaded', () => {
         for (let d = 0; d < NUM_DAYS; d++) {
             const dObj = curDates[d];
             if (dObj) {
-                const isWeekendOrHol = dObj.isSun || dObj.isSat || dObj.isHoliday || dObj.isHol;
+                const isWeekendOrHol = dObj.isSun || dObj.isSat || 
+                                       dObj.wIdx === 5 || dObj.wIdx === 6 || 
+                                       dObj.weekday === '土' || dObj.weekday === '日' || 
+                                       dObj.isHoliday || dObj.isHol;
                 if (isWeekendOrHol) {
                     arr[d] = -2;
                 }
@@ -289,10 +292,19 @@ document.addEventListener('DOMContentLoaded', () => {
             currentWorkingStartDate = data.startDate;
             const term = getTermInfo();
 
-            // 2.5 日別出勤増減枠（dayOffsets）の復元（未保存なら土日祝日-2のデフォルトを適用）
-            dayOffsets = (Array.isArray(data.dayOffsets) && data.dayOffsets.length === NUM_DAYS)
-                ? [...data.dayOffsets]
-                : createDefaultDayOffsets(term.dates);
+            // 2.5 日別出勤増減枠（dayOffsets）の復元（未保存または旧仕様の全日0データの場合は土日祝日-2を適用）
+            const defaultOffsets = createDefaultDayOffsets(term.dates);
+            if (Array.isArray(data.dayOffsets) && data.dayOffsets.length === NUM_DAYS) {
+                const hasAnyNonZero = data.dayOffsets.some(v => v !== 0);
+                if (!hasAnyNonZero) {
+                    // 旧バージョンで全日0として保存されていたデータには、土日祝日-2を自動適用
+                    dayOffsets = [...defaultOffsets];
+                } else {
+                    dayOffsets = [...data.dayOffsets];
+                }
+            } else {
+                dayOffsets = [...defaultOffsets];
+            }
 
             // 4. 入力テーブル描画
             renderInputTable();
@@ -1581,7 +1593,10 @@ document.addEventListener('DOMContentLoaded', () => {
                 weekday: WEEKDAYS[wIdx],
                 label: `${m}/${day}`,
                 wIdx,
+                isSun: (wIdx === 6),
+                isSat: (wIdx === 5),
                 isHoliday,
+                isHol: isHoliday,
                 dateObj: d
             });
         }
