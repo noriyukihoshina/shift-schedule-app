@@ -3113,185 +3113,185 @@ document.addEventListener('DOMContentLoaded', () => {
 
         tableHtml += `</tbody>\n<tfoot>\n`;
 
-        // 1. 出勤人数合計（行高45px固定）
-        tableHtml += `  <tr style="height:45px; background-color:#ffffff;">
-    <th style="width:175px; height:45px; ${borderThin} ${borderThickR} border-bottom:1pt solid #64748b; font-weight:bold; text-align:center;">出勤人数合計</th>
+        // 1. 出勤人数合計（行高38px固定）
+        tableHtml += `  <tr style="height:38px; background-color:#ffffff;">
+    <th style="width:175px; height:38px; ${borderThin} ${borderThickR} border-bottom:1pt solid #64748b; font-weight:bold; text-align:center;">出勤人数合計</th>
 `;
         for (let d = 0; d < NUM_DAYS; d++) {
             const col = getExcelColName(d + 1);
             const rightBorder = ((d + 1) === NUM_DAYS) ? borderThickR : (((d + 1) % 7 === 0) ? borderMediumR : '');
             const fDayWork = `=${makeWorkCountFormula(`INDIRECT("${col}$4:${col}"&(ROW()-1))`)}`;
-            tableHtml += `    <td style="width:115px; min-width:115px; max-width:115px; height:45px; font-weight:bold; ${borderThin} ${rightBorder} border-bottom:1pt solid #64748b; text-align:center;">${fDayWork}</td>\n`;
+            tableHtml += `    <td style="width:115px; min-width:115px; max-width:115px; height:38px; font-weight:bold; ${borderThin} ${rightBorder} border-bottom:1pt solid #64748b; text-align:center;">${fDayWork}</td>\n`;
         }
-        tableHtml += `    <td style="width:105px; height:45px; font-weight:bold; ${borderThin} border-bottom:1pt solid #64748b; text-align:center;">=SUM(INDIRECT("AD$4:AD"&(ROW()-1)))</td>
-    <td style="width:105px; height:45px; font-weight:bold; color:#000000; ${borderThin} border-bottom:1pt solid #64748b; text-align:center;">=SUM(INDIRECT("AE$4:AE"&(ROW()-1)))</td>
-    <td style="width:105px; height:45px; font-weight:bold; color:#000000; ${borderThin} border-bottom:1pt solid #64748b; text-align:center;">=SUM(INDIRECT("AF$4:AF"&(ROW()-1)))</td>
-    <td style="width:75px; height:45px; font-weight:bold; color:#000000; ${borderThin} border-bottom:1pt solid #64748b; text-align:center;">=SUM(INDIRECT("AG$4:AG"&(ROW()-1)))</td>
-    <td style="width:75px; min-width:75px; max-width:75px; height:45px; font-weight:bold; color:#334155; ${borderThin} border-bottom:1pt solid #64748b; text-align:center;">=SUM(INDIRECT("AH$4:AH"&(ROW()-1)))</td>
-    <td style="width:75px; min-width:75px; max-width:75px; height:45px; font-weight:bold; color:#334155; ${borderThin} border-bottom:1pt solid #64748b; text-align:center;">=SUM(INDIRECT("AI$4:AI"&(ROW()-1)))</td>
-    <td style="width:75px; min-width:75px; max-width:75px; height:45px; font-weight:bold; color:#334155; ${borderThin} border-bottom:1pt solid #64748b; text-align:center;">=SUM(INDIRECT("AJ$4:AJ"&(ROW()-1)))</td>
-    <td style="width:75px; min-width:75px; max-width:75px; height:45px; font-weight:bold; color:#334155; ${borderThin} border-bottom:1pt solid #64748b; text-align:center;">=SUM(INDIRECT("AK$4:AK"&(ROW()-1)))</td>
+        tableHtml += `    <td style="width:105px; height:38px; font-weight:bold; ${borderThin} border-bottom:1pt solid #64748b; text-align:center;">=SUM(INDIRECT("AD$4:AD"&(ROW()-1)))</td>
+    <td style="width:105px; height:38px; font-weight:bold; color:#000000; ${borderThin} border-bottom:1pt solid #64748b; text-align:center;">=SUM(INDIRECT("AE$4:AE"&(ROW()-1)))</td>
+    <td style="width:105px; height:38px; font-weight:bold; color:#000000; ${borderThin} border-bottom:1pt solid #64748b; text-align:center;">=SUM(INDIRECT("AF$4:AF"&(ROW()-1)))</td>
+    <td style="width:75px; height:38px; font-weight:bold; color:#000000; ${borderThin} border-bottom:1pt solid #64748b; text-align:center;">=SUM(INDIRECT("AG$4:AG"&(ROW()-1)))</td>
+    <td style="width:75px; min-width:75px; max-width:75px; height:38px; font-weight:bold; color:#334155; ${borderThin} border-bottom:1pt solid #64748b; text-align:center;">=SUM(INDIRECT("AH$4:AH"&(ROW()-1)))</td>
+    <td style="width:75px; min-width:75px; max-width:75px; height:38px; font-weight:bold; color:#334155; ${borderThin} border-bottom:1pt solid #64748b; text-align:center;">=SUM(INDIRECT("AI$4:AI"&(ROW()-1)))</td>
+    <td style="width:75px; min-width:75px; max-width:75px; height:38px; font-weight:bold; color:#334155; ${borderThin} border-bottom:1pt solid #64748b; text-align:center;">=SUM(INDIRECT("AJ$4:AJ"&(ROW()-1)))</td>
+    <td style="width:75px; min-width:75px; max-width:75px; height:38px; font-weight:bold; color:#334155; ${borderThin} border-bottom:1pt solid #64748b; text-align:center;">=SUM(INDIRECT("AK$4:AK"&(ROW()-1)))</td>
   </tr>
 `;
 
-        // 2. 実数合計（行高45px固定）
+        // 2. 実数合計（行高38px固定）
         const realRowIdx = endRow + 2;
-        tableHtml += `  <tr style="height:45px; background-color:#ffffff;">
-    <th style="width:175px; height:45px; ${borderThin} ${borderThickR} border-bottom:0.5pt solid #cbd5e1; font-weight:bold; text-align:center;">実数合計</th>
+        tableHtml += `  <tr style="height:38px; background-color:#ffffff;">
+    <th style="width:175px; height:38px; ${borderThin} ${borderThickR} border-bottom:0.5pt solid #cbd5e1; font-weight:bold; text-align:center;">実数合計</th>
 `;
         for (let d = 0; d < NUM_DAYS; d++) {
             const col = getExcelColName(d + 1);
             const rightBorder = ((d + 1) === NUM_DAYS) ? borderThickR : (((d + 1) % 7 === 0) ? borderMediumR : '');
             const offset = (dayOffsets && dayOffsets[d]) ? dayOffsets[d] : 0;
             const fReal = offset === 0 ? `=INDIRECT("${col}"&(ROW()-1))` : `=INDIRECT("${col}"&(ROW()-1))-(${offset})`;
-            tableHtml += `    <td style="width:115px; min-width:115px; max-width:115px; height:45px; font-weight:bold; ${borderThin} ${rightBorder} border-bottom:0.5pt solid #cbd5e1; text-align:center;">${fReal}</td>\n`;
+            tableHtml += `    <td style="width:115px; min-width:115px; max-width:115px; height:38px; font-weight:bold; ${borderThin} ${rightBorder} border-bottom:0.5pt solid #cbd5e1; text-align:center;">${fReal}</td>\n`;
         }
-        tableHtml += `    <td style="width:105px; height:45px; font-weight:bold; ${borderThin} border-bottom:0.5pt solid #cbd5e1; text-align:center;">=SUM(B${realRowIdx}:AC${realRowIdx})</td>
-    <td colspan="7" style="height:45px; ${borderThin} border-bottom:0.5pt solid #cbd5e1; text-align:center; color:#94a3b8;">-</td>
+        tableHtml += `    <td style="width:105px; height:38px; font-weight:bold; ${borderThin} border-bottom:0.5pt solid #cbd5e1; text-align:center;">=SUM(B${realRowIdx}:AC${realRowIdx})</td>
+    <td colspan="7" style="height:38px; ${borderThin} border-bottom:0.5pt solid #cbd5e1; text-align:center; color:#94a3b8;">-</td>
   </tr>
 `;
 
         // 3. PT A 出勤
         const ptARowIdx = endRow + 3;
-        tableHtml += `  <tr style="height:45px; background-color:#ffffff;">
-    <th style="width:175px; height:45px; color:#ea580c; font-weight:bold; ${borderThin} ${borderThickR} border-bottom:0.5pt solid #cbd5e1; text-align:center;">PT A 出勤</th>
+        tableHtml += `  <tr style="height:38px; background-color:#ffffff;">
+    <th style="width:175px; height:38px; color:#ea580c; font-weight:bold; ${borderThin} ${borderThickR} border-bottom:0.5pt solid #cbd5e1; text-align:center;">PT A 出勤</th>
 `;
         for (let d = 0; d < NUM_DAYS; d++) {
             const col = getExcelColName(d + 1);
             const rightBorder = ((d + 1) === NUM_DAYS) ? borderThickR : (((d + 1) % 7 === 0) ? borderMediumR : '');
             const fPtA = `=${makeWorkCountFormula(`${col}$${ptAStart}:${col}$${ptAEnd}`)}`;
-            tableHtml += `    <td style="width:115px; min-width:115px; max-width:115px; height:45px; color:#ea580c; font-weight:bold; ${borderThin} ${rightBorder} border-bottom:0.5pt solid #cbd5e1; text-align:center;">${fPtA}</td>\n`;
+            tableHtml += `    <td style="width:115px; min-width:115px; max-width:115px; height:38px; color:#ea580c; font-weight:bold; ${borderThin} ${rightBorder} border-bottom:0.5pt solid #cbd5e1; text-align:center;">${fPtA}</td>\n`;
         }
-        tableHtml += `    <td style="width:105px; height:45px; color:#ea580c; font-weight:bold; ${borderThin} border-bottom:0.5pt solid #cbd5e1; text-align:center;">=SUM(B${ptARowIdx}:AC${ptARowIdx})</td>
-    <td colspan="7" style="height:45px; ${borderThin} border-bottom:0.5pt solid #cbd5e1; text-align:center; color:#94a3b8;">-</td>
+        tableHtml += `    <td style="width:105px; height:38px; color:#ea580c; font-weight:bold; ${borderThin} border-bottom:0.5pt solid #cbd5e1; text-align:center;">=SUM(B${ptARowIdx}:AC${ptARowIdx})</td>
+    <td colspan="7" style="height:38px; ${borderThin} border-bottom:0.5pt solid #cbd5e1; text-align:center; color:#94a3b8;">-</td>
   </tr>
 `;
 
         // 4. OT A 出勤
         const otARowIdx = endRow + 4;
-        tableHtml += `  <tr style="height:45px; background-color:#ffffff;">
-    <th style="width:175px; height:45px; color:#ea580c; font-weight:bold; ${borderThin} ${borderThickR} border-bottom:0.5pt solid #cbd5e1; text-align:center;">OT A 出勤</th>
+        tableHtml += `  <tr style="height:38px; background-color:#ffffff;">
+    <th style="width:175px; height:38px; color:#ea580c; font-weight:bold; ${borderThin} ${borderThickR} border-bottom:0.5pt solid #cbd5e1; text-align:center;">OT A 出勤</th>
 `;
         for (let d = 0; d < NUM_DAYS; d++) {
             const col = getExcelColName(d + 1);
             const rightBorder = ((d + 1) === NUM_DAYS) ? borderThickR : (((d + 1) % 7 === 0) ? borderMediumR : '');
             const fOtA = `=${makeWorkCountFormula(`${col}$${otAStart}:${col}$${otAEnd}`)}`;
-            tableHtml += `    <td style="width:115px; min-width:115px; max-width:115px; height:45px; color:#ea580c; font-weight:bold; ${borderThin} ${rightBorder} border-bottom:0.5pt solid #cbd5e1; text-align:center;">${fOtA}</td>\n`;
+            tableHtml += `    <td style="width:115px; min-width:115px; max-width:115px; height:38px; color:#ea580c; font-weight:bold; ${borderThin} ${rightBorder} border-bottom:0.5pt solid #cbd5e1; text-align:center;">${fOtA}</td>\n`;
         }
-        tableHtml += `    <td style="width:105px; height:45px; color:#ea580c; font-weight:bold; ${borderThin} border-bottom:0.5pt solid #cbd5e1; text-align:center;">=SUM(B${otARowIdx}:AC${otARowIdx})</td>
-    <td colspan="7" style="height:45px; ${borderThin} border-bottom:0.5pt solid #cbd5e1; text-align:center; color:#94a3b8;">-</td>
+        tableHtml += `    <td style="width:105px; height:38px; color:#ea580c; font-weight:bold; ${borderThin} border-bottom:0.5pt solid #cbd5e1; text-align:center;">=SUM(B${otARowIdx}:AC${otARowIdx})</td>
+    <td colspan="7" style="height:38px; ${borderThin} border-bottom:0.5pt solid #cbd5e1; text-align:center; color:#94a3b8;">-</td>
   </tr>
 `;
 
         // 5. PT B 出勤
         const ptBRowIdx = endRow + 5;
-        tableHtml += `  <tr style="height:45px; background-color:#ffffff;">
-    <th style="width:175px; height:45px; color:#1d4ed8; font-weight:bold; ${borderThin} ${borderThickR} border-bottom:0.5pt solid #cbd5e1; text-align:center;">PT B 出勤</th>
+        tableHtml += `  <tr style="height:38px; background-color:#ffffff;">
+    <th style="width:175px; height:38px; color:#1d4ed8; font-weight:bold; ${borderThin} ${borderThickR} border-bottom:0.5pt solid #cbd5e1; text-align:center;">PT B 出勤</th>
 `;
         for (let d = 0; d < NUM_DAYS; d++) {
             const col = getExcelColName(d + 1);
             const rightBorder = ((d + 1) === NUM_DAYS) ? borderThickR : (((d + 1) % 7 === 0) ? borderMediumR : '');
             const fPtB = `=${makeWorkCountFormula(`${col}$${ptBStart}:${col}$${ptBEnd}`)}`;
-            tableHtml += `    <td style="width:115px; min-width:115px; max-width:115px; height:45px; color:#1d4ed8; font-weight:bold; ${borderThin} ${rightBorder} border-bottom:0.5pt solid #cbd5e1; text-align:center;">${fPtB}</td>\n`;
+            tableHtml += `    <td style="width:115px; min-width:115px; max-width:115px; height:38px; color:#1d4ed8; font-weight:bold; ${borderThin} ${rightBorder} border-bottom:0.5pt solid #cbd5e1; text-align:center;">${fPtB}</td>\n`;
         }
-        tableHtml += `    <td style="width:105px; height:45px; color:#1d4ed8; font-weight:bold; ${borderThin} border-bottom:0.5pt solid #cbd5e1; text-align:center;">=SUM(B${ptBRowIdx}:AC${ptBRowIdx})</td>
-    <td colspan="7" style="height:45px; ${borderThin} border-bottom:0.5pt solid #cbd5e1; text-align:center; color:#94a3b8;">-</td>
+        tableHtml += `    <td style="width:105px; height:38px; color:#1d4ed8; font-weight:bold; ${borderThin} border-bottom:0.5pt solid #cbd5e1; text-align:center;">=SUM(B${ptBRowIdx}:AC${ptBRowIdx})</td>
+    <td colspan="7" style="height:38px; ${borderThin} border-bottom:0.5pt solid #cbd5e1; text-align:center; color:#94a3b8;">-</td>
   </tr>
 `;
 
         // 6. OT B 出勤
         const otBRowIdx = endRow + 6;
-        tableHtml += `  <tr style="height:45px; background-color:#ffffff;">
-    <th style="width:175px; height:45px; color:#1d4ed8; font-weight:bold; ${borderThin} ${borderThickR} border-bottom:0.5pt solid #cbd5e1; text-align:center;">OT B 出勤</th>
+        tableHtml += `  <tr style="height:38px; background-color:#ffffff;">
+    <th style="width:175px; height:38px; color:#1d4ed8; font-weight:bold; ${borderThin} ${borderThickR} border-bottom:0.5pt solid #cbd5e1; text-align:center;">OT B 出勤</th>
 `;
         for (let d = 0; d < NUM_DAYS; d++) {
             const col = getExcelColName(d + 1);
             const rightBorder = ((d + 1) === NUM_DAYS) ? borderThickR : (((d + 1) % 7 === 0) ? borderMediumR : '');
             const fOtB = `=${makeWorkCountFormula(`${col}$${otBStart}:${col}$${otBEnd}`)}`;
-            tableHtml += `    <td style="width:115px; min-width:115px; max-width:115px; height:45px; color:#1d4ed8; font-weight:bold; ${borderThin} ${rightBorder} border-bottom:0.5pt solid #cbd5e1; text-align:center;">${fOtB}</td>\n`;
+            tableHtml += `    <td style="width:115px; min-width:115px; max-width:115px; height:38px; color:#1d4ed8; font-weight:bold; ${borderThin} ${rightBorder} border-bottom:0.5pt solid #cbd5e1; text-align:center;">${fOtB}</td>\n`;
         }
-        tableHtml += `    <td style="width:105px; height:45px; color:#1d4ed8; font-weight:bold; ${borderThin} border-bottom:0.5pt solid #cbd5e1; text-align:center;">=SUM(B${otBRowIdx}:AC${otBRowIdx})</td>
-    <td colspan="7" style="height:45px; ${borderThin} border-bottom:0.5pt solid #cbd5e1; text-align:center; color:#94a3b8;">-</td>
+        tableHtml += `    <td style="width:105px; height:38px; color:#1d4ed8; font-weight:bold; ${borderThin} border-bottom:0.5pt solid #cbd5e1; text-align:center;">=SUM(B${otBRowIdx}:AC${otBRowIdx})</td>
+    <td colspan="7" style="height:38px; ${borderThin} border-bottom:0.5pt solid #cbd5e1; text-align:center; color:#94a3b8;">-</td>
   </tr>
 `;
 
         // 7. ST 出勤（51と52の間にSTが挟まれた場合に自動追従・集計）
         const stRowIdx = endRow + 7;
-        tableHtml += `  <tr style="height:45px; background-color:#ffffff;">
-    <th style="width:175px; height:45px; color:#ec4899; font-weight:bold; ${borderThin} ${borderThickR} border-bottom:0.5pt solid #cbd5e1; text-align:center;">ST 出勤</th>
+        tableHtml += `  <tr style="height:38px; background-color:#ffffff;">
+    <th style="width:175px; height:38px; color:#ec4899; font-weight:bold; ${borderThin} ${borderThickR} border-bottom:0.5pt solid #cbd5e1; text-align:center;">ST 出勤</th>
 `;
         for (let d = 0; d < NUM_DAYS; d++) {
             const col = getExcelColName(d + 1);
             const rightBorder = ((d + 1) === NUM_DAYS) ? borderThickR : (((d + 1) % 7 === 0) ? borderMediumR : '');
             const fSt = `=IF((ROW()-7)<${stStartRow},0,${makeWorkCountFormula(`INDIRECT("${col}\$${stStartRow}:${col}"&(ROW()-7))`)} )`;
-            tableHtml += `    <td style="width:115px; min-width:115px; max-width:115px; height:45px; color:#ec4899; font-weight:bold; ${borderThin} ${rightBorder} border-bottom:0.5pt solid #cbd5e1; text-align:center;">${fSt}</td>\n`;
+            tableHtml += `    <td style="width:115px; min-width:115px; max-width:115px; height:38px; color:#ec4899; font-weight:bold; ${borderThin} ${rightBorder} border-bottom:0.5pt solid #cbd5e1; text-align:center;">${fSt}</td>\n`;
         }
-        tableHtml += `    <td style="width:105px; height:45px; color:#ec4899; font-weight:bold; ${borderThin} border-bottom:0.5pt solid #cbd5e1; text-align:center;">=SUM(B${stRowIdx}:AC${stRowIdx})</td>
-    <td colspan="7" style="height:45px; ${borderThin} border-bottom:0.5pt solid #cbd5e1; text-align:center; color:#94a3b8;">-</td>
+        tableHtml += `    <td style="width:105px; height:38px; color:#ec4899; font-weight:bold; ${borderThin} border-bottom:0.5pt solid #cbd5e1; text-align:center;">=SUM(B${stRowIdx}:AC${stRowIdx})</td>
+    <td colspan="7" style="height:38px; ${borderThin} border-bottom:0.5pt solid #cbd5e1; text-align:center; color:#94a3b8;">-</td>
   </tr>
 `;
 
         // 8. 早番
         const earlyRowIdx = endRow + 8;
-        tableHtml += `  <tr style="height:45px; background-color:#ffffff;">
-    <th style="width:175px; height:45px; color:#334155; font-weight:bold; ${borderThin} ${borderThickR} border-bottom:0.5pt solid #cbd5e1; text-align:center;">早番</th>
+        tableHtml += `  <tr style="height:38px; background-color:#ffffff;">
+    <th style="width:175px; height:38px; color:#334155; font-weight:bold; ${borderThin} ${borderThickR} border-bottom:0.5pt solid #cbd5e1; text-align:center;">早番</th>
 `;
         for (let d = 0; d < NUM_DAYS; d++) {
             const col = getExcelColName(d + 1);
             const rightBorder = ((d + 1) === NUM_DAYS) ? borderThickR : (((d + 1) % 7 === 0) ? borderMediumR : '');
             const fEarly = `=COUNTIF(INDIRECT("${col}$4:${col}"&(ROW()-8)),"早")+COUNTIF(INDIRECT("${col}$4:${col}"&(ROW()-8)),"ハヤ")`;
-            tableHtml += `    <td style="width:115px; min-width:115px; max-width:115px; height:45px; color:#334155; font-weight:bold; ${borderThin} ${rightBorder} border-bottom:0.5pt solid #cbd5e1; text-align:center;">${fEarly}</td>\n`;
+            tableHtml += `    <td style="width:115px; min-width:115px; max-width:115px; height:38px; color:#334155; font-weight:bold; ${borderThin} ${rightBorder} border-bottom:0.5pt solid #cbd5e1; text-align:center;">${fEarly}</td>\n`;
         }
-        tableHtml += `    <td style="width:105px; height:45px; color:#334155; font-weight:bold; ${borderThin} border-bottom:0.5pt solid #cbd5e1; text-align:center;">=SUM(B${earlyRowIdx}:AC${earlyRowIdx})</td>
-    <td colspan="7" style="height:45px; ${borderThin} border-bottom:0.5pt solid #cbd5e1; text-align:center; color:#94a3b8;">-</td>
+        tableHtml += `    <td style="width:105px; height:38px; color:#334155; font-weight:bold; ${borderThin} border-bottom:0.5pt solid #cbd5e1; text-align:center;">=SUM(B${earlyRowIdx}:AC${earlyRowIdx})</td>
+    <td colspan="7" style="height:38px; ${borderThin} border-bottom:0.5pt solid #cbd5e1; text-align:center; color:#94a3b8;">-</td>
   </tr>
 `;
 
         // 9. 遅番
         const lateRowIdx = endRow + 9;
-        tableHtml += `  <tr style="height:45px; background-color:#ffffff;">
-    <th style="width:175px; height:45px; color:#334155; font-weight:bold; ${borderThin} ${borderThickR} border-bottom:0.5pt solid #cbd5e1; text-align:center;">遅番</th>
+        tableHtml += `  <tr style="height:38px; background-color:#ffffff;">
+    <th style="width:175px; height:38px; color:#334155; font-weight:bold; ${borderThin} ${borderThickR} border-bottom:0.5pt solid #cbd5e1; text-align:center;">遅番</th>
 `;
         for (let d = 0; d < NUM_DAYS; d++) {
             const col = getExcelColName(d + 1);
             const rightBorder = ((d + 1) === NUM_DAYS) ? borderThickR : (((d + 1) % 7 === 0) ? borderMediumR : '');
             const fLate = `=COUNTIF(INDIRECT("${col}$4:${col}"&(ROW()-9)),"遅")+COUNTIF(INDIRECT("${col}$4:${col}"&(ROW()-9)),"オソ")`;
-            tableHtml += `    <td style="width:115px; min-width:115px; max-width:115px; height:45px; color:#334155; font-weight:bold; ${borderThin} ${rightBorder} border-bottom:0.5pt solid #cbd5e1; text-align:center;">${fLate}</td>\n`;
+            tableHtml += `    <td style="width:115px; min-width:115px; max-width:115px; height:38px; color:#334155; font-weight:bold; ${borderThin} ${rightBorder} border-bottom:0.5pt solid #cbd5e1; text-align:center;">${fLate}</td>\n`;
         }
-        tableHtml += `    <td style="width:105px; height:45px; color:#334155; font-weight:bold; ${borderThin} border-bottom:0.5pt solid #cbd5e1; text-align:center;">=SUM(B${lateRowIdx}:AC${lateRowIdx})</td>
-    <td colspan="7" style="height:45px; ${borderThin} border-bottom:0.5pt solid #cbd5e1; text-align:center; color:#94a3b8;">-</td>
+        tableHtml += `    <td style="width:105px; height:38px; color:#334155; font-weight:bold; ${borderThin} border-bottom:0.5pt solid #cbd5e1; text-align:center;">=SUM(B${lateRowIdx}:AC${lateRowIdx})</td>
+    <td colspan="7" style="height:38px; ${borderThin} border-bottom:0.5pt solid #cbd5e1; text-align:center; color:#94a3b8;">-</td>
   </tr>
 `;
 
         // 10. E
         const eveRowIdx = endRow + 10;
-        tableHtml += `  <tr style="height:45px; background-color:#ffffff;">
-    <th style="width:175px; height:45px; color:#334155; font-weight:bold; ${borderThin} ${borderThickR} border-bottom:0.5pt solid #cbd5e1; text-align:center;">E</th>
+        tableHtml += `  <tr style="height:38px; background-color:#ffffff;">
+    <th style="width:175px; height:38px; color:#334155; font-weight:bold; ${borderThin} ${borderThickR} border-bottom:0.5pt solid #cbd5e1; text-align:center;">E</th>
 `;
         for (let d = 0; d < NUM_DAYS; d++) {
             const col = getExcelColName(d + 1);
             const rightBorder = ((d + 1) === NUM_DAYS) ? borderThickR : (((d + 1) % 7 === 0) ? borderMediumR : '');
             const fEve = `=COUNTIF(INDIRECT("${col}$4:${col}"&(ROW()-10)),"E")+COUNTIF(INDIRECT("${col}$4:${col}"&(ROW()-10)),"イブ")`;
-            tableHtml += `    <td style="width:115px; min-width:115px; max-width:115px; height:45px; color:#334155; font-weight:bold; ${borderThin} ${rightBorder} border-bottom:0.5pt solid #cbd5e1; text-align:center;">${fEve}</td>\n`;
+            tableHtml += `    <td style="width:115px; min-width:115px; max-width:115px; height:38px; color:#334155; font-weight:bold; ${borderThin} ${rightBorder} border-bottom:0.5pt solid #cbd5e1; text-align:center;">${fEve}</td>\n`;
         }
-        tableHtml += `    <td style="width:105px; height:45px; color:#334155; font-weight:bold; ${borderThin} border-bottom:0.5pt solid #cbd5e1; text-align:center;">=SUM(B${eveRowIdx}:AC${eveRowIdx})</td>
-    <td colspan="7" style="height:45px; ${borderThin} border-bottom:0.5pt solid #cbd5e1; text-align:center; color:#94a3b8;">-</td>
+        tableHtml += `    <td style="width:105px; height:38px; color:#334155; font-weight:bold; ${borderThin} border-bottom:0.5pt solid #cbd5e1; text-align:center;">=SUM(B${eveRowIdx}:AC${eveRowIdx})</td>
+    <td colspan="7" style="height:38px; ${borderThin} border-bottom:0.5pt solid #cbd5e1; text-align:center; color:#94a3b8;">-</td>
   </tr>
 `;
 
         // 11. 8時
         const h8RowIdx = endRow + 11;
-        tableHtml += `  <tr style="height:45px; background-color:#ffffff;">
-    <th style="width:175px; height:45px; color:#334155; font-weight:bold; ${borderThin} ${borderThickR} ${borderThickB} text-align:center;">8時</th>
+        tableHtml += `  <tr style="height:38px; background-color:#ffffff;">
+    <th style="width:175px; height:38px; color:#334155; font-weight:bold; ${borderThin} ${borderThickR} ${borderThickB} text-align:center;">8時</th>
 `;
         for (let d = 0; d < NUM_DAYS; d++) {
             const col = getExcelColName(d + 1);
             const rightBorder = ((d + 1) === NUM_DAYS) ? borderThickR : (((d + 1) % 7 === 0) ? borderMediumR : '');
             const fH8 = `=COUNTIF(INDIRECT("${col}$4:${col}"&(ROW()-11)),"8時")`;
-            tableHtml += `    <td style="width:115px; min-width:115px; max-width:115px; height:45px; color:#334155; font-weight:bold; ${borderThin} ${rightBorder} ${borderThickB} text-align:center;">${fH8}</td>\n`;
+            tableHtml += `    <td style="width:115px; min-width:115px; max-width:115px; height:38px; color:#334155; font-weight:bold; ${borderThin} ${rightBorder} ${borderThickB} text-align:center;">${fH8}</td>\n`;
         }
-        tableHtml += `    <td style="width:105px; height:45px; color:#334155; font-weight:bold; ${borderThin} ${borderThickB} text-align:center;">=SUM(B${h8RowIdx}:AC${h8RowIdx})</td>
-    <td colspan="7" style="height:45px; ${borderThin} ${borderThickB}; text-align:center; color:#94a3b8;">-</td>
+        tableHtml += `    <td style="width:105px; height:38px; color:#334155; font-weight:bold; ${borderThin} ${borderThickB} text-align:center;">=SUM(B${h8RowIdx}:AC${h8RowIdx})</td>
+    <td colspan="7" style="height:38px; ${borderThin} ${borderThickB}; text-align:center; color:#94a3b8;">-</td>
   </tr>
 </tfoot>
 </table>`;
@@ -4534,10 +4534,10 @@ document.addEventListener('DOMContentLoaded', () => {
             sheet1 += `\n    </row>`;
         });
 
-        // 集計フッター行 (静的範囲参照に統一：保護ビュー完全対応、行高45px固定 -> ht="33.75")
+        // 集計フッター行 (静的範囲参照に統一：保護ビュー完全対応、行高38px固定 -> ht="28.5")
         // 1. 出勤人数合計
         const rWork = endRow + 1;
-        sheet1 += `\n    <row r="${rWork}" ht="33.75" customHeight="1">
+        sheet1 += `\n    <row r="${rWork}" ht="28.5" customHeight="1">
       <c r="A${rWork}" s="9" t="inlineStr"><is><t>出勤人数合計</t></is></c>`;
         for (let d = 0; d < NUM_DAYS; d++) {
             const col = toColLetter(2 + d);
@@ -4555,7 +4555,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
         // 2. 実数合計
         const rReal = endRow + 2;
-        sheet1 += `\n    <row r="${rReal}" ht="33.75" customHeight="1">
+        sheet1 += `\n    <row r="${rReal}" ht="28.5" customHeight="1">
       <c r="A${rReal}" s="9" t="inlineStr"><is><t>実数合計</t></is></c>`;
         for (let d = 0; d < NUM_DAYS; d++) {
             const col = toColLetter(2 + d);
@@ -4571,7 +4571,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
         // 3. PT A 出勤
         const rPtA = endRow + 3;
-        sheet1 += `\n    <row r="${rPtA}" ht="33.75" customHeight="1">
+        sheet1 += `\n    <row r="${rPtA}" ht="28.5" customHeight="1">
       <c r="A${rPtA}" s="10" t="inlineStr"><is><t>PT A 出勤</t></is></c>`;
         for (let d = 0; d < NUM_DAYS; d++) {
             const col = toColLetter(2 + d);
@@ -4584,7 +4584,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
         // 4. OT A 出勤
         const rOtA = endRow + 4;
-        sheet1 += `\n    <row r="${rOtA}" ht="33.75" customHeight="1">
+        sheet1 += `\n    <row r="${rOtA}" ht="28.5" customHeight="1">
       <c r="A${rOtA}" s="10" t="inlineStr"><is><t>OT A 出勤</t></is></c>`;
         for (let d = 0; d < NUM_DAYS; d++) {
             const col = toColLetter(2 + d);
@@ -4597,7 +4597,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
         // 5. PT B 出勤
         const rPtB = endRow + 5;
-        sheet1 += `\n    <row r="${rPtB}" ht="33.75" customHeight="1">
+        sheet1 += `\n    <row r="${rPtB}" ht="28.5" customHeight="1">
       <c r="A${rPtB}" s="11" t="inlineStr"><is><t>PT B 出勤</t></is></c>`;
         for (let d = 0; d < NUM_DAYS; d++) {
             const col = toColLetter(2 + d);
@@ -4610,7 +4610,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
         // 6. OT B 出勤
         const rOtB = endRow + 6;
-        sheet1 += `\n    <row r="${rOtB}" ht="33.75" customHeight="1">
+        sheet1 += `\n    <row r="${rOtB}" ht="28.5" customHeight="1">
       <c r="A${rOtB}" s="11" t="inlineStr"><is><t>OT B 出勤</t></is></c>`;
         for (let d = 0; d < NUM_DAYS; d++) {
             const col = toColLetter(2 + d);
@@ -4623,7 +4623,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
         // 7. ST 出勤
         const rSt = endRow + 7;
-        sheet1 += `\n    <row r="${rSt}" ht="33.75" customHeight="1">
+        sheet1 += `\n    <row r="${rSt}" ht="28.5" customHeight="1">
       <c r="A${rSt}" s="12" t="inlineStr"><is><t>ST 出勤</t></is></c>`;
         for (let d = 0; d < NUM_DAYS; d++) {
             const col = toColLetter(2 + d);
@@ -4636,7 +4636,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
         // 8. 早番
         const rEarly = endRow + 8;
-        sheet1 += `\n    <row r="${rEarly}" ht="33.75" customHeight="1">
+        sheet1 += `\n    <row r="${rEarly}" ht="28.5" customHeight="1">
       <c r="A${rEarly}" s="13" t="inlineStr"><is><t>早番</t></is></c>`;
         for (let d = 0; d < NUM_DAYS; d++) {
             const col = toColLetter(2 + d);
@@ -4648,7 +4648,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
         // 9. 遅番
         const rLate = endRow + 9;
-        sheet1 += `\n    <row r="${rLate}" ht="33.75" customHeight="1">
+        sheet1 += `\n    <row r="${rLate}" ht="28.5" customHeight="1">
       <c r="A${rLate}" s="13" t="inlineStr"><is><t>遅番</t></is></c>`;
         for (let d = 0; d < NUM_DAYS; d++) {
             const col = toColLetter(2 + d);
@@ -4660,7 +4660,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
         // 10. E
         const rEve = endRow + 10;
-        sheet1 += `\n    <row r="${rEve}" ht="33.75" customHeight="1">
+        sheet1 += `\n    <row r="${rEve}" ht="28.5" customHeight="1">
       <c r="A${rEve}" s="13" t="inlineStr"><is><t>E</t></is></c>`;
         for (let d = 0; d < NUM_DAYS; d++) {
             const col = toColLetter(2 + d);
@@ -4672,7 +4672,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
         // 11. 8時
         const rH8 = endRow + 11;
-        sheet1 += `\n    <row r="${rH8}" ht="33.75" customHeight="1">
+        sheet1 += `\n    <row r="${rH8}" ht="28.5" customHeight="1">
       <c r="A${rH8}" s="13" t="inlineStr"><is><t>8時</t></is></c>`;
         for (let d = 0; d < NUM_DAYS; d++) {
             const col = toColLetter(2 + d);
