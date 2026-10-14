@@ -718,24 +718,25 @@ input:checked + .toggle-slider:before {
 
 /* 日付ヘッダーセルの縦積み＆横幅圧縮 */
 .header-day-col {
-    min-width: 34px !important;
-    max-width: 40px !important;
-    padding: 2px 1px !important;
+    min-width: 42px !important;
+    width: 44px !important;
+    max-width: 48px !important;
+    padding: 3px 1px !important;
     text-align: center !important;
 }
 
 .day-label {
-    font-size: 0.8rem;
+    font-size: 0.82rem;
     font-weight: 700;
-    line-height: 1.1;
+    line-height: 1.15;
 }
 
 .day-weekday {
-    font-size: 0.72rem;
-    line-height: 1.1;
+    font-size: 0.74rem;
+    line-height: 1.15;
 }
 
-/* 日別出勤増減（オフセット）コントロール - 超スリム縦積み対応 */
+/* 日別出勤増減（オフセット）コントロール - 押しやすく視認性の高い縦積み対応 */
 .day-offset-ctrl {
     display: inline-flex;
     align-items: center;
@@ -743,27 +744,27 @@ input:checked + .toggle-slider:before {
     gap: 1px;
     background: #ffffff;
     border: 1px solid #cbd5e1;
-    border-radius: 2px;
-    padding: 0 1px;
+    border-radius: 3px;
+    padding: 0 2px;
     box-shadow: 0 1px 1px rgba(0, 0, 0, 0.05);
     user-select: none;
-    font-size: 0.65rem;
-    margin-top: 1px;
-    height: 14px;
-    max-width: 32px;
+    font-size: 0.72rem;
+    margin-top: 2px;
+    height: 17px;
+    max-width: 40px;
 }
 
 .day-offset-btn {
     border: none;
     background: #f1f5f9;
     color: #475569;
-    font-size: 0.65rem;
+    font-size: 0.75rem;
     font-weight: 800;
-    width: 9px;
-    height: 11px;
-    line-height: 10px;
+    width: 11px;
+    height: 13px;
+    line-height: 12px;
     padding: 0;
-    border-radius: 1px;
+    border-radius: 2px;
     cursor: pointer;
     transition: all 0.1s;
     display: flex;
@@ -777,19 +778,19 @@ input:checked + .toggle-slider:before {
 }
 
 .day-offset-val {
-    min-width: 12px;
+    min-width: 14px;
     text-align: center;
     font-weight: 800;
-    font-size: 0.65rem;
+    font-size: 0.72rem;
     color: #64748b;
-    padding: 0;
-    line-height: 11px;
+    padding: 0 1px;
+    line-height: 13px;
 }
 
 .day-offset-val.offset-pos {
     color: #1d4ed8;
     background: #dbeafe;
-    border-radius: 1px;
+    border-radius: 2px;
 }
 
 .day-offset-val.offset-neg {

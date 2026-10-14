@@ -52,10 +52,13 @@ function isHolidaySymbol(sym) {
     return false;
 }
 
-// ★ 追加要件: 公休（休）判定。連勤の切断・リセットは「丸1日の公休（休）」のみ！
-// 有休（有）やリフレッシュ休暇（上/下）は公休ではないため連勤をリセットしない！
+// ★ 公休（休）およびリフレッシュ休暇（上/下）判定。連勤を切断・リセット！
+// リフレッシュ休暇は丸1日の休暇であるため連勤を切断（前借り・後回しや連続取得も完全許容）
 function isFullOffSymbol(sym) {
-    return sym === SYMBOLS.OFF;
+    if (!sym) return false;
+    if (sym === SYMBOLS.OFF) return true;
+    if (SYMBOLS.REF_SUMMER.includes(sym) || SYMBOLS.REF_WINTER.includes(sym)) return true;
+    return false;
 }
 
 // 勤務日判定（日勤、出張、特殊勤務、手当なし特殊勤務、および半日出勤を含む勤務）
@@ -1984,23 +1987,31 @@ class ShiftScheduler {
             }
         }
 
-        // 7. 各スタッフの公休日数チェック（8.0日, 8.5日, 9.0日）
+        // 7. 各スタッフの公休日数チェック（8.0日, 8.5日, 9.0日、リフ複数取得・前借り等の柔軟運用を許容）
         for (let s = 0; s < this.numStaff; s++) {
             const staff = this.staffList[s];
             if (staff.isUnused) continue;
             let offDays = 0;
+            let refDays = 0;
             for (let d = 0; d < this.numDays; d++) {
                 const sym = this.grid[s][d].symbol;
                 if (sym === SYMBOLS.OFF) offDays += 1.0;
                 else if (sym === SYMBOLS.HALF_WORK_OFF || sym === SYMBOLS.HALF_OFF_WORK) offDays += 0.5;
+                else if (SYMBOLS.REF_SUMMER.includes(sym) || SYMBOLS.REF_WINTER.includes(sym)) refDays += 1.0;
             }
+
+            // 通常: offDays === standardHolidays (8.0日) でOK
+            // リフ取得時: リフ1日で公休8日(計9日)、リフ複数・前借りで公休7〜8日(計9〜11日)など柔軟に合格判定
+            const isStandardPass = (Math.abs(offDays - this.options.standardHolidays) < 0.01);
+            const isRefPass = (refDays > 0 && (offDays + refDays >= 9.0 || (Math.abs(offDays + refDays - (this.options.standardHolidays + 1.0)) < 0.01)));
+
             if (Math.abs(this.options.standardHolidays - 8.5) < 0.01) {
-                if (offDays !== 8.0 && offDays !== 9.0) {
+                if (offDays !== 8.0 && offDays !== 9.0 && !isRefPass) {
                     errors.push(`【スタッフ No.${staff.id} ${staff.name}】公休日数が${offDays}日です（8.5日調整要件: 8日または9日）。`);
                 }
             } else {
-                if (Math.abs(offDays - this.options.standardHolidays) > 0.01) {
-                    errors.push(`【スタッフ No.${staff.id} ${staff.name}】公休日数が${offDays}日です（標準要件: ${this.options.standardHolidays}日）。`);
+                if (!isStandardPass && !isRefPass) {
+                    errors.push(`【スタッフ No.${staff.id} ${staff.name}】公休日数が${offDays}日です（標準要件: ${this.options.standardHolidays}日 / リフ込み計: ${offDays + refDays}日）。`);
                 }
             }
         }
@@ -2273,15 +2284,21 @@ function validateScheduleGrid(grid, staffList, options = {}) {
             });
         }
 
-        // F. 公休日数チェック（8.0日, 8.5日, 9.0日）
+        // F. 公休日数チェック（8.0日, 8.5日, 9.0日、リフ複数取得・前借り等の柔軟運用を許容）
         let offDays = 0;
+        let refDays = 0;
         for (let d = 0; d < numDays; d++) {
             const sym = getSym(s, d);
             if (sym === SYMBOLS.OFF) offDays += 1.0;
             else if (sym === SYMBOLS.HALF_WORK_OFF || sym === SYMBOLS.HALF_OFF_WORK) offDays += 0.5;
+            else if (SYMBOLS.REF_SUMMER.includes(sym) || SYMBOLS.REF_WINTER.includes(sym)) refDays += 1.0;
         }
+
+        const isStandardPass = (Math.abs(offDays - standardHolidays) < 0.01);
+        const isRefPass = (refDays > 0 && (offDays + refDays >= 9.0 || (Math.abs(offDays + refDays - (standardHolidays + 1.0)) < 0.01)));
+
         if (Math.abs(standardHolidays - 8.5) < 0.01) {
-            if (offDays !== 8.0 && offDays !== 9.0) {
+            if (offDays !== 8.0 && offDays !== 9.0 && !isRefPass) {
                 const reason = `公休日数が${offDays}日です（8.5日調整要件: 8日または9日）`;
                 errors.push(`【スタッフ No.${staff.id} ${staff.name}】${reason}。`);
                 conflictCells.push({
@@ -2291,8 +2308,8 @@ function validateScheduleGrid(grid, staffList, options = {}) {
                 });
             }
         } else {
-            if (Math.abs(offDays - standardHolidays) > 0.01) {
-                const reason = `公休日数が${offDays}日です（標準要件: ${standardHolidays}日）`;
+            if (!isStandardPass && !isRefPass) {
+                const reason = `公休日数が${offDays}日です（標準要件: ${standardHolidays}日 / リフ込み計: ${offDays + refDays}日）`;
                 errors.push(`【スタッフ No.${staff.id} ${staff.name}】${reason}。`);
                 conflictCells.push({
                     staffIndex: s,

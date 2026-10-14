@@ -2238,23 +2238,17 @@ document.addEventListener('DOMContentLoaded', () => {
         // 2行目: 実数合計（リハビリ実働人数: 出勤人数合計 - 加減枠）
         const totalRealSum = stats.daily.reduce((sum, dStat, d) => sum + (dStat.totalWork - ((dayOffsets && dayOffsets[d]) || 0)), 0);
         footHtml += `
-            <tr style="background:#f0fdf4; font-weight:bold; font-size:0.85rem; border-bottom: 2px solid #86efac;">
-                <th class="sticky-col-1" colspan="2" style="color:#166534;" title="行事等の出勤加減枠を除いた実際のリハビリ業務稼働人数">実数合計</th>
+            <tr style="background:#f8fafc; font-weight:bold;">
+                <th class="sticky-col-1" colspan="2" style="color:#1e293b;" title="行事等の出勤加減枠を除いた実際のリハビリ業務稼働人数">実数合計</th>
         `;
         for (let d = 0; d < NUM_DAYS; d++) {
             const dStat = stats.daily[d];
             const thickCls = ((d + 1) % 7 === 0) ? 'border-thick-right' : '';
             const offset = (dayOffsets && dayOffsets[d]) ? dayOffsets[d] : 0;
             const real = dStat.totalWork - offset;
-            let cellText = `<span style="font-weight:800; color:#15803d; font-size:0.95rem;">${real}</span>`;
-            if (offset !== 0) {
-                const offColor = offset > 0 ? '#1d4ed8' : '#b91c1c';
-                const sign = offset > 0 ? `+${offset}` : `${offset}`;
-                cellText += `<small style="font-size:0.7rem; color:${offColor}; margin-left:2px; font-weight:700;">(${sign})</small>`;
-            }
-            footHtml += `<td class="${thickCls}" style="vertical-align:middle; background:#f0fdf4;">${cellText}</td>`;
+            footHtml += `<td class="${thickCls}" style="vertical-align:middle; font-weight:800; color:#1e293b; font-size:0.95rem;">${real}</td>`;
         }
-        footHtml += `<td style="font-weight:800; color:#15803d; background:#dcfce7;">${totalRealSum}</td><td colspan="7" style="color:#94a3b8; background:#f0fdf4;">-</td></tr>`;
+        footHtml += `<td style="font-weight:700; color:#1e293b;">${totalRealSum}</td><td colspan="7" style="color:#94a3b8;">-</td></tr>`;
 
         // ★ セクション別出勤人数（PT A, PT B, OT A, OT B）
         const secList = [
