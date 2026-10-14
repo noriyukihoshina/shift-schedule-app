@@ -18,6 +18,7 @@ document.addEventListener('DOMContentLoaded', () => {
     let lastSolveResult = null;
     let lastScheduler = null;
     let currentWorkingStartDate = '2026-04-01';
+    let dayOffsets = new Array(NUM_DAYS).fill(0); // 日別出勤増減枠（プラス要因・マイナス要因）
 
     // ★ Web Audio API による心地よい短い「ポン♪」通知音の再生
     function playNotificationSound() {
@@ -213,6 +214,7 @@ document.addEventListener('DOMContentLoaded', () => {
                     ? lastSolveResult.stats 
                     : null,
                 activeTab: activeTab,
+                dayOffsets: [...dayOffsets],
                 updatedAt: new Date().toISOString()
             };
 
@@ -261,6 +263,11 @@ document.addEventListener('DOMContentLoaded', () => {
                 }
             });
 
+            // 2.5 日別出勤増減枠（dayOffsets）の復元
+            dayOffsets = (Array.isArray(data.dayOffsets) && data.dayOffsets.length === NUM_DAYS)
+                ? [...data.dayOffsets]
+                : new Array(NUM_DAYS).fill(0);
+
             // 3. 日付セット & 期間タイトル更新
             const dateInput = document.getElementById('termStartDate');
             if (dateInput) dateInput.value = data.startDate;
@@ -275,7 +282,8 @@ document.addEventListener('DOMContentLoaded', () => {
                 const stdVal = parseFloat(document.getElementById('standardHolidaySelect')?.value || '8.0');
                 const scheduler = new ShiftScheduler(staffList, {
                     standardHolidays: stdVal,
-                    dates: term.dates
+                    dates: term.dates,
+                    dayOffsets: [...dayOffsets]
                 });
                 scheduler.grid = data.outputGrid.map(row => row.map(c => ({ ...c })));
                 const newStats = data.lastSolveStats || scheduler.calculateStats();
@@ -410,6 +418,7 @@ document.addEventListener('DOMContentLoaded', () => {
             s.prevDays = ['', '', '', '', ''];
             s.days = new Array(NUM_DAYS).fill('');
         });
+        dayOffsets = new Array(NUM_DAYS).fill(0);
         lastSolveResult = null;
         lastScheduler = null;
 
@@ -703,6 +712,54 @@ document.addEventListener('DOMContentLoaded', () => {
         alert('【エラーハンドリング検証用データ】を投入しました。\n「10日目」に希望休が集中しています。\n「⚡ 勤務表を自動生成する」を押すと、障壁となっている10日目の休みセルが【薄いブルーで網掛け】されます。');
     }
 
+    // ★ 日別出勤増減枠（プラス要因・マイナス要因）の操作
+    function renderDayOffsetCtrl(d) {
+        const val = dayOffsets[d] || 0;
+        const valText = val > 0 ? `+${val}` : (val < 0 ? `${val}` : '±0');
+        const cls = val > 0 ? 'offset-pos' : (val < 0 ? 'offset-neg' : '');
+        return `
+            <div class="day-offset-ctrl" data-d="${d}" title="この日の出勤加減枠（例: 行事等で+2、減員で-1）">
+                <button type="button" class="day-offset-btn offset-minus" data-d="${d}" title="出勤人数を-1">-</button>
+                <span class="day-offset-val ${cls}" data-d="${d}">${valText}</span>
+                <button type="button" class="day-offset-btn offset-plus" data-d="${d}" title="出勤人数を+1">+</button>
+            </div>
+        `;
+    }
+
+    function setDayOffset(d, delta) {
+        if (d < 0 || d >= NUM_DAYS) return;
+        pushHistory();
+        const cur = dayOffsets[d] || 0;
+        dayOffsets[d] = Math.max(-10, Math.min(10, cur + delta));
+
+        updateDayOffsetDisplay();
+
+        // 出力テーブル・ダッシュボードが表示されていればリアルタイム再計算
+        if (lastSolveResult && lastScheduler) {
+            lastScheduler.dayOffsets = [...dayOffsets];
+            const newStats = lastScheduler.calculateStats();
+            lastSolveResult.stats = newStats;
+            renderOutputTable(lastSolveResult.grid, newStats);
+            renderStatsDashboard(newStats);
+        }
+
+        const curDate = document.getElementById('termStartDate')?.value || currentWorkingStartDate;
+        saveCurrentTermToStorage(curDate);
+    }
+
+    function updateDayOffsetDisplay() {
+        document.querySelectorAll('.day-offset-ctrl').forEach(ctrl => {
+            const d = parseInt(ctrl.dataset.d, 10);
+            if (isNaN(d) || d < 0 || d >= NUM_DAYS) return;
+            const val = dayOffsets[d] || 0;
+            const valSpan = ctrl.querySelector('.day-offset-val');
+            if (valSpan) {
+                valSpan.textContent = val > 0 ? `+${val}` : (val < 0 ? `${val}` : '±0');
+                valSpan.className = `day-offset-val ${val > 0 ? 'offset-pos' : (val < 0 ? 'offset-neg' : '')}`;
+            }
+        });
+    }
+
     // 入力テーブル描画
     function renderInputTable() {
         const thead = document.getElementById('inputTableHead');
@@ -742,7 +799,11 @@ document.addEventListener('DOMContentLoaded', () => {
             const di = term.dates[d];
             const cls = di.wIdx === 5 ? 'header-sat' : ((di.wIdx === 6 || di.isHoliday) ? 'header-sun' : '');
             const thickCls = ((d + 1) % 7 === 0) ? 'border-thick-right' : '';
-            headHtml += `<th class="${cls} ${thickCls}" title="${di.label} (${di.weekday})${di.isHoliday ? ' 祝日' : ''}">${di.label}<br><small>${di.weekday}</small></th>`;
+            headHtml += `<th class="${cls} ${thickCls}" title="${di.label} (${di.weekday})${di.isHoliday ? ' 祝日' : ''}">
+                <div>${di.label}</div>
+                <small>${di.weekday}</small>
+                ${renderDayOffsetCtrl(d)}
+            </th>`;
         }
         headHtml += `</tr>`;
         thead.innerHTML = headHtml;
@@ -920,6 +981,27 @@ document.addEventListener('DOMContentLoaded', () => {
                 let newSym = currentSelectedSymbol;
                 if (currentSelectedSymbol === 'CLEAR') {
                     newSym = '';
+                }
+
+                // ★ P（プロテクト）ボタン選択時の処理
+                if (currentSelectedSymbol === 'P') {
+                    if (type === 'day') {
+                        const d = parseInt(cell.dataset.d, 10);
+                        const oldSym = staffList[s].days[d];
+                        pushHistory();
+                        if (oldSym) {
+                            staffList[s].days[d] = '';
+                            cell.textContent = '';
+                            cell.classList.remove('fixed-cell');
+                            showToast(`🔓 No.${staffList[s].id} の固定枠を解除しました`);
+                        } else {
+                            staffList[s].days[d] = '○';
+                            cell.textContent = '○';
+                            cell.classList.add('fixed-cell');
+                            showToast(`🛡️ No.${staffList[s].id} を事前固定「○」（赤字保護）に設定しました`);
+                        }
+                    }
+                    return;
                 }
 
                 if (type === 'prev') {
@@ -1304,6 +1386,19 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     });
 
+    // ★ 日別出勤加減ボタン（+ / -）のグローバルイベントリスナー
+    document.addEventListener('click', (e) => {
+        const btn = e.target.closest('.day-offset-btn');
+        if (!btn) return;
+        const d = parseInt(btn.dataset.d, 10);
+        if (isNaN(d)) return;
+        if (btn.classList.contains('offset-plus')) {
+            setDayOffset(d, 1);
+        } else if (btn.classList.contains('offset-minus')) {
+            setDayOffset(d, -1);
+        }
+    });
+
     const tabBtns = document.querySelectorAll('.tab-btn');
     const tabPanels = document.querySelectorAll('.tab-panel');
 
@@ -1570,7 +1665,8 @@ document.addEventListener('DOMContentLoaded', () => {
                     const term = getTermInfo();
                     const scheduler = new ShiftScheduler(staffList, {
                         standardHolidays: stdHolidayVal,
-                        dates: term.dates
+                        dates: term.dates,
+                        dayOffsets: [...dayOffsets]
                     });
                     const result = scheduler.solveBaseSchedule();
 
@@ -1629,7 +1725,8 @@ document.addEventListener('DOMContentLoaded', () => {
                     const stdHolidayVal = parseFloat(document.getElementById('standardHolidaySelect')?.value || '8.0');
                     lastScheduler = new ShiftScheduler(staffList, {
                         standardHolidays: stdHolidayVal,
-                        dates: getTermInfo().dates
+                        dates: getTermInfo().dates,
+                        dayOffsets: [...dayOffsets]
                     });
                     const baseResult = lastScheduler.solveBaseSchedule();
                     if (!baseResult.success) {
@@ -1721,7 +1818,11 @@ document.addEventListener('DOMContentLoaded', () => {
             const cls = dateInfo.wIdx === 5 ? 'header-sat' : ((dateInfo.wIdx === 6 || dateInfo.isHoliday) ? 'header-sun' : '');
             // 7日ごと（週区切り）および28日目に太線
             const thickCls = ((d + 1) % 7 === 0) ? 'border-thick-right' : '';
-            headHtml += `<th class="${cls} ${thickCls} border-thick-bottom" title="${dateInfo.label} (${dateInfo.weekday})${dateInfo.isHoliday ? ' 祝日' : ''}">${dateInfo.label}<br><small>${dateInfo.weekday}</small></th>`;
+            headHtml += `<th class="${cls} ${thickCls} border-thick-bottom" title="${dateInfo.label} (${dateInfo.weekday})${dateInfo.isHoliday ? ' 祝日' : ''}">
+                <div>${dateInfo.label}</div>
+                <small>${dateInfo.weekday}</small>
+                ${renderDayOffsetCtrl(d)}
+            </th>`;
         }
         headHtml += `
                 <th title="出勤日数" class="border-thick-bottom" style="background:#f1f5f9;">出勤</th>
@@ -1793,7 +1894,15 @@ document.addEventListener('DOMContentLoaded', () => {
         for (let d = 0; d < NUM_DAYS; d++) {
             const dStat = stats.daily[d];
             const thickCls = ((d + 1) % 7 === 0) ? 'border-thick-right' : '';
-            footHtml += `<td class="${thickCls}" style="font-weight:800; color:#1e293b;">${dStat.totalWork}</td>`;
+            const offset = (dayOffsets && dayOffsets[d]) ? dayOffsets[d] : 0;
+            let cellContent = `<div style="font-size:0.95rem; font-weight:800; color:#1e293b;">${dStat.totalWork}</div>`;
+            if (offset !== 0) {
+                const real = dStat.totalWork - offset;
+                const sign = offset > 0 ? `+${offset}` : `${offset}`;
+                const offColor = offset > 0 ? '#1d4ed8' : '#b91c1c';
+                cellContent += `<div style="font-size:0.7rem; font-weight:700; color:#64748b; line-height:1.1;">実質${real}<br><span style="color:${offColor};">(${sign})</span></div>`;
+            }
+            footHtml += `<td class="${thickCls}" style="vertical-align:middle;">${cellContent}</td>`;
         }
         footHtml += `
             <td style="font-weight:700;">${totalWorkSum}</td>
@@ -1805,6 +1914,32 @@ document.addEventListener('DOMContentLoaded', () => {
             <td style="font-weight:600;">${totalEveSum}</td>
             <td style="font-weight:600;">${totalH8Sum}</td>
         </tr>`;
+
+        // ★ セクション別出勤人数（PT A, PT B, OT A, OT B）
+        const secList = [
+            { name: 'PT A', label: 'PT A 出勤', cls: 'foot-sec-pt-a', color: '#3730a3' },
+            { name: 'PT B', label: 'PT B 出勤', cls: 'foot-sec-pt-b', color: '#5b21b6' },
+            { name: 'OT A', label: 'OT A 出勤', cls: 'foot-sec-ot-a', color: '#86198f' },
+            { name: 'OT B', label: 'OT B 出勤', cls: 'foot-sec-ot-b', color: '#9d174d' }
+        ];
+
+        secList.forEach(sec => {
+            footHtml += `
+                <tr class="${sec.cls}" style="font-weight:700; font-size:0.82rem;">
+                    <th class="sticky-col-1" colspan="2" style="color:${sec.color};">${sec.label}</th>
+            `;
+            let secTotalSum = 0;
+            for (let d = 0; d < NUM_DAYS; d++) {
+                const dStat = stats.daily[d];
+                const secVal = (dStat.sectionWork && dStat.sectionWork[sec.name] !== undefined)
+                    ? dStat.sectionWork[sec.name]
+                    : 0;
+                secTotalSum += secVal;
+                const thickCls = ((d + 1) % 7 === 0) ? 'border-thick-right' : '';
+                footHtml += `<td class="${thickCls}" style="color:${sec.color}; font-weight:800;">${secVal > 0 ? secVal : '-'}</td>`;
+            }
+            footHtml += `<td style="font-weight:800; color:${sec.color};">${secTotalSum}</td><td colspan="7" style="color:#94a3b8;">-</td></tr>`;
+        });
 
         // 早番
         footHtml += `
@@ -1876,6 +2011,32 @@ document.addEventListener('DOMContentLoaded', () => {
                 const s = parseInt(cell.dataset.s, 10);
                 const d = parseInt(cell.dataset.d, 10);
                 if (!lastSolveResult || !lastSolveResult.grid) return;
+
+                // ★ P（プロテクト）ボタンが選択されている場合: 固定保護のトグル切り替え
+                if (currentOutputSelectedSymbol === 'P') {
+                    pushHistory();
+                    const cellData = lastSolveResult.grid[s][d];
+                    cellData.isFixed = !cellData.isFixed;
+                    const oldSym = cellData.symbol || '○';
+                    if (cellData.isFixed && !cellData.symbol) {
+                        cellData.symbol = '○';
+                    }
+                    // 希望入力シート側にも事前固定枠として連動
+                    staffList[s].days[d] = cellData.isFixed ? cellData.symbol : '';
+
+                    if (lastScheduler) {
+                        lastScheduler.grid[s][d].isFixed = cellData.isFixed;
+                        lastScheduler.grid[s][d].symbol = cellData.symbol;
+                    }
+                    renderOutputTable(lastSolveResult.grid, lastSolveResult.stats);
+                    const staff = staffList[s];
+                    const term = getTermInfo();
+                    const dateInfo = term.dates[d];
+                    showToast(cellData.isFixed
+                        ? `🛡️ 【No.${staff.id} ${staff.name}】${dateInfo.label} をプロテクト（固定希望・赤字）に設定しました`
+                        : `🔓 【No.${staff.id} ${staff.name}】${dateInfo.label} のプロテクトを解除しました`);
+                    return;
+                }
 
                 let newSym = currentOutputSelectedSymbol;
                 if (newSym === 'CLEAR') newSym = '';
@@ -2000,7 +2161,16 @@ document.addEventListener('DOMContentLoaded', () => {
 
             if (weekdayBadgeEl) weekdayBadgeEl.textContent = `${weekdayDaily.length} 日間`;
             if (weekdayRangeEl) weekdayRangeEl.textContent = `${wMin} 〜 ${wMax} 名 (ブレ幅: ${wMax - wMin})`;
-            if (weekdayAvgEl) weekdayAvgEl.textContent = `${wAvg} 名`;
+            
+            const hasOffset = weekdayDaily.some(item => (dayOffsets && dayOffsets[item.d]) !== 0);
+            if (hasOffset) {
+                const realWorks = weekdayDaily.map(item => item.totalWork - ((dayOffsets && dayOffsets[item.d]) || 0));
+                const realSum = realWorks.reduce((a, b) => a + b, 0);
+                const realAvg = (realSum / weekdayDaily.length).toFixed(1);
+                if (weekdayAvgEl) weekdayAvgEl.innerHTML = `${wAvg} 名 <span style="font-size:0.78rem; color:#64748b; font-weight:normal;">(実質リハ: ${realAvg}名)</span>`;
+            } else {
+                if (weekdayAvgEl) weekdayAvgEl.textContent = `${wAvg} 名`;
+            }
         } else {
             if (weekdayBadgeEl) weekdayBadgeEl.textContent = '0 日間';
             if (weekdayRangeEl) weekdayRangeEl.textContent = '- 名';
@@ -2022,7 +2192,16 @@ document.addEventListener('DOMContentLoaded', () => {
 
             if (holidayBadgeEl) holidayBadgeEl.textContent = `${holidayDaily.length} 日間`;
             if (holidayRangeEl) holidayRangeEl.textContent = `${hMin} 〜 ${hMax} 名 (ブレ幅: ${hMax - hMin})`;
-            if (holidayAvgEl) holidayAvgEl.textContent = `${hAvg} 名`;
+            
+            const hasHolidayOffset = holidayDaily.some(item => (dayOffsets && dayOffsets[item.d]) !== 0);
+            if (hasHolidayOffset) {
+                const realWorks = holidayDaily.map(item => item.totalWork - ((dayOffsets && dayOffsets[item.d]) || 0));
+                const realSum = realWorks.reduce((a, b) => a + b, 0);
+                const realAvg = (realSum / holidayDaily.length).toFixed(1);
+                if (holidayAvgEl) holidayAvgEl.innerHTML = `${hAvg} 名 <span style="font-size:0.78rem; color:#64748b; font-weight:normal;">(実質リハ: ${realAvg}名)</span>`;
+            } else {
+                if (holidayAvgEl) holidayAvgEl.textContent = `${hAvg} 名`;
+            }
             if (sunHolSubInfoEl) sunHolSubInfoEl.textContent = `土曜日・日曜日・国民の祝日（計${holidayDaily.length}日間）`;
         } else {
             if (holidayBadgeEl) holidayBadgeEl.textContent = '0 日間';
@@ -3413,7 +3592,8 @@ document.addEventListener('DOMContentLoaded', () => {
             if (!lastScheduler) {
                 lastScheduler = new ShiftScheduler(staffList, {
                     standardHolidays: stdHolidayVal,
-                    dates: term.dates
+                    dates: term.dates,
+                    dayOffsets: [...dayOffsets]
                 });
             }
 

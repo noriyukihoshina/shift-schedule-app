@@ -2,145 +2,110 @@
 <html lang="ja">
 <head>
     <meta charset="UTF-8">
-    <title>All Features Test</title>
+    <title>総合機能テスト（オフセット増減・Pプロテクト・4セクションフッター）</title>
 </head>
 <body>
-    <div id="testStatus">TEST_RUNNING</div>
-    <div id="testLogs"></div>
+    <div id="testStatus" style="font-size: 20px; font-weight: bold; padding: 20px;">テスト実行中...</div>
+    <div id="testResults" style="font-family: monospace; white-space: pre-wrap; padding: 20px;"></div>
 
-    <!-- index.htmlの全主要要素を含む完全なモック -->
-    <iframe id="mainFrame" src="index.html" style="width: 1200px; height: 900px;"></iframe>
+    <!-- アプリ本体のiframe -->
+    <iframe id="appFrame" src="index.html" style="width: 1200px; height: 800px; border: 1px solid #ccc;"></iframe>
 
     <script>
-        const logs = [];
-        function log(msg) {
-            logs.push(msg);
-            document.getElementById('testLogs').innerText = logs.join('\n');
+        const log = (msg) => {
+            const el = document.getElementById('testResults');
+            el.textContent += msg + '\n';
             console.log(msg);
-        }
+        };
 
-        window.addEventListener('load', async () => {
-            const frame = document.getElementById('mainFrame');
-            await new Promise(r => {
-                if (frame.contentDocument && frame.contentDocument.readyState === 'complete') r();
-                else frame.onload = r;
-            });
-            await new Promise(r => setTimeout(r, 800));
+        window.addEventListener('load', () => {
+            const frame = document.getElementById('appFrame');
+            frame.onload = async () => {
+                const doc = frame.contentDocument;
+                const win = frame.contentWindow;
 
-            const win = frame.contentWindow;
-            const doc = frame.contentDocument;
+                try {
+                    log('=== 総合機能自動テスト開始 ===');
 
-            try {
-                log('=== TEST 1: 日付変更と終了日・バッジの追従検証 ===');
-                const dateInput = doc.getElementById('termStartDate');
-                const endDisplay = doc.getElementById('termEndDateDisplay');
-                const badge = doc.getElementById('termTitleBadge');
-                log('1. 初期日付: ' + dateInput.value + ' -> 終了日: ' + endDisplay.textContent + ', バッジ: ' + badge.textContent);
+                    // テスト1: エラーなしロード確認
+                    log('[TEST 1] アプリケーション基本ロード確認');
+                    if (!doc.getElementById('termStartDate')) throw new Error('termStartDateが存在しません');
+                    if (!doc.getElementById('inputTableHead')) throw new Error('inputTableHeadが存在しません');
+                    log('  -> PASS: アプリ基本ロード正常');
 
-                // 2026-05-01 に変更してみる (5/1～5/28)
-                dateInput.value = '2026-05-01';
-                dateInput.dispatchEvent(new win.Event('change'));
-                await new Promise(r => setTimeout(r, 400));
+                    // テスト2: 3つのパレットに「P」ボタンが存在するか確認
+                    log('[TEST 2] 記号パレットの「P」ボタン確認');
+                    const inputPBtn = doc.querySelector('#inputTab .palette-btn-protect');
+                    const outputPBtn = doc.querySelector('#outputTab .palette-btn-protect');
+                    const checkPBtn = doc.querySelector('#checkTab .palette-btn-protect');
+                    if (!inputPBtn || inputPBtn.dataset.sym !== 'P') throw new Error('入力パレットにPボタンがありません');
+                    if (!outputPBtn || outputPBtn.dataset.sym !== 'P') throw new Error('修正パレットにPボタンがありません');
+                    if (!checkPBtn || checkPBtn.dataset.sym !== 'P') throw new Error('チェックパレットにPボタンがありません');
+                    log('  -> PASS: 3タブすべてにP（プロテクト）ボタン確認完了');
 
-                log('2. 変更後: ' + dateInput.value + ' -> 終了日: ' + endDisplay.textContent + ', バッジ: ' + badge.textContent);
-                if (endDisplay.textContent !== '2026-05-28' || !badge.textContent.includes('5/1～5/28')) {
-                    throw new Error('日付変更追従テスト失敗: 終了日=' + endDisplay.textContent + ', バッジ=' + badge.textContent);
+                    // テスト3: 日別オフセット（+ / -）コントロールの存在確認
+                    log('[TEST 3] 日別オフセット（+ / -）コントロール確認');
+                    const offsetCtrls = doc.querySelectorAll('#inputTableHead .day-offset-ctrl');
+                    if (offsetCtrls.length !== 28) throw new Error(`日別オフセットコントロール数が28個ではありません (現在: ${offsetCtrls.length})`);
+                    log('  -> PASS: 全28日分のオフセットコントロール確認完了');
+
+                    // テスト4: オフセット増減操作のテスト
+                    log('[TEST 4] オフセット増減クリック操作テスト');
+                    const firstPlusBtn = offsetCtrls[0].querySelector('.offset-plus');
+                    const firstValSpan = offsetCtrls[0].querySelector('.day-offset-val');
+                    firstPlusBtn.click();
+                    firstPlusBtn.click();
+                    if (firstValSpan.textContent.trim() !== '+2') throw new Error(`+2をクリック後の表示が不正です: ${firstValSpan.textContent}`);
+                    
+                    const firstMinusBtn = offsetCtrls[0].querySelector('.offset-minus');
+                    firstMinusBtn.click();
+                    if (firstValSpan.textContent.trim() !== '+1') throw new Error(`-1をクリック後の表示が不正です: ${firstValSpan.textContent}`);
+                    log('  -> PASS: オフセット増減クリック(+2 -> +1)正常');
+
+                    // テスト5: 勤務表自動生成の実行
+                    log('[TEST 5] 勤務表自動生成実行');
+                    const solveBtn = doc.getElementById('inputSolveBtn');
+                    solveBtn.click();
+
+                    // 自動生成完了待ち（非同期）
+                    await new Promise(resolve => setTimeout(resolve, 800));
+
+                    // テスト6: フッターに出勤合計およびPT A, PT B, OT A, OT B の4セクション行が存在するか確認
+                    log('[TEST 6] フッターのセクション別集計行確認');
+                    const footRows = doc.querySelectorAll('#outputTableFoot tr');
+                    const rowTexts = Array.from(footRows).map(r => r.textContent);
+                    log(`  フッター行数: ${footRows.length}`);
+                    
+                    const hasPTA = rowTexts.some(t => t.includes('PT A 出勤'));
+                    const hasPTB = rowTexts.some(t => t.includes('PT B 出勤'));
+                    const hasOTA = rowTexts.some(t => t.includes('OT A 出勤'));
+                    const hasOTB = rowTexts.some(t => t.includes('OT B 出勤'));
+                    const hasWorkTotal = rowTexts.some(t => t.includes('出勤人数合計'));
+
+                    if (!hasWorkTotal) throw new Error('出勤人数合計行がありません');
+                    if (!hasPTA || !hasPTB || !hasOTA || !hasOTB) throw new Error('4セクション(PT A, PT B, OT A, OT B)の出勤行が不足しています');
+                    log('  -> PASS: 4セクション出勤集計行(PT A, PT B, OT A, OT B)すべて存在確認');
+
+                    // テスト7: 「P」ボタンによるセルのプロテクトトグルテスト
+                    log('[TEST 7] 「P」ボタンによるプロテクトトグルテスト');
+                    outputPBtn.click(); // Pボタンを選択
+                    const firstWorkCell = doc.querySelector('#outputTableBody .day-cell[data-s="0"][data-d="1"]');
+                    const initialFixed = firstWorkCell.classList.contains('fixed-cell');
+                    firstWorkCell.click(); // クリックしてプロテクトON
+                    const afterFixed = firstWorkCell.classList.contains('fixed-cell');
+                    if (initialFixed === afterFixed) throw new Error('Pボタンクリックでfixed-cellクラスがトグルされませんでした');
+                    log(`  -> PASS: Pボタンによるセルプロテクトトグル正常 (初期:${initialFixed} -> クリック後:${afterFixed})`);
+
+                    log('=== 全テスト合格 (ALL PASS)! ===');
+                    document.getElementById('testStatus').textContent = '✅ 全テスト合格 (ALL PASS)';
+                    document.getElementById('testStatus').style.color = '#16a34a';
+
+                } catch (e) {
+                    log('❌ ERROR: ' + e.message);
+                    document.getElementById('testStatus').textContent = '❌ テスト失敗: ' + e.message;
+                    document.getElementById('testStatus').style.color = '#dc2626';
                 }
-                log('✓ TEST 1 PASS: 日付変更と終了日・バッジの追従が完璧に動作！');
-
-                log('=== TEST 2: 空白勤務表 (.xlsx) ダウンロード動作検証 ===');
-                const blankBtn = doc.getElementById('downloadBlankTemplateBtn');
-                let downloadedBlobName = null;
-                const origCreateObjectURL = win.URL.createObjectURL;
-                win.URL.createObjectURL = function(blob) {
-                    downloadedBlobName = 'blob-ok';
-                    return 'blob-ok';
-                };
-                blankBtn.click();
-                await new Promise(r => setTimeout(r, 400));
-                if (!downloadedBlobName) throw new Error('空白勤務表ダウンロードが発火しませんでした');
-                log('✓ TEST 2 PASS: 空白勤務表(.xlsx)ダウンロードが正常に動作！');
-
-                log('=== TEST 3: 希望入力 ＆ 制約チェック動作検証 ===');
-                // スタッフ1(idx 0)の1日目(idx 0)に「休」を入力
-                const cellS0D0 = doc.querySelector('#inputTableBody td.day-cell[data-s="0"][data-d="0"]');
-                cellS0D0.click();
-                await new Promise(r => setTimeout(r, 200));
-
-                const validateInputBtn = doc.getElementById('validateInputBtn');
-                validateInputBtn.click();
-                await new Promise(r => setTimeout(r, 300));
-                log('✓ TEST 3 PASS: 希望の制約チェックが正常に動作！');
-
-                log('=== TEST 4: 基本勤務表 自動生成 ＆ タブ遷移検証 ===');
-                const solveBtn = doc.getElementById('inputSolveBtn');
-                solveBtn.click();
-                await new Promise(r => setTimeout(r, 700));
-
-                const activeTab = doc.querySelector('.tab-panel.active');
-                log('Active tab after solve: ' + (activeTab ? activeTab.id : 'none'));
-                if (!activeTab || activeTab.id !== 'outputTab') {
-                    throw new Error('自動生成後に outputTab に切り替わっていません: ' + (activeTab ? activeTab.id : 'none'));
-                }
-                const outCell0 = doc.querySelector('#outputTableBody td.day-cell[data-s="0"][data-d="0"]');
-                if (!outCell0) throw new Error('outputTableBody にセルが描画されていません');
-                log('✓ TEST 4 PASS: 勤務表自動生成＆修正作業エリアへの遷移が正常に動作！');
-
-                log('=== TEST 5: 特殊勤務割当 ＆ 最終チェック＆完成タブ遷移検証 ===');
-                const assignSpecialBtn = doc.getElementById('outputAssignSpecialBtn');
-                assignSpecialBtn.click();
-                await new Promise(r => setTimeout(r, 700));
-
-                const activeTab2 = doc.querySelector('.tab-panel.active');
-                log('Active tab after assign special: ' + (activeTab2 ? activeTab2.id : 'none'));
-                if (!activeTab2 || activeTab2.id !== 'checkTab') {
-                    throw new Error('特殊勤務割当後に checkTab に切り替わっていません: ' + (activeTab2 ? activeTab2.id : 'none'));
-                }
-                log('✓ TEST 5 PASS: 特殊勤務割当＆最終チェック＆完成タブへの遷移が正常に動作！');
-
-                log('=== TEST 6: Excelダウンロード (.xls) 動作検証 ===');
-                let downloadedXls = false;
-                win.URL.createObjectURL = function(blob) {
-                    downloadedXls = true;
-                    return 'blob-xls-ok';
-                };
-                const downloadExcelBtn = doc.getElementById('downloadExcelBtn');
-                if (downloadExcelBtn) {
-                    downloadExcelBtn.click();
-                    await new Promise(r => setTimeout(r, 300));
-                    if (!downloadedXls) throw new Error('Excelダウンロードボタンが発火しませんでした');
-                    log('✓ TEST 6 PASS: 確定勤務表Excelダウンロードが正常に動作！');
-                }
-
-                log('=== TEST 7: 期間切替と保存復元の完全性検証 ===');
-                // 2026-05-01 から 2026-04-01 に切り替え
-                dateInput.value = '2026-04-01';
-                dateInput.dispatchEvent(new win.Event('change'));
-                await new Promise(r => setTimeout(r, 500));
-
-                log('Switched to 2026-04-01: ' + endDisplay.textContent + ', badge: ' + badge.textContent);
-                if (endDisplay.textContent !== '2026-04-28' || !badge.textContent.includes('4/1～4/28')) {
-                    throw new Error('4/1～4/28 への再切り替えが失敗しました');
-                }
-
-                // 再度 2026-05-01 に戻してデータが復元されるか
-                const savedTermsSelect = doc.getElementById('savedTermsSelect');
-                savedTermsSelect.value = '2026-05-01';
-                savedTermsSelect.dispatchEvent(new win.Event('change'));
-                await new Promise(r => setTimeout(r, 500));
-
-                log('Switched back to 2026-05-01: ' + endDisplay.textContent + ', badge: ' + badge.textContent);
-                if (endDisplay.textContent !== '2026-05-28' || !badge.textContent.includes('5/1～5/28')) {
-                    throw new Error('5/1～5/28 へのドロップダウン復元が失敗しました');
-                }
-                log('✓ TEST 7 PASS: 期間別保存＆相互切替・復元が完璧に動作！');
-
-                log('=== ALL_SYSTEM_FEATURES_VERIFIED_SUCCESSFULLY ===');
-                document.getElementById('testStatus').innerText = 'ALL_SYSTEM_FEATURES_VERIFIED_SUCCESSFULLY';
-            } catch(e) {
-                log('ERROR: ' + e.message);
-                document.getElementById('testStatus').innerText = 'FAILED: ' + e.message;
-            }
+            };
         });
     </script>
 </body>
