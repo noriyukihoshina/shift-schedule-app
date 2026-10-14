@@ -920,7 +920,7 @@ input:checked + .toggle-slider:before {
 
 .foot-sec-st {
     background: transparent !important;
-    color: #334155 !important; /* 濃い灰色 */
+    color: #db2777 !important; /* ピンク */
 }
 
 .foot-duty-gray {
@@ -928,7 +928,7 @@ input:checked + .toggle-slider:before {
     color: #334155 !important; /* 早〜8時は濃い灰色 */
 }
 
-/* 右側集計列のスタイル：背景色完全除去、有休はオレンジ、早は赤、遅・E・8時は濃い灰色 */
+/* 右側集計列のスタイル：背景色完全除去、有休はオレンジ、早・遅・E・8時は濃い灰色 */
 .stat-cell {
     background: transparent !important;
 }
@@ -937,13 +937,10 @@ input:checked + .toggle-slider:before {
     color: #ea580c !important; /* 有休: オレンジ */
 }
 
-.stat-cell[data-stat="early"] {
-    color: #dc2626 !important; /* 早: 赤 */
-}
-
+.stat-cell[data-stat="early"],
 .stat-cell[data-stat="late"],
 .stat-cell[data-stat="eve"],
 .stat-cell[data-stat="h8"] {
-    color: #334155 !important; /* 遅・E・8時: 濃い灰色 */
+    color: #334155 !important; /* 早・遅・E・8時: 濃い灰色 */
 }
 
