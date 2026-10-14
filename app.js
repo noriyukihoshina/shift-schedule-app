@@ -1944,7 +1944,7 @@ document.addEventListener('DOMContentLoaded', () => {
         setTxt('statHolidayBadge', '- 日間');
         setTxt('statHolidayWorkRange', '- 〜 - 名');
         setTxt('statHolidayAvgWork', '- 名');
-        setTxt('statSunHolSubInfo', '国民の祝日・振替休日');
+        setTxt('statSunHolSubInfo', '土曜日・日曜日・国民の祝日');
 
         setTxt('statTotalPaidDays', '- 日');
         setTxt('statPaidStaffCount', '- 名');
@@ -1968,22 +1968,20 @@ document.addEventListener('DOMContentLoaded', () => {
         const term = getTermInfo();
         const dates = term.dates;
 
-        // 1. 平日、祝日、日祝の日別出勤データを分類
+        // 1. 「平日」と「土日祝（その他）」に完全に2区分
         const weekdayDaily = [];
-        const holidayDaily = [];
-        const sunHolDaily = [];
+        const holidayDaily = []; // 土日祝
 
         for (let d = 0; d < NUM_DAYS; d++) {
             const di = dates[d];
             const totalWork = stats.daily[d].totalWork;
             const item = { d, totalWork, label: di.label, weekday: di.weekday, isHoliday: di.isHoliday };
 
-            if (di.isHoliday) {
+            // 土曜(wIdx=5), 日曜(wIdx=6), 国民の祝日(isHoliday)
+            const isWeekendOrHoliday = (di.wIdx === 5 || di.wIdx === 6 || di.isHoliday);
+            if (isWeekendOrHoliday) {
                 holidayDaily.push(item);
-                sunHolDaily.push(item);
-            } else if (di.wIdx === 6) { // 日曜日
-                sunHolDaily.push(item);
-            } else if (di.wIdx < 5) { // 月〜金（祝日除く平日）
+            } else {
                 weekdayDaily.push(item);
             }
         }
@@ -2009,7 +2007,7 @@ document.addEventListener('DOMContentLoaded', () => {
             if (weekdayAvgEl) weekdayAvgEl.textContent = '- 名';
         }
 
-        // --- 祝日の集計（最小・最大・平均） ---
+        // --- 土日祝（その他）の集計（最小・最大・平均） ---
         const holidayBadgeEl = document.getElementById('statHolidayBadge');
         const holidayRangeEl = document.getElementById('statHolidayWorkRange');
         const holidayAvgEl = document.getElementById('statHolidayAvgWork');
@@ -2025,22 +2023,11 @@ document.addEventListener('DOMContentLoaded', () => {
             if (holidayBadgeEl) holidayBadgeEl.textContent = `${holidayDaily.length} 日間`;
             if (holidayRangeEl) holidayRangeEl.textContent = `${hMin} 〜 ${hMax} 名 (ブレ幅: ${hMax - hMin})`;
             if (holidayAvgEl) holidayAvgEl.textContent = `${hAvg} 名`;
+            if (sunHolSubInfoEl) sunHolSubInfoEl.textContent = `土曜日・日曜日・国民の祝日（計${holidayDaily.length}日間）`;
         } else {
             if (holidayBadgeEl) holidayBadgeEl.textContent = '0 日間';
-            if (holidayRangeEl) holidayRangeEl.textContent = '対象祝日なし (0日)';
+            if (holidayRangeEl) holidayRangeEl.textContent = '- 名';
             if (holidayAvgEl) holidayAvgEl.textContent = '- 名';
-        }
-
-        // 日・祝体制（日曜日＋祝日）の補足表示
-        if (sunHolDaily.length > 0 && sunHolSubInfoEl) {
-            const works = sunHolDaily.map(item => item.totalWork);
-            const sMin = Math.min(...works);
-            const sMax = Math.max(...works);
-            const sSum = works.reduce((a, b) => a + b, 0);
-            const sAvg = (sSum / sunHolDaily.length).toFixed(1);
-            sunHolSubInfoEl.textContent = `※日・祝合計 (計${sunHolDaily.length}日): ${sMin}〜${sMax}名 (平均 ${sAvg}名)`;
-        } else if (sunHolSubInfoEl) {
-            sunHolSubInfoEl.textContent = '国民の祝日・振替休日';
         }
 
         // --- 有休取得合計数 ---
