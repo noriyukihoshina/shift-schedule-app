@@ -373,20 +373,70 @@
         <!-- 4. 勤務分析・統計ダッシュボードタブ -->
         <section id="statsTab" class="tab-panel">
             <div class="stats-grid">
-                <div class="stat-card">
-                    <div class="stat-card-title">1日あたりの平均出勤可能人数（動的目標値）</div>
-                    <div class="stat-card-value" id="statAvgWork">- 名</div>
-                    <div style="font-size: 0.75rem; color: #64748b; margin-top: 4px;">（総枠 1400枠 － 全休日数） ÷ 28日</div>
+                <!-- 1. 平日の出勤人数（平準化状況 & 平均） -->
+                <div class="stat-card" style="border-top: 4px solid #2563eb;">
+                    <div class="stat-card-title" style="display: flex; align-items: center; justify-content: space-between;">
+                        <span>🏢 平日の出勤人数（平準化状況）</span>
+                        <span id="statWeekdayBadge" style="font-size: 0.75rem; background: #eff6ff; color: #1d4ed8; padding: 2px 8px; border-radius: 9999px; font-weight: 700;">- 日間</span>
+                    </div>
+                    <div class="stat-card-value" id="statWeekdayWorkRange" style="font-size: 1.3rem; color: #1e3a8a;">- 〜 - 名</div>
+                    <div style="display: flex; justify-content: space-between; align-items: center; margin-top: 6px; padding-top: 6px; border-top: 1px dashed #e2e8f0; font-size: 0.85rem;">
+                        <span style="color: #64748b; font-weight: 600;">平日の平均出勤人数:</span>
+                        <strong id="statWeekdayAvgWork" style="color: #1e293b; font-size: 1.05rem;">- 名</strong>
+                    </div>
+                    <div style="font-size: 0.75rem; color: #64748b; margin-top: 4px;">月〜金（国民の祝日を除く）</div>
                 </div>
-                <div class="stat-card">
-                    <div class="stat-card-title">日別出勤人数の最小・最大（平準化状況）</div>
-                    <div class="stat-card-value" id="statWorkRange">- 名</div>
+
+                <!-- 2. 祝日の出勤人数（平準化状況 & 平均） -->
+                <div class="stat-card" style="border-top: 4px solid #dc2626;">
+                    <div class="stat-card-title" style="display: flex; align-items: center; justify-content: space-between;">
+                        <span>🎌 祝日の出勤人数（平準化状況）</span>
+                        <span id="statHolidayBadge" style="font-size: 0.75rem; background: #fef2f2; color: #b91c1c; padding: 2px 8px; border-radius: 9999px; font-weight: 700;">- 日間</span>
+                    </div>
+                    <div class="stat-card-value" id="statHolidayWorkRange" style="font-size: 1.3rem; color: #991b1b;">- 〜 - 名</div>
+                    <div style="display: flex; justify-content: space-between; align-items: center; margin-top: 6px; padding-top: 6px; border-top: 1px dashed #e2e8f0; font-size: 0.85rem;">
+                        <span style="color: #64748b; font-weight: 600;">祝日の平均出勤人数:</span>
+                        <strong id="statHolidayAvgWork" style="color: #1e293b; font-size: 1.05rem;">- 名</strong>
+                    </div>
+                    <div id="statSunHolSubInfo" style="font-size: 0.75rem; color: #64748b; margin-top: 4px;">国民の祝日・振替休日</div>
+                </div>
+
+                <!-- 3. 有休取得合計数 -->
+                <div class="stat-card" style="border-top: 4px solid #f59e0b; background: #fffdfa;">
+                    <div class="stat-card-title" style="display: flex; align-items: center; justify-content: space-between;">
+                        <span>🏖️ 有休取得合計数（全体）</span>
+                        <span style="font-size: 0.75rem; background: #fef3c7; color: #92400e; padding: 2px 8px; border-radius: 9999px; font-weight: 700;">休暇実績</span>
+                    </div>
+                    <div class="stat-card-value" id="statTotalPaidDays" style="font-size: 1.6rem; color: #b45309; font-weight: 800;">- 日</div>
+                    <div style="display: flex; justify-content: space-between; align-items: center; margin-top: 6px; padding-top: 6px; border-top: 1px dashed #fed7aa; font-size: 0.85rem;">
+                        <span style="color: #78350f; font-weight: 600;">有休取得スタッフ数:</span>
+                        <strong id="statPaidStaffCount" style="color: #92400e; font-size: 1.05rem;">- 名</strong>
+                    </div>
+                    <div style="font-size: 0.75rem; color: #9a3412; margin-top: 4px;">全有効スタッフの有給休暇（半日有休含む）取得合計</div>
+                </div>
+
+                <!-- 4. 全日（28日間）の出勤人数 -->
+                <div class="stat-card" style="border-top: 4px solid #64748b;">
+                    <div class="stat-card-title" style="display: flex; align-items: center; justify-content: space-between;">
+                        <span>📊 全日（28日間）の出勤人数</span>
+                        <span style="font-size: 0.75rem; background: #f1f5f9; color: #475569; padding: 2px 8px; border-radius: 9999px; font-weight: 700;">28日間</span>
+                    </div>
+                    <div class="stat-card-value" id="statWorkRange" style="font-size: 1.3rem; color: #1e293b;">- 〜 - 名</div>
+                    <div style="display: flex; justify-content: space-between; align-items: center; margin-top: 6px; padding-top: 6px; border-top: 1px dashed #e2e8f0; font-size: 0.85rem;">
+                        <span style="color: #64748b; font-weight: 600;">全日平均出勤人数:</span>
+                        <strong id="statAvgWork" style="color: #1e293b; font-size: 1.05rem;">- 名</strong>
+                    </div>
                     <div style="font-size: 0.75rem; color: #64748b; margin-top: 4px;">目標値を中心に各日のブレを極小化</div>
                 </div>
-                <div class="stat-card">
-                    <div class="stat-card-title">特殊勤務（早・遅・E・8時）の配置累計</div>
-                    <div class="stat-card-value" style="font-size: 1.15rem; font-weight: 700;" id="statSpecialCounts">-</div>
-                    <div style="font-size: 0.75rem; color: #64748b; margin-top: 4px;">毎日「早3名 / 遅1名 / E2名 / 8時1名」を完全配置</div>
+
+                <!-- 5. 特殊勤務（早・遅・E・8時）の配置累計 -->
+                <div class="stat-card" style="border-top: 4px solid #10b981;">
+                    <div class="stat-card-title" style="display: flex; align-items: center; justify-content: space-between;">
+                        <span>⏰ 特殊勤務の配置累計</span>
+                        <span style="font-size: 0.75rem; background: #ecfdf5; color: #047857; padding: 2px 8px; border-radius: 9999px; font-weight: 700;">割当完了</span>
+                    </div>
+                    <div class="stat-card-value" style="font-size: 1.05rem; font-weight: 700; color: #065f46;" id="statSpecialCounts">-</div>
+                    <div style="font-size: 0.75rem; color: #64748b; margin-top: 8px;">毎日「早3名 / 遅1名 / E2名 / 8時1名」を完全配置</div>
                 </div>
             </div>
 

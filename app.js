@@ -169,6 +169,10 @@ document.addEventListener('DOMContentLoaded', () => {
         if (checkThead) checkThead.innerHTML = '';
         if (checkTbody) checkTbody.innerHTML = `<tr><td colspan="38" style="text-align:center; padding: 40px; color: #94a3b8; font-size: 0.95rem;">💡 勤務表がまだ完成していません。「修正作業エリア」で【✨ 特殊勤務を入れる】を実行するとここに完成版が表示されます。</td></tr>`;
         if (checkTfoot) checkTfoot.innerHTML = '';
+
+        if (typeof resetStatsDashboard === 'function') {
+            resetStatsDashboard();
+        }
     }
 
     function saveCurrentTermToStorage() {
@@ -1928,32 +1932,180 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     }
 
-    function renderStatsDashboard(stats) {
-        const avgDailyWork = (stats.daily.reduce((sum, d) => sum + d.totalWork, 0) / NUM_DAYS).toFixed(1);
-        const minWork = Math.min(...stats.daily.map(d => d.totalWork));
-        const maxWork = Math.max(...stats.daily.map(d => d.totalWork));
+    function resetStatsDashboard() {
+        const setTxt = (id, txt) => {
+            const el = document.getElementById(id);
+            if (el) el.textContent = txt;
+        };
+        setTxt('statWeekdayBadge', '- 日間');
+        setTxt('statWeekdayWorkRange', '- 〜 - 名');
+        setTxt('statWeekdayAvgWork', '- 名');
 
-        document.getElementById('statAvgWork').textContent = `${avgDailyWork} 名`;
-        document.getElementById('statWorkRange').textContent = `${minWork} 〜 ${maxWork} 名 (ブレ幅: ${maxWork - minWork})`;
+        setTxt('statHolidayBadge', '- 日間');
+        setTxt('statHolidayWorkRange', '- 〜 - 名');
+        setTxt('statHolidayAvgWork', '- 名');
+        setTxt('statSunHolSubInfo', '国民の祝日・振替休日');
 
-        const totalEarly = stats.staffStats.reduce((sum, s) => sum + s.early, 0);
-        const totalLate = stats.staffStats.reduce((sum, s) => sum + s.late, 0);
-        const totalEve = stats.staffStats.reduce((sum, s) => sum + s.eve, 0);
-        const totalH8 = stats.staffStats.reduce((sum, s) => sum + s.h8, 0);
-        document.getElementById('statSpecialCounts').textContent = `早: ${totalEarly}回 / 遅: ${totalLate}回 / E: ${totalEve}回 / 8時: ${totalH8}回`;
+        setTxt('statTotalPaidDays', '- 日');
+        setTxt('statPaidStaffCount', '- 名');
+
+        setTxt('statWorkRange', '- 〜 - 名');
+        setTxt('statAvgWork', '- 名');
+        setTxt('statSpecialCounts', '-');
 
         const chartEl = document.getElementById('dailyWorkChart');
         if (chartEl) {
+            chartEl.innerHTML = '<div style="color: #94a3b8; font-size: 0.85rem; margin: auto;">勤務表を自動生成するとグラフが表示されます</div>';
+        }
+    }
+
+    function renderStatsDashboard(stats) {
+        if (!stats || !stats.daily || stats.daily.length === 0) {
+            resetStatsDashboard();
+            return;
+        }
+
+        const term = getTermInfo();
+        const dates = term.dates;
+
+        // 1. 平日、祝日、日祝の日別出勤データを分類
+        const weekdayDaily = [];
+        const holidayDaily = [];
+        const sunHolDaily = [];
+
+        for (let d = 0; d < NUM_DAYS; d++) {
+            const di = dates[d];
+            const totalWork = stats.daily[d].totalWork;
+            const item = { d, totalWork, label: di.label, weekday: di.weekday, isHoliday: di.isHoliday };
+
+            if (di.isHoliday) {
+                holidayDaily.push(item);
+                sunHolDaily.push(item);
+            } else if (di.wIdx === 6) { // 日曜日
+                sunHolDaily.push(item);
+            } else if (di.wIdx < 5) { // 月〜金（祝日除く平日）
+                weekdayDaily.push(item);
+            }
+        }
+
+        // --- 平日の集計（最小・最大・平均） ---
+        const weekdayBadgeEl = document.getElementById('statWeekdayBadge');
+        const weekdayRangeEl = document.getElementById('statWeekdayWorkRange');
+        const weekdayAvgEl = document.getElementById('statWeekdayAvgWork');
+
+        if (weekdayDaily.length > 0) {
+            const works = weekdayDaily.map(item => item.totalWork);
+            const wMin = Math.min(...works);
+            const wMax = Math.max(...works);
+            const wSum = works.reduce((a, b) => a + b, 0);
+            const wAvg = (wSum / weekdayDaily.length).toFixed(1);
+
+            if (weekdayBadgeEl) weekdayBadgeEl.textContent = `${weekdayDaily.length} 日間`;
+            if (weekdayRangeEl) weekdayRangeEl.textContent = `${wMin} 〜 ${wMax} 名 (ブレ幅: ${wMax - wMin})`;
+            if (weekdayAvgEl) weekdayAvgEl.textContent = `${wAvg} 名`;
+        } else {
+            if (weekdayBadgeEl) weekdayBadgeEl.textContent = '0 日間';
+            if (weekdayRangeEl) weekdayRangeEl.textContent = '- 名';
+            if (weekdayAvgEl) weekdayAvgEl.textContent = '- 名';
+        }
+
+        // --- 祝日の集計（最小・最大・平均） ---
+        const holidayBadgeEl = document.getElementById('statHolidayBadge');
+        const holidayRangeEl = document.getElementById('statHolidayWorkRange');
+        const holidayAvgEl = document.getElementById('statHolidayAvgWork');
+        const sunHolSubInfoEl = document.getElementById('statSunHolSubInfo');
+
+        if (holidayDaily.length > 0) {
+            const works = holidayDaily.map(item => item.totalWork);
+            const hMin = Math.min(...works);
+            const hMax = Math.max(...works);
+            const hSum = works.reduce((a, b) => a + b, 0);
+            const hAvg = (hSum / holidayDaily.length).toFixed(1);
+
+            if (holidayBadgeEl) holidayBadgeEl.textContent = `${holidayDaily.length} 日間`;
+            if (holidayRangeEl) holidayRangeEl.textContent = `${hMin} 〜 ${hMax} 名 (ブレ幅: ${hMax - hMin})`;
+            if (holidayAvgEl) holidayAvgEl.textContent = `${hAvg} 名`;
+        } else {
+            if (holidayBadgeEl) holidayBadgeEl.textContent = '0 日間';
+            if (holidayRangeEl) holidayRangeEl.textContent = '対象祝日なし (0日)';
+            if (holidayAvgEl) holidayAvgEl.textContent = '- 名';
+        }
+
+        // 日・祝体制（日曜日＋祝日）の補足表示
+        if (sunHolDaily.length > 0 && sunHolSubInfoEl) {
+            const works = sunHolDaily.map(item => item.totalWork);
+            const sMin = Math.min(...works);
+            const sMax = Math.max(...works);
+            const sSum = works.reduce((a, b) => a + b, 0);
+            const sAvg = (sSum / sunHolDaily.length).toFixed(1);
+            sunHolSubInfoEl.textContent = `※日・祝合計 (計${sunHolDaily.length}日): ${sMin}〜${sMax}名 (平均 ${sAvg}名)`;
+        } else if (sunHolSubInfoEl) {
+            sunHolSubInfoEl.textContent = '国民の祝日・振替休日';
+        }
+
+        // --- 有休取得合計数 ---
+        const validStaffStats = stats.staffStats.filter(s => !s.isUnused);
+        const totalPaidDays = validStaffStats.reduce((sum, s) => sum + s.paidDays, 0);
+        const paidStaffCount = validStaffStats.filter(s => s.paidDays > 0).length;
+
+        const totalPaidEl = document.getElementById('statTotalPaidDays');
+        const paidStaffEl = document.getElementById('statPaidStaffCount');
+        if (totalPaidEl) {
+            const formattedPaid = (totalPaidDays % 1 === 0) ? totalPaidDays.toFixed(0) : totalPaidDays.toFixed(1);
+            totalPaidEl.textContent = `${formattedPaid} 日`;
+        }
+        if (paidStaffEl) {
+            paidStaffEl.textContent = `${paidStaffCount} 名`;
+        }
+
+        // --- 全日（28日間）の出勤人数 ---
+        const allDailyWorks = stats.daily.map(d => d.totalWork);
+        const allMin = Math.min(...allDailyWorks);
+        const allMax = Math.max(...allDailyWorks);
+        const allAvg = (allDailyWorks.reduce((a, b) => a + b, 0) / NUM_DAYS).toFixed(1);
+
+        const workRangeEl = document.getElementById('statWorkRange');
+        const avgWorkEl = document.getElementById('statAvgWork');
+        if (workRangeEl) workRangeEl.textContent = `${allMin} 〜 ${allMax} 名 (ブレ幅: ${allMax - allMin})`;
+        if (avgWorkEl) avgWorkEl.textContent = `${allAvg} 名`;
+
+        // --- 特殊勤務（早・遅・E・8時）の配置累計 ---
+        const totalEarly = validStaffStats.reduce((sum, s) => sum + s.early, 0);
+        const totalLate = validStaffStats.reduce((sum, s) => sum + s.late, 0);
+        const totalEve = validStaffStats.reduce((sum, s) => sum + s.eve, 0);
+        const totalH8 = validStaffStats.reduce((sum, s) => sum + s.h8, 0);
+        const specEl = document.getElementById('statSpecialCounts');
+        if (specEl) {
+            specEl.textContent = `早: ${totalEarly}回 / 遅: ${totalLate}回 / E: ${totalEve}回 / 8時: ${totalH8}回`;
+        }
+
+        // --- 日別出勤人数グラフ（28日間、平日・土曜・祝日で色分け） ---
+        const chartEl = document.getElementById('dailyWorkChart');
+        if (chartEl) {
             let chartHtml = '';
-            stats.daily.forEach(d => {
-                const pct = Math.min(100, Math.max(10, (d.totalWork / 50) * 100));
+            stats.daily.forEach((d, idx) => {
+                const di = dates[idx];
+                const pct = Math.min(100, Math.max(10, (d.totalWork / 60) * 100));
+
+                let barColor = '#3b82f6'; // 平日: 青
+                let dayLabelColor = '#64748b';
+                if (di.isHoliday || di.wIdx === 6) {
+                    barColor = '#ef4444'; // 祝日・日曜: 赤
+                    dayLabelColor = '#dc2626';
+                } else if (di.wIdx === 5) {
+                    barColor = '#0ea5e9'; // 土曜: 水色
+                    dayLabelColor = '#0284c7';
+                }
+
+                const dayBadge = di.isHoliday ? '祝' : di.weekday;
                 chartHtml += `
-                    <div style="flex:1; display:flex; flex-direction:column; align-items:center; gap:4px;">
-                        <span style="font-size:0.7rem; font-weight:700;">${d.totalWork}</span>
-                        <div style="width:100%; background:#e2e8f0; height:120px; border-radius:4px; display:flex; align-items:flex-end;">
-                            <div style="width:100%; background:#3b82f6; height:${pct}%; border-radius:4px; transition:height 0.3s;"></div>
+                    <div style="flex:1; display:flex; flex-direction:column; align-items:center; gap:3px;" title="${di.label} (${di.weekday})${di.isHoliday ? ' 祝日' : ''}: 出勤 ${d.totalWork}名">
+                        <span style="font-size:0.68rem; font-weight:700; color:#1e293b;">${d.totalWork}</span>
+                        <div style="width:100%; background:#f1f5f9; height:110px; border-radius:4px; display:flex; align-items:flex-end;">
+                            <div style="width:100%; background:${barColor}; height:${pct}%; border-radius:4px; transition:height 0.3s;"></div>
                         </div>
-                        <span style="font-size:0.7rem; color:#64748b;">${d.day}</span>
+                        <span style="font-size:0.68rem; font-weight:600; color:${dayLabelColor};">${d.day}</span>
+                        <span style="font-size:0.62rem; color:${dayLabelColor};">${dayBadge}</span>
                     </div>
                 `;
             });
