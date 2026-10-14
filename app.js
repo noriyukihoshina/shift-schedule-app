@@ -3532,10 +3532,10 @@ document.addEventListener('DOMContentLoaded', () => {
   <fills count="6">
     <fill><patternFill patternType="none"/></fill>
     <fill><patternFill patternType="gray125"/></fill>
-    <fill><patternFill patternType="solid"><fgColor rgb="F1F5F9"/></patternFill></fill> <!-- 2: ヘッダーグレー -->
-    <fill><patternFill patternType="solid"><fgColor rgb="EFF6FF"/></patternFill></fill> <!-- 3: 土曜薄青 -->
-    <fill><patternFill patternType="solid"><fgColor rgb="FEF2F2"/></patternFill></fill> <!-- 4: 日曜薄赤 -->
-    <fill><patternFill patternType="solid"><fgColor rgb="F0FDF4"/></patternFill></fill> <!-- 5: 合計薄緑 -->
+    <fill><patternFill patternType="solid"><fgColor rgb="F1F5F9"/></patternFill></fill>
+    <fill><patternFill patternType="solid"><fgColor rgb="EFF6FF"/></patternFill></fill>
+    <fill><patternFill patternType="solid"><fgColor rgb="FEF2F2"/></patternFill></fill>
+    <fill><patternFill patternType="solid"><fgColor rgb="F0FDF4"/></patternFill></fill>
   </fills>
   <borders count="2">
     <border><left/><right/><top/><bottom/></border>
@@ -3550,14 +3550,14 @@ document.addEventListener('DOMContentLoaded', () => {
     <xf numFmtId="0" fontId="0" fillId="0" borderId="0"/>
   </cellStyleXfs>
   <cellXfs count="8">
-    <xf numFmtId="0" fontId="0" fillId="0" borderId="0" xfId="0"/> <!-- 0: default -->
-    <xf numFmtId="0" fontId="2" fillId="0" borderId="0" xfId="0"><alignment horizontal="left" vertical="center"/></xf> <!-- 1: title -->
-    <xf numFmtId="0" fontId="1" fillId="2" borderId="1" xfId="0"><alignment horizontal="center" vertical="center"/></xf> <!-- 2: header gray -->
-    <xf numFmtId="0" fontId="1" fillId="3" borderId="1" xfId="0"><alignment horizontal="center" vertical="center"/></xf> <!-- 3: header sat -->
-    <xf numFmtId="0" fontId="1" fillId="4" borderId="1" xfId="0"><alignment horizontal="center" vertical="center"/></xf> <!-- 4: header sun -->
-    <xf numFmtId="0" fontId="0" fillId="0" borderId="1" xfId="0"><alignment horizontal="center" vertical="center"/></xf> <!-- 5: cell normal -->
-    <xf numFmtId="0" fontId="0" fillId="0" borderId="1" xfId="0"><alignment horizontal="left" vertical="center"/></xf> <!-- 6: cell staff name -->
-    <xf numFmtId="0" fontId="1" fillId="5" borderId="1" xfId="0"><alignment horizontal="center" vertical="center"/></xf> <!-- 7: cell sum -->
+    <xf numFmtId="0" fontId="0" fillId="0" borderId="0" xfId="0"/>
+    <xf numFmtId="0" fontId="2" fillId="0" borderId="0" xfId="0"><alignment horizontal="left" vertical="center"/></xf>
+    <xf numFmtId="0" fontId="1" fillId="2" borderId="1" xfId="0"><alignment horizontal="center" vertical="center"/></xf>
+    <xf numFmtId="0" fontId="1" fillId="3" borderId="1" xfId="0"><alignment horizontal="center" vertical="center"/></xf>
+    <xf numFmtId="0" fontId="1" fillId="4" borderId="1" xfId="0"><alignment horizontal="center" vertical="center"/></xf>
+    <xf numFmtId="0" fontId="0" fillId="0" borderId="1" xfId="0"><alignment horizontal="center" vertical="center"/></xf>
+    <xf numFmtId="0" fontId="0" fillId="0" borderId="1" xfId="0"><alignment horizontal="left" vertical="center"/></xf>
+    <xf numFmtId="0" fontId="1" fillId="5" borderId="1" xfId="0"><alignment horizontal="center" vertical="center"/></xf>
   </cellXfs>
 </styleSheet>`;
 
@@ -3568,18 +3568,16 @@ document.addEventListener('DOMContentLoaded', () => {
   <sheetViews><sheetView tabSelected="1" workbookViewId="0"/></sheetViews>
   <sheetFormatPr defaultRowHeight="18"/>
   <cols>
-    <col min="1" max="1" width="5" customWidth="1"/> <!-- A: No -->
-    <col min="2" max="2" width="16" customWidth="1"/> <!-- B: 氏名 -->
-    <col min="3" max="30" width="6" customWidth="1"/> <!-- C〜AD: 28日間 -->
-    <col min="31" max="32" width="11" customWidth="1"/> <!-- AE〜AF: 希望休数, 希望有休数 -->
-    <col min="33" max="33" width="16" customWidth="1"/> <!-- AG: 備考 -->
+    <col min="1" max="1" width="5" customWidth="1"/>
+    <col min="2" max="2" width="16" customWidth="1"/>
+    <col min="3" max="30" width="6" customWidth="1"/>
+    <col min="31" max="32" width="11" customWidth="1"/>
+    <col min="33" max="33" width="16" customWidth="1"/>
   </cols>
   <sheetData>
-    <!-- 1行目: タイトル -->
     <row r="1" ht="24" customHeight="1">
       <c r="A1" s="1" t="inlineStr"><is><t>${title}</t></is></c>
     </row>
-    <!-- 2行目: 日付ヘッダー行（曜日なし！日付のみ） -->
     <row r="2" ht="22" customHeight="1">
       <c r="A2" s="2" t="inlineStr"><is><t>No</t></is></c>
       <c r="B2" s="2" t="inlineStr"><is><t>氏名</t></is></c>`;
@@ -4336,7 +4334,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
     function exportExcelSpreadsheet(grid, stats) {
         const term = getTermInfo();
-        const title = `${term.title}（作成日: ${new Date().toLocaleDateString('ja-JP')}）`;
+        const title = term.title;
 
         const contentTypes = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 <Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">
@@ -4368,24 +4366,24 @@ document.addEventListener('DOMContentLoaded', () => {
         const styles = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 <styleSheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">
   <fonts count="10">
-    <font><sz val="9"/><name val="Meiryo"/><color rgb="000000"/></font> <!-- 0: 通常 -->
-    <font><b/><sz val="9"/><name val="Meiryo"/><color rgb="000000"/></font> <!-- 1: 太字黒 -->
-    <font><b/><sz val="9"/><name val="Meiryo"/><color rgb="DC2626"/></font> <!-- 2: 🔒赤字太字 -->
-    <font><b/><sz val="12"/><name val="Meiryo"/><color rgb="1E293B"/></font> <!-- 3: タイトル -->
-    <font><b/><sz val="9"/><name val="Meiryo"/><color rgb="EA580C"/></font> <!-- 4: オレンジ(PT/OT A) -->
-    <font><b/><sz val="9"/><name val="Meiryo"/><color rgb="1D4ED8"/></font> <!-- 5: 青(PT/OT B) -->
-    <font><b/><sz val="9"/><name val="Meiryo"/><color rgb="EC4899"/></font> <!-- 6: 薄いピンク(ST) -->
-    <font><b/><sz val="9"/><name val="Meiryo"/><color rgb="334155"/></font> <!-- 7: 濃い灰色(早〜8時) -->
-    <font><b/><sz val="9"/><name val="Meiryo"/><color rgb="0284C7"/></font> <!-- 8: 土曜青 -->
-    <font><b/><sz val="9"/><name val="Meiryo"/><color rgb="E11D48"/></font> <!-- 9: 日祝赤 -->
+    <font><sz val="9"/><name val="Meiryo"/><color rgb="000000"/></font>
+    <font><b/><sz val="9"/><name val="Meiryo"/><color rgb="000000"/></font>
+    <font><b/><sz val="9"/><name val="Meiryo"/><color rgb="DC2626"/></font>
+    <font><b/><sz val="12"/><name val="Meiryo"/><color rgb="1E293B"/></font>
+    <font><b/><sz val="9"/><name val="Meiryo"/><color rgb="EA580C"/></font>
+    <font><b/><sz val="9"/><name val="Meiryo"/><color rgb="1D4ED8"/></font>
+    <font><b/><sz val="9"/><name val="Meiryo"/><color rgb="EC4899"/></font>
+    <font><b/><sz val="9"/><name val="Meiryo"/><color rgb="334155"/></font>
+    <font><b/><sz val="9"/><name val="Meiryo"/><color rgb="0284C7"/></font>
+    <font><b/><sz val="9"/><name val="Meiryo"/><color rgb="E11D48"/></font>
   </fonts>
   <fills count="6">
     <fill><patternFill patternType="none"/></fill>
     <fill><patternFill patternType="gray125"/></fill>
-    <fill><patternFill patternType="solid"><fgColor rgb="F1F5F9"/></patternFill></fill> <!-- 2: ヘッダーグレー -->
-    <fill><patternFill patternType="solid"><fgColor rgb="E0F2FE"/></patternFill></fill> <!-- 3: 土曜薄青 -->
-    <fill><patternFill patternType="solid"><fgColor rgb="FFE4E6"/></patternFill></fill> <!-- 4: 日祝薄赤 -->
-    <fill><patternFill patternType="solid"><fgColor rgb="F8FAFC"/></patternFill></fill> <!-- 5: 合計薄グレー -->
+    <fill><patternFill patternType="solid"><fgColor rgb="F1F5F9"/></patternFill></fill>
+    <fill><patternFill patternType="solid"><fgColor rgb="E0F2FE"/></patternFill></fill>
+    <fill><patternFill patternType="solid"><fgColor rgb="FFE4E6"/></patternFill></fill>
+    <fill><patternFill patternType="solid"><fgColor rgb="F8FAFC"/></patternFill></fill>
   </fills>
   <borders count="2">
     <border><left/><right/><top/><bottom/></border>
@@ -4400,21 +4398,21 @@ document.addEventListener('DOMContentLoaded', () => {
     <xf numFmtId="0" fontId="0" fillId="0" borderId="0"/>
   </cellStyleXfs>
   <cellXfs count="15">
-    <xf numFmtId="0" fontId="0" fillId="0" borderId="0" xfId="0"/> <!-- 0: default -->
-    <xf numFmtId="0" fontId="3" fillId="0" borderId="0" xfId="0"><alignment horizontal="left" vertical="center"/></xf> <!-- 1: title -->
-    <xf numFmtId="0" fontId="1" fillId="2" borderId="1" xfId="0"><alignment horizontal="center" vertical="center"/></xf> <!-- 2: header gray -->
-    <xf numFmtId="0" fontId="8" fillId="3" borderId="1" xfId="0"><alignment horizontal="center" vertical="center"/></xf> <!-- 3: header sat -->
-    <xf numFmtId="0" fontId="9" fillId="4" borderId="1" xfId="0"><alignment horizontal="center" vertical="center"/></xf> <!-- 4: header sun -->
-    <xf numFmtId="0" fontId="1" fillId="0" borderId="1" xfId="0"><alignment horizontal="left" vertical="center"/></xf> <!-- 5: staff name -->
-    <xf numFmtId="0" fontId="0" fillId="0" borderId="1" xfId="0"><alignment horizontal="center" vertical="center"/></xf> <!-- 6: normal symbol -->
-    <xf numFmtId="0" fontId="2" fillId="0" borderId="1" xfId="0"><alignment horizontal="center" vertical="center"/></xf> <!-- 7: 🔒fixed symbol red -->
-    <xf numFmtId="0" fontId="1" fillId="0" borderId="1" xfId="0"><alignment horizontal="center" vertical="center"/></xf> <!-- 8: staff stat black -->
-    <xf numFmtId="0" fontId="1" fillId="5" borderId="1" xfId="0"><alignment horizontal="center" vertical="center"/></xf> <!-- 9: total sum / real sum -->
-    <xf numFmtId="0" fontId="4" fillId="0" borderId="1" xfId="0"><alignment horizontal="center" vertical="center"/></xf> <!-- 10: PT/OT A orange -->
-    <xf numFmtId="0" fontId="5" fillId="0" borderId="1" xfId="0"><alignment horizontal="center" vertical="center"/></xf> <!-- 11: PT/OT B blue -->
-    <xf numFmtId="0" fontId="6" fillId="0" borderId="1" xfId="0"><alignment horizontal="center" vertical="center"/></xf> <!-- 12: ST pink -->
-    <xf numFmtId="0" fontId="7" fillId="0" borderId="1" xfId="0"><alignment horizontal="center" vertical="center"/></xf> <!-- 13: early/late/eve/h8 gray -->
-    <xf numFmtId="0" fontId="1" fillId="0" borderId="1" xfId="0"><alignment horizontal="center" vertical="center"/></xf> <!-- 14: footer label center -->
+    <xf numFmtId="0" fontId="0" fillId="0" borderId="0" xfId="0"/>
+    <xf numFmtId="0" fontId="3" fillId="0" borderId="0" xfId="0"><alignment horizontal="left" vertical="center"/></xf>
+    <xf numFmtId="0" fontId="1" fillId="2" borderId="1" xfId="0"><alignment horizontal="center" vertical="center"/></xf>
+    <xf numFmtId="0" fontId="8" fillId="3" borderId="1" xfId="0"><alignment horizontal="center" vertical="center"/></xf>
+    <xf numFmtId="0" fontId="9" fillId="4" borderId="1" xfId="0"><alignment horizontal="center" vertical="center"/></xf>
+    <xf numFmtId="0" fontId="1" fillId="0" borderId="1" xfId="0"><alignment horizontal="left" vertical="center"/></xf>
+    <xf numFmtId="0" fontId="0" fillId="0" borderId="1" xfId="0"><alignment horizontal="center" vertical="center"/></xf>
+    <xf numFmtId="0" fontId="2" fillId="0" borderId="1" xfId="0"><alignment horizontal="center" vertical="center"/></xf>
+    <xf numFmtId="0" fontId="1" fillId="0" borderId="1" xfId="0"><alignment horizontal="center" vertical="center"/></xf>
+    <xf numFmtId="0" fontId="1" fillId="5" borderId="1" xfId="0"><alignment horizontal="center" vertical="center"/></xf>
+    <xf numFmtId="0" fontId="4" fillId="0" borderId="1" xfId="0"><alignment horizontal="center" vertical="center"/></xf>
+    <xf numFmtId="0" fontId="5" fillId="0" borderId="1" xfId="0"><alignment horizontal="center" vertical="center"/></xf>
+    <xf numFmtId="0" fontId="6" fillId="0" borderId="1" xfId="0"><alignment horizontal="center" vertical="center"/></xf>
+    <xf numFmtId="0" fontId="7" fillId="0" borderId="1" xfId="0"><alignment horizontal="center" vertical="center"/></xf>
+    <xf numFmtId="0" fontId="1" fillId="0" borderId="1" xfId="0"><alignment horizontal="center" vertical="center"/></xf>
   </cellXfs>
 </styleSheet>`;
 
@@ -4424,20 +4422,21 @@ document.addEventListener('DOMContentLoaded', () => {
         }
         const endRow = 3 + validStaffIndices.length;
 
-        // セクション行範囲計算
-        let ptAStart = 4, ptAEnd = 4;
-        let otAStart = 4, otAEnd = 4;
-        let ptBStart = 4, ptBEnd = 4;
-        let otBStart = 4, otBEnd = 4;
-        const stStartRow = 55;
+        // 各セクションの開始行・終了行
+        let ptAStart = 0, ptAEnd = 0;
+        let otAStart = 0, otAEnd = 0;
+        let ptBStart = 0, ptBEnd = 0;
+        let otBStart = 0, otBEnd = 0;
+        let stStart = 0, stEnd = 0;
 
         validStaffIndices.forEach((s, idx) => {
             const staff = staffList[s];
             const row = 4 + idx;
-            if (staff.section === 'PT A') { if (ptAStart === 4 && idx !== 0) ptAStart = row; ptAEnd = row; }
-            if (staff.section === 'OT A') { if (otAStart === 4) otAStart = row; otAEnd = row; }
-            if (staff.section === 'PT B') { if (ptBStart === 4) ptBStart = row; ptBEnd = row; }
-            if (staff.section === 'OT B') { if (otBStart === 4) otBStart = row; otBEnd = row; }
+            if (staff.section === 'PT A') { if (ptAStart === 0) ptAStart = row; ptAEnd = row; }
+            if (staff.section === 'OT A') { if (otAStart === 0) otAStart = row; otAEnd = row; }
+            if (staff.section === 'PT B') { if (ptBStart === 0) ptBStart = row; ptBEnd = row; }
+            if (staff.section === 'OT B') { if (otBStart === 0) otBStart = row; otBEnd = row; }
+            if (staff.section === 'ST')   { if (stStart === 0) stStart = row; stEnd = row; }
         });
 
         function makeWorkCountFormulaXml(range) {
@@ -4453,17 +4452,15 @@ document.addEventListener('DOMContentLoaded', () => {
   <sheetViews><sheetView tabSelected="1" workbookViewId="0"/></sheetViews>
   <sheetFormatPr defaultRowHeight="18"/>
   <cols>
-    <col min="1" max="1" width="16" customWidth="1"/> <!-- A: 氏名 (約115px、A3縦横比最適化) -->
-    <col min="2" max="29" width="4.0" customWidth="1"/> <!-- B〜AC: 28日分 (33ピクセル固定) -->
-    <col min="30" max="33" width="7" customWidth="1"/> <!-- AD〜AG: 出勤, 公休, 有休, リフ (黒字) -->
-    <col min="34" max="37" width="4.0" customWidth="1"/> <!-- AH〜AK: 早, 遅, E, 8時 (33ピクセル固定) -->
+    <col min="1" max="1" width="16" customWidth="1"/>
+    <col min="2" max="29" width="4.0" customWidth="1"/>
+    <col min="30" max="33" width="7" customWidth="1"/>
+    <col min="34" max="37" width="4.0" customWidth="1"/>
   </cols>
   <sheetData>
-    <!-- 1行目: タイトル -->
     <row r="1" ht="24" customHeight="1">
       <c r="A1" s="1" t="inlineStr"><is><t>${title}</t></is></c>
     </row>
-    <!-- 2行目: 日付ヘッダー行 -->
     <row r="2" ht="20" customHeight="1">
       <c r="A2" s="2" t="inlineStr"><is><t>氏名</t></is></c>`;
 
@@ -4517,7 +4514,7 @@ document.addEventListener('DOMContentLoaded', () => {
             const fWork = makeWorkCountFormulaXml(rng);
             const fOff = `COUNTIF(${rng},&quot;休&quot;)+0.5*(COUNTIF(${rng},&quot;○/休&quot;)+COUNTIF(${rng},&quot;〇/休&quot;)+COUNTIF(${rng},&quot;休/○&quot;)+COUNTIF(${rng},&quot;休/〇&quot;))`;
             const fPaid = `COUNTIF(${rng},&quot;有&quot;)+0.5*(COUNTIF(${rng},&quot;○/有&quot;)+COUNTIF(${rng},&quot;〇/有&quot;)+COUNTIF(${rng},&quot;有/○&quot;)+COUNTIF(${rng},&quot;有/〇&quot;))`;
-            const fRef = `COUNTIF(${rng},&quot;上1&quot;)+COUNTIF(${rng},&quot;上2&quot;)+COUNTIF(${rng},&quot;上3&quot;)+COUNTIF(${rng},&quot;上4&quot;)+COUNTIF(${rng},&quot;上5&quot;)+COUNTIF(${rng},&quot;下1&quot;)+COUNTIF(${rng},&quot;下2&quot;)+COUNTIF(${rng},&quot;下3&quot;))`;
+            const fRef = `COUNTIF(${rng},&quot;上1&quot;)+COUNTIF(${rng},&quot;上2&quot;)+COUNTIF(${rng},&quot;上3&quot;)+COUNTIF(${rng},&quot;上4&quot;)+COUNTIF(${rng},&quot;上5&quot;)+COUNTIF(${rng},&quot;下1&quot;)+COUNTIF(${rng},&quot;下2&quot;)+COUNTIF(${rng},&quot;下3&quot;)`;
             const fEarly = `COUNTIF(${rng},&quot;早&quot;)+COUNTIF(${rng},&quot;ハヤ&quot;)`;
             const fLate = `COUNTIF(${rng},&quot;遅&quot;)+COUNTIF(${rng},&quot;オソ&quot;)`;
             const fEve = `COUNTIF(${rng},&quot;E&quot;)+COUNTIF(${rng},&quot;イブ&quot;)`;
@@ -4534,23 +4531,23 @@ document.addEventListener('DOMContentLoaded', () => {
             sheet1 += `\n    </row>`;
         });
 
-        // 集計フッター行
+        // 集計フッター行 (静的範囲参照に統一：保護ビュー完全対応)
         // 1. 出勤人数合計
         const rWork = endRow + 1;
         sheet1 += `\n    <row r="${rWork}" ht="20" customHeight="1">
       <c r="A${rWork}" s="9" t="inlineStr"><is><t>出勤人数合計</t></is></c>`;
         for (let d = 0; d < NUM_DAYS; d++) {
             const col = toColLetter(2 + d);
-            sheet1 += `\n      <c r="${col}${rWork}" s="9"><f>${makeWorkCountFormulaXml(`INDIRECT(&quot;${col}$4:${col}&quot;&amp;(ROW()-1))`)}</f><v>0</v></c>`;
+            sheet1 += `\n      <c r="${col}${rWork}" s="9"><f>${makeWorkCountFormulaXml(`${col}$4:${col}$${endRow}`)}</f><v>0</v></c>`;
         }
-        sheet1 += `\n      <c r="AD${rWork}" s="9"><f>SUM(INDIRECT(&quot;AD$4:AD&quot;&amp;(ROW()-1)))</f><v>0</v></c>`;
-        sheet1 += `\n      <c r="AE${rWork}" s="9"><f>SUM(INDIRECT(&quot;AE$4:AE&quot;&amp;(ROW()-1)))</f><v>0</v></c>`;
-        sheet1 += `\n      <c r="AF${rWork}" s="9"><f>SUM(INDIRECT(&quot;AF$4:AF&quot;&amp;(ROW()-1)))</f><v>0</v></c>`;
-        sheet1 += `\n      <c r="AG${rWork}" s="9"><f>SUM(INDIRECT(&quot;AG$4:AG&quot;&amp;(ROW()-1)))</f><v>0</v></c>`;
-        sheet1 += `\n      <c r="AH${rWork}" s="13"><f>SUM(INDIRECT(&quot;AH$4:AH&quot;&amp;(ROW()-1)))</f><v>0</v></c>`;
-        sheet1 += `\n      <c r="AI${rWork}" s="13"><f>SUM(INDIRECT(&quot;AI$4:AI&quot;&amp;(ROW()-1)))</f><v>0</v></c>`;
-        sheet1 += `\n      <c r="AJ${rWork}" s="13"><f>SUM(INDIRECT(&quot;AJ$4:AJ&quot;&amp;(ROW()-1)))</f><v>0</v></c>`;
-        sheet1 += `\n      <c r="AK${rWork}" s="13"><f>SUM(INDIRECT(&quot;AK$4:AK&quot;&amp;(ROW()-1)))</f><v>0</v></c>`;
+        sheet1 += `\n      <c r="AD${rWork}" s="9"><f>SUM(AD$4:AD$${endRow})</f><v>0</v></c>`;
+        sheet1 += `\n      <c r="AE${rWork}" s="9"><f>SUM(AE$4:AE$${endRow})</f><v>0</v></c>`;
+        sheet1 += `\n      <c r="AF${rWork}" s="9"><f>SUM(AF$4:AF$${endRow})</f><v>0</v></c>`;
+        sheet1 += `\n      <c r="AG${rWork}" s="9"><f>SUM(AG$4:AG$${endRow})</f><v>0</v></c>`;
+        sheet1 += `\n      <c r="AH${rWork}" s="13"><f>SUM(AH$4:AH$${endRow})</f><v>0</v></c>`;
+        sheet1 += `\n      <c r="AI${rWork}" s="13"><f>SUM(AI$4:AI$${endRow})</f><v>0</v></c>`;
+        sheet1 += `\n      <c r="AJ${rWork}" s="13"><f>SUM(AJ$4:AJ$${endRow})</f><v>0</v></c>`;
+        sheet1 += `\n      <c r="AK${rWork}" s="13"><f>SUM(AK$4:AK$${endRow})</f><v>0</v></c>`;
         sheet1 += `\n    </row>`;
 
         // 2. 実数合計
@@ -4560,7 +4557,7 @@ document.addEventListener('DOMContentLoaded', () => {
         for (let d = 0; d < NUM_DAYS; d++) {
             const col = toColLetter(2 + d);
             const offset = (dayOffsets && dayOffsets[d]) ? dayOffsets[d] : 0;
-            const fReal = offset === 0 ? `INDIRECT(&quot;${col}&quot;&amp;(ROW()-1))` : `INDIRECT(&quot;${col}&quot;&amp;(ROW()-1))-(${offset})`;
+            const fReal = offset === 0 ? `${col}${rWork}` : `${col}${rWork}-(${offset})`;
             sheet1 += `\n      <c r="${col}${rReal}" s="9"><f>${fReal}</f><v>0</v></c>`;
         }
         sheet1 += `\n      <c r="AD${rReal}" s="9"><f>SUM(B${rReal}:AC${rReal})</f><v>0</v></c>`;
@@ -4575,7 +4572,8 @@ document.addEventListener('DOMContentLoaded', () => {
       <c r="A${rPtA}" s="10" t="inlineStr"><is><t>PT A 出勤</t></is></c>`;
         for (let d = 0; d < NUM_DAYS; d++) {
             const col = toColLetter(2 + d);
-            sheet1 += `\n      <c r="${col}${rPtA}" s="10"><f>${makeWorkCountFormulaXml(`${col}${ptAStart}:${col}${ptAEnd}`)}</f><v>0</v></c>`;
+            const fPtA = ptAStart > 0 ? makeWorkCountFormulaXml(`${col}$${ptAStart}:${col}$${ptAEnd}`) : '0';
+            sheet1 += `\n      <c r="${col}${rPtA}" s="10"><f>${fPtA}</f><v>0</v></c>`;
         }
         sheet1 += `\n      <c r="AD${rPtA}" s="10"><f>SUM(B${rPtA}:AC${rPtA})</f><v>0</v></c>`;
         for (let c = 31; c <= 37; c++) sheet1 += `\n      <c r="${toColLetter(c)}${rPtA}" s="10" t="inlineStr"><is><t>-</t></is></c>`;
@@ -4587,7 +4585,8 @@ document.addEventListener('DOMContentLoaded', () => {
       <c r="A${rOtA}" s="10" t="inlineStr"><is><t>OT A 出勤</t></is></c>`;
         for (let d = 0; d < NUM_DAYS; d++) {
             const col = toColLetter(2 + d);
-            sheet1 += `\n      <c r="${col}${rOtA}" s="10"><f>${makeWorkCountFormulaXml(`${col}${otAStart}:${col}${otAEnd}`)}</f><v>0</v></c>`;
+            const fOtA = otAStart > 0 ? makeWorkCountFormulaXml(`${col}$${otAStart}:${col}$${otAEnd}`) : '0';
+            sheet1 += `\n      <c r="${col}${rOtA}" s="10"><f>${fOtA}</f><v>0</v></c>`;
         }
         sheet1 += `\n      <c r="AD${rOtA}" s="10"><f>SUM(B${rOtA}:AC${rOtA})</f><v>0</v></c>`;
         for (let c = 31; c <= 37; c++) sheet1 += `\n      <c r="${toColLetter(c)}${rOtA}" s="10" t="inlineStr"><is><t>-</t></is></c>`;
@@ -4599,7 +4598,8 @@ document.addEventListener('DOMContentLoaded', () => {
       <c r="A${rPtB}" s="11" t="inlineStr"><is><t>PT B 出勤</t></is></c>`;
         for (let d = 0; d < NUM_DAYS; d++) {
             const col = toColLetter(2 + d);
-            sheet1 += `\n      <c r="${col}${rPtB}" s="11"><f>${makeWorkCountFormulaXml(`${col}${ptBStart}:${col}${ptBEnd}`)}</f><v>0</v></c>`;
+            const fPtB = ptBStart > 0 ? makeWorkCountFormulaXml(`${col}$${ptBStart}:${col}$${ptBEnd}`) : '0';
+            sheet1 += `\n      <c r="${col}${rPtB}" s="11"><f>${fPtB}</f><v>0</v></c>`;
         }
         sheet1 += `\n      <c r="AD${rPtB}" s="11"><f>SUM(B${rPtB}:AC${rPtB})</f><v>0</v></c>`;
         for (let c = 31; c <= 37; c++) sheet1 += `\n      <c r="${toColLetter(c)}${rPtB}" s="11" t="inlineStr"><is><t>-</t></is></c>`;
@@ -4611,7 +4611,8 @@ document.addEventListener('DOMContentLoaded', () => {
       <c r="A${rOtB}" s="11" t="inlineStr"><is><t>OT B 出勤</t></is></c>`;
         for (let d = 0; d < NUM_DAYS; d++) {
             const col = toColLetter(2 + d);
-            sheet1 += `\n      <c r="${col}${rOtB}" s="11"><f>${makeWorkCountFormulaXml(`${col}${otBStart}:${col}${otBEnd}`)}</f><v>0</v></c>`;
+            const fOtB = otBStart > 0 ? makeWorkCountFormulaXml(`${col}$${otBStart}:${col}$${otBEnd}`) : '0';
+            sheet1 += `\n      <c r="${col}${rOtB}" s="11"><f>${fOtB}</f><v>0</v></c>`;
         }
         sheet1 += `\n      <c r="AD${rOtB}" s="11"><f>SUM(B${rOtB}:AC${rOtB})</f><v>0</v></c>`;
         for (let c = 31; c <= 37; c++) sheet1 += `\n      <c r="${toColLetter(c)}${rOtB}" s="11" t="inlineStr"><is><t>-</t></is></c>`;
@@ -4623,7 +4624,7 @@ document.addEventListener('DOMContentLoaded', () => {
       <c r="A${rSt}" s="12" t="inlineStr"><is><t>ST 出勤</t></is></c>`;
         for (let d = 0; d < NUM_DAYS; d++) {
             const col = toColLetter(2 + d);
-            const fSt = `IF((ROW()-7)&lt;${stStartRow},0,${makeWorkCountFormulaXml(`INDIRECT(&quot;${col}${stStartRow}:${col}&quot;&amp;(ROW()-7))`)} )`;
+            const fSt = stStart > 0 ? makeWorkCountFormulaXml(`${col}$${stStart}:${col}$${stEnd}`) : '0';
             sheet1 += `\n      <c r="${col}${rSt}" s="12"><f>${fSt}</f><v>0</v></c>`;
         }
         sheet1 += `\n      <c r="AD${rSt}" s="12"><f>SUM(B${rSt}:AC${rSt})</f><v>0</v></c>`;
@@ -4636,7 +4637,7 @@ document.addEventListener('DOMContentLoaded', () => {
       <c r="A${rEarly}" s="13" t="inlineStr"><is><t>早番</t></is></c>`;
         for (let d = 0; d < NUM_DAYS; d++) {
             const col = toColLetter(2 + d);
-            sheet1 += `\n      <c r="${col}${rEarly}" s="13"><f>COUNTIF(INDIRECT(&quot;${col}$4:${col}&quot;&amp;(ROW()-8)),&quot;早&quot;)+COUNTIF(INDIRECT(&quot;${col}$4:${col}&quot;&amp;(ROW()-8)),&quot;ハヤ&quot;)</f><v>0</v></c>`;
+            sheet1 += `\n      <c r="${col}${rEarly}" s="13"><f>COUNTIF(${col}$4:${col}$${endRow},&quot;早&quot;)+COUNTIF(${col}$4:${col}$${endRow},&quot;ハヤ&quot;)</f><v>0</v></c>`;
         }
         sheet1 += `\n      <c r="AD${rEarly}" s="13"><f>SUM(B${rEarly}:AC${rEarly})</f><v>0</v></c>`;
         for (let c = 31; c <= 37; c++) sheet1 += `\n      <c r="${toColLetter(c)}${rEarly}" s="13" t="inlineStr"><is><t>-</t></is></c>`;
@@ -4648,7 +4649,7 @@ document.addEventListener('DOMContentLoaded', () => {
       <c r="A${rLate}" s="13" t="inlineStr"><is><t>遅番</t></is></c>`;
         for (let d = 0; d < NUM_DAYS; d++) {
             const col = toColLetter(2 + d);
-            sheet1 += `\n      <c r="${col}${rLate}" s="13"><f>COUNTIF(INDIRECT(&quot;${col}$4:${col}&quot;&amp;(ROW()-9)),&quot;遅&quot;)+COUNTIF(INDIRECT(&quot;${col}$4:${col}&quot;&amp;(ROW()-9)),&quot;オソ&quot;)</f><v>0</v></c>`;
+            sheet1 += `\n      <c r="${col}${rLate}" s="13"><f>COUNTIF(${col}$4:${col}$${endRow},&quot;遅&quot;)+COUNTIF(${col}$4:${col}$${endRow},&quot;オソ&quot;)</f><v>0</v></c>`;
         }
         sheet1 += `\n      <c r="AD${rLate}" s="13"><f>SUM(B${rLate}:AC${rLate})</f><v>0</v></c>`;
         for (let c = 31; c <= 37; c++) sheet1 += `\n      <c r="${toColLetter(c)}${rLate}" s="13" t="inlineStr"><is><t>-</t></is></c>`;
@@ -4660,7 +4661,7 @@ document.addEventListener('DOMContentLoaded', () => {
       <c r="A${rEve}" s="13" t="inlineStr"><is><t>E</t></is></c>`;
         for (let d = 0; d < NUM_DAYS; d++) {
             const col = toColLetter(2 + d);
-            sheet1 += `\n      <c r="${col}${rEve}" s="13"><f>COUNTIF(INDIRECT(&quot;${col}$4:${col}&quot;&amp;(ROW()-10)),&quot;E&quot;)+COUNTIF(INDIRECT(&quot;${col}$4:${col}&quot;&amp;(ROW()-10)),&quot;イブ&quot;)</f><v>0</v></c>`;
+            sheet1 += `\n      <c r="${col}${rEve}" s="13"><f>COUNTIF(${col}$4:${col}$${endRow},&quot;E&quot;)+COUNTIF(${col}$4:${col}$${endRow},&quot;イブ&quot;)</f><v>0</v></c>`;
         }
         sheet1 += `\n      <c r="AD${rEve}" s="13"><f>SUM(B${rEve}:AC${rEve})</f><v>0</v></c>`;
         for (let c = 31; c <= 37; c++) sheet1 += `\n      <c r="${toColLetter(c)}${rEve}" s="13" t="inlineStr"><is><t>-</t></is></c>`;
@@ -4672,7 +4673,7 @@ document.addEventListener('DOMContentLoaded', () => {
       <c r="A${rH8}" s="13" t="inlineStr"><is><t>8時</t></is></c>`;
         for (let d = 0; d < NUM_DAYS; d++) {
             const col = toColLetter(2 + d);
-            sheet1 += `\n      <c r="${col}${rH8}" s="13"><f>COUNTIF(INDIRECT(&quot;${col}$4:${col}&quot;&amp;(ROW()-11)),&quot;8時&quot;)</f><v>0</v></c>`;
+            sheet1 += `\n      <c r="${col}${rH8}" s="13"><f>COUNTIF(${col}$4:${col}$${endRow},&quot;8時&quot;)</f><v>0</v></c>`;
         }
         sheet1 += `\n      <c r="AD${rH8}" s="13"><f>SUM(B${rH8}:AC${rH8})</f><v>0</v></c>`;
         for (let c = 31; c <= 37; c++) sheet1 += `\n      <c r="${toColLetter(c)}${rH8}" s="13" t="inlineStr"><is><t>-</t></is></c>`;
