@@ -701,3 +701,18 @@ input:checked + .toggle-slider:before {
     z-index: 5;
 }
 
+/* 不使用スタッフ行のスタイル（希望入力シート） */
+.row-unused {
+    opacity: 0.45;
+    background-color: #f8fafc !important;
+}
+
+.row-unused td {
+    background-color: #f8fafc !important;
+    color: #94a3b8 !important;
+}
+
+.row-unused input.staff-name-input {
+    color: #94a3b8 !important;
+}
+

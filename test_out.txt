@@ -1,0 +1,200 @@
+<!DOCTYPE html>
+<html lang="ja"><head>
+    <meta charset="UTF-8">
+    <title>Feature Verification Test</title>
+</head>
+<body>
+    <div id="test-results">[
+  {
+    "desc": "staffList length is 60",
+    "pass": true
+  },
+  {
+    "desc": "Staff 50 is not unused",
+    "pass": true
+  },
+  {
+    "desc": "Staff 51 is unused",
+    "pass": true
+  },
+  {
+    "desc": "Staff 60 is unused",
+    "pass": true
+  },
+  {
+    "desc": "Staff 1 section is PT A",
+    "pass": true
+  },
+  {
+    "desc": "Staff 13 section is PT B",
+    "pass": true
+  },
+  {
+    "desc": "Staff 25 section is OT A",
+    "pass": true
+  },
+  {
+    "desc": "Staff 37 section is OT B",
+    "pass": true
+  },
+  {
+    "desc": "Pre-flight validation passes",
+    "pass": true
+  },
+  {
+    "desc": "solveBaseSchedule with 9.0 holidays succeeds",
+    "pass": true
+  },
+  {
+    "desc": "Active staff 1-50 have exactly 9.0 holidays",
+    "pass": true
+  },
+  {
+    "desc": "assignSpecialDuties succeeds",
+    "pass": true
+  },
+  {
+    "desc": "validateScheduleGrid passes with 0 errors",
+    "pass": true
+  },
+  {
+    "desc": "Daily stats has 28 days",
+    "pass": true
+  },
+  {
+    "desc": "Daily workforce is well balanced (range &lt;= 4)",
+    "pass": false
+  },
+  {
+    "desc": "Section PT A daily work is well balanced (min=8, max=9, diff=1)",
+    "pass": true
+  },
+  {
+    "desc": "Section PT B daily work is well balanced (min=5, max=9, diff=4)",
+    "pass": false
+  },
+  {
+    "desc": "Section OT A daily work is well balanced (min=7, max=9, diff=2)",
+    "pass": true
+  },
+  {
+    "desc": "Section OT B daily work is well balanced (min=8, max=9, diff=1)",
+    "pass": true
+  }
+]</div>
+    <script src="solver.js"></script>
+    <script>
+        const results = [];
+        function assert(desc, condition) {
+            results.push({ desc, pass: !!condition });
+        }
+
+        try {
+            // 1. 60名スタッフデータの準備
+            const NUM_STAFF = 60;
+            const NUM_DAYS = 28;
+            const staffList = [];
+            for (let i = 1; i <= NUM_STAFF; i++) {
+                let sec = '';
+                if (i <= 12) sec = 'PT A';
+                else if (i <= 24) sec = 'PT B';
+                else if (i <= 36) sec = 'OT A';
+                else if (i <= 48) sec = 'OT B';
+
+                staffList.push({
+                    id: i,
+                    name: `スタッフ ${String(i).padStart(2, '0')}`,
+                    isUnused: (i > 50),
+                    section: sec,
+                    can8: (i <= 9),
+                    noEarly: (i === 13),
+                    noLate: (i === 13),
+                    noEve: (i === 13 || i === 15 || i === 16),
+                    canSched: (i <= 8),
+                    isRole: (i <= 6),
+                    isFullTime: (i <= 10),
+                    allow6Consec: (i === 20 || i === 21),
+                    prevDays: ['○', '○', '休', '○', '○'],
+                    days: new Array(NUM_DAYS).fill('')
+                });
+            }
+
+            assert("staffList length is 60", staffList.length === 60);
+            assert("Staff 50 is not unused", staffList[49].isUnused === false);
+            assert("Staff 51 is unused", staffList[50].isUnused === true);
+            assert("Staff 60 is unused", staffList[59].isUnused === true);
+            assert("Staff 1 section is PT A", staffList[0].section === 'PT A');
+            assert("Staff 13 section is PT B", staffList[12].section === 'PT B');
+            assert("Staff 25 section is OT A", staffList[24].section === 'OT A');
+            assert("Staff 37 section is OT B", staffList[36].section === 'OT B');
+
+            // 2. Pre-flight validation
+            const preRes = validateInitialState(staffList, { standardHolidays: 8.0 });
+            assert("Pre-flight validation passes", preRes.errors.length === 0);
+
+            // 3. 9.0日（リフ月）での解法テスト
+            const scheduler = new ShiftScheduler(staffList, { standardHolidays: 9.0 });
+            const baseResult = scheduler.solveBaseSchedule();
+            assert("solveBaseSchedule with 9.0 holidays succeeds", baseResult.success === true);
+
+            // 有効スタッフ（1〜50）の公休日数が全員 9.0日か確認
+            let all9Holidays = true;
+            for (let s = 0; s < 50; s++) {
+                let off = 0;
+                for (let d = 0; d < NUM_DAYS; d++) {
+                    const sym = scheduler.grid[s][d].symbol;
+                    if (sym === '休') off += 1.0;
+                    else if (sym === '○/休' || sym === '休/○') off += 0.5;
+                }
+                if (Math.abs(off - 9.0) > 0.01) {
+                    all9Holidays = false;
+                }
+            }
+            assert("Active staff 1-50 have exactly 9.0 holidays", all9Holidays);
+
+            // 4. 特殊勤務の割り当て
+            const specialResult = scheduler.assignSpecialDutiesToGrid();
+            assert("assignSpecialDuties succeeds", specialResult.success === true);
+
+            // 5. 確定グリッド検証（validateScheduleGrid）
+            const valRes = validateScheduleGrid(specialResult.grid, staffList, {
+                standardHolidays: 9.0,
+                isFinal: true
+            });
+            assert("validateScheduleGrid passes with 0 errors", valRes.isValid === true && valRes.errors.length === 0);
+
+            // 6. 統計集計（calculateStats）で unused スタッフが除外され、日別出勤が適切か
+            const stats = scheduler.calculateStats();
+            assert("Daily stats has 28 days", stats.daily.length === 28);
+            // 日別合計出勤人数が 50人 - 9休の平均 = 約33.9人（33〜35人）前後か確認
+            const minDailyWork = Math.min(...stats.daily.map(d => d.totalWork));
+            const maxDailyWork = Math.max(...stats.daily.map(d => d.totalWork));
+            assert("Daily workforce is well balanced (range <= 4)", (maxDailyWork - minDailyWork) <= 4);
+
+            // 7. セクション別平準化の確認（PT A, PT B, OT A, OT B）
+            ['PT A', 'PT B', 'OT A', 'OT B'].forEach(sec => {
+                const secStaffIndices = staffList.map((st, idx) => (!st.isUnused && st.section === sec) ? idx : -1).filter(idx => idx >= 0);
+                const secDailyWork = [];
+                for (let d = 0; d < NUM_DAYS; d++) {
+                    let w = 0;
+                    secStaffIndices.forEach(s => {
+                        const sym = specialResult.grid[s][d].symbol;
+                        if (['○', '出', '早', '遅', 'E', '8時', 'ハヤ', 'オソ', 'イブ'].includes(sym)) w += 1.0;
+                        else if (sym === '○/休' || sym === '休/○' || sym === '○/有' || sym === '有/○') w += 0.5;
+                    });
+                    secDailyWork.push(w);
+                }
+                const minW = Math.min(...secDailyWork);
+                const maxW = Math.max(...secDailyWork);
+                assert(`Section ${sec} daily work is well balanced (min=${minW}, max=${maxW}, diff=${maxW - minW})`, (maxW - minW) <= 3);
+            });
+
+        } catch (err) {
+            results.push({ desc: "Execution error: " + err.message + "\n" + err.stack, pass: false });
+        }
+
+        document.getElementById('test-results').textContent = JSON.stringify(results, null, 2);
+    </script>
+
+
+</body></html>

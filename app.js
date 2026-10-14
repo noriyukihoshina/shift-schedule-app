@@ -9,7 +9,7 @@
  */
 
 document.addEventListener('DOMContentLoaded', () => {
-    const NUM_STAFF = 50;
+    const NUM_STAFF = 60;
     const NUM_DAYS = 28;
     const WEEKDAYS = ['月', '火', '水', '木', '金', '土', '日'];
 
@@ -47,13 +47,15 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     }
 
-    // スタッフデータの初期化
+    // スタッフデータの初期化（60名枠、51〜60番目は初期状態で不使用）
     function initStaffData() {
         staffList = [];
         for (let i = 1; i <= NUM_STAFF; i++) {
             staffList.push({
                 id: i,
                 name: `スタッフ ${String(i).padStart(2, '0')}`,
+                isUnused: (i > 50),  // 51〜60番目は初期状態で不使用
+                section: '',         // 'PT A', 'PT B', 'OT A', 'OT B', または ''
                 can8: (i <= 9),      // 1〜9番目のみ8時可能（現場の運用に完全一致）
                 noEarly: false,     // 早番不可
                 noLate: false,      // 遅番不可
@@ -187,6 +189,8 @@ document.addEventListener('DOMContentLoaded', () => {
                 staffList: staffList.map(s => ({
                     id: s.id,
                     name: s.name,
+                    isUnused: !!s.isUnused,
+                    section: s.section || '',
                     can8: s.can8,
                     noEarly: s.noEarly,
                     noLate: s.noLate,
@@ -225,17 +229,21 @@ document.addEventListener('DOMContentLoaded', () => {
             const data = JSON.parse(raw);
             if (!data || !data.staffList) return false;
 
-            // 1. 公休日数（基本は8.0、明示的に8.5が指定されている場合のみ8.5）
+            // 1. 公休日数（基本は8.0、明示的に8.5または9.0が指定されている場合は復元）
             const stdSel = document.getElementById('standardHolidaySelect');
             if (stdSel) {
                 const valNum = parseFloat(data.standardHolidays);
-                stdSel.value = (valNum === 8.5) ? '8.5' : '8.0';
+                if (valNum === 8.5) stdSel.value = '8.5';
+                else if (valNum === 9.0) stdSel.value = '9.0';
+                else stdSel.value = '8.0';
             }
 
             // 2. スタッフ復元
             data.staffList.forEach((s, idx) => {
                 if (staffList[idx]) {
                     staffList[idx].name = s.name;
+                    staffList[idx].isUnused = s.isUnused !== undefined ? !!s.isUnused : (idx >= 50);
+                    staffList[idx].section = s.section || '';
                     staffList[idx].can8 = s.can8;
                     staffList[idx].noEarly = s.noEarly;
                     staffList[idx].noLate = s.noLate;
@@ -452,6 +460,8 @@ document.addEventListener('DOMContentLoaded', () => {
             staffList: staffList.map(s => ({
                 id: s.id,
                 name: s.name,
+                isUnused: !!s.isUnused,
+                section: s.section || '',
                 can8: s.can8,
                 noEarly: s.noEarly,
                 noLate: s.noLate,
@@ -504,6 +514,8 @@ document.addEventListener('DOMContentLoaded', () => {
             state.staffList.forEach((s, idx) => {
                 if (staffList[idx]) {
                     staffList[idx].name = s.name;
+                    staffList[idx].isUnused = s.isUnused !== undefined ? !!s.isUnused : (idx >= 50);
+                    staffList[idx].section = s.section || '';
                     staffList[idx].can8 = s.can8;
                     staffList[idx].noEarly = s.noEarly;
                     staffList[idx].noLate = s.noLate;
@@ -609,6 +621,12 @@ document.addEventListener('DOMContentLoaded', () => {
             s.isRole = (idx < 6);     // 役職: 6名
             s.isFullTime = (idx < 10); // 専従: 10名
             s.allow6Consec = (idx === 19 || idx === 20); // 20番・21番は6連勤可
+            // セクション初期割り当て（PT A, PT B, OT A, OT B 各12名）
+            if (idx < 12) s.section = 'PT A';
+            else if (idx < 24) s.section = 'PT B';
+            else if (idx < 36) s.section = 'OT A';
+            else if (idx < 48) s.section = 'OT B';
+            else s.section = '';
         });
 
         // 個別不可フラグ（現場の実態画像に合わせて設定）
@@ -691,7 +709,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
         let headHtml = `
             <tr>
-                <th class="sticky-col-1" rowspan="2">No</th>
+                <th class="sticky-col-1" rowspan="2" title="不使用時にONにする（勤務表・出力から除外）">不使用</th>
                 <th class="sticky-col-2" rowspan="2">氏名</th>
                 <th class="prev-col-header" colspan="5">前ターム最終5日間実績</th>
                 <th colspan="${NUM_DAYS}">当ターム（${term.title}）希望休・事前固定枠（🔒手動以外は変更不可）</th>
@@ -699,6 +717,10 @@ document.addEventListener('DOMContentLoaded', () => {
                 <th class="flag-col" rowspan="2" title="早番不可">早<br>不可</th>
                 <th class="flag-col" rowspan="2" title="遅番不可">遅<br>不可</th>
                 <th class="flag-col" rowspan="2" title="イブニング不可">E<br>不可</th>
+                <th class="flag-col" rowspan="2" title="PT A セクション（この中で出勤平均化）" style="background:#e0e7ff; color:#3730a3;">PT<br>A</th>
+                <th class="flag-col" rowspan="2" title="PT B セクション（この中で出勤平均化）" style="background:#ede9fe; color:#5b21b6;">PT<br>B</th>
+                <th class="flag-col" rowspan="2" title="OT A セクション（この中で出勤平均化）" style="background:#fae8ff; color:#86198f;">OT<br>A</th>
+                <th class="flag-col" rowspan="2" title="OT B セクション（この中で出勤平均化）" style="background:#fce7f3; color:#9d174d;">OT<br>B</th>
                 <th class="flag-col" rowspan="2" title="スケ可（毎日2名以上必要・○のみ）" style="background:#e0f2fe; color:#0369a1;">スケ<br>可</th>
                 <th class="flag-col" rowspan="2" title="役職（毎日2名以上必要・出張除く）" style="background:#fef3c7; color:#92400e;">役職</th>
                 <th class="flag-col" rowspan="2" title="専従（毎日3名以上必要・出張除く）" style="background:#dcfce7; color:#166534;">専従</th>
@@ -723,8 +745,14 @@ document.addEventListener('DOMContentLoaded', () => {
 
         let bodyHtml = '';
         staffList.forEach((staff, sIdx) => {
-            bodyHtml += `<tr>`;
-            bodyHtml += `<td class="sticky-col-1 font-mono">${staff.id}</td>`;
+            const rowClass = staff.isUnused ? 'row-unused' : '';
+            bodyHtml += `<tr class="${rowClass}">`;
+            bodyHtml += `<td class="sticky-col-1 text-center" style="padding:2px;">
+                <label class="toggle-switch" title="不使用（ONで勤務表・出力から除外）">
+                    <input type="checkbox" ${staff.isUnused ? 'checked' : ''} data-unused="true" data-s="${sIdx}">
+                    <span class="toggle-slider danger-slider"></span>
+                </label>
+            </td>`;
             bodyHtml += `<td class="sticky-col-2">
                 <input type="text" class="staff-name-input" value="${staff.name}" data-s="${sIdx}" style="width:100%; border:none; background:transparent; font-weight:600; outline:none;">
             </td>`;
@@ -770,6 +798,30 @@ document.addEventListener('DOMContentLoaded', () => {
                         <span class="toggle-slider danger-slider"></span>
                     </label>
                 </td>
+                <td class="flag-col" style="background:#eef2ff;">
+                    <label class="toggle-switch" title="PT A セクション">
+                        <input type="checkbox" ${staff.section === 'PT A' ? 'checked' : ''} data-section="PT A" data-s="${sIdx}">
+                        <span class="toggle-slider"></span>
+                    </label>
+                </td>
+                <td class="flag-col" style="background:#f5f3ff;">
+                    <label class="toggle-switch" title="PT B セクション">
+                        <input type="checkbox" ${staff.section === 'PT B' ? 'checked' : ''} data-section="PT B" data-s="${sIdx}">
+                        <span class="toggle-slider"></span>
+                    </label>
+                </td>
+                <td class="flag-col" style="background:#faf5ff;">
+                    <label class="toggle-switch" title="OT A セクション">
+                        <input type="checkbox" ${staff.section === 'OT A' ? 'checked' : ''} data-section="OT A" data-s="${sIdx}">
+                        <span class="toggle-slider"></span>
+                    </label>
+                </td>
+                <td class="flag-col" style="background:#fdf2f8;">
+                    <label class="toggle-switch" title="OT B セクション">
+                        <input type="checkbox" ${staff.section === 'OT B' ? 'checked' : ''} data-section="OT B" data-s="${sIdx}">
+                        <span class="toggle-slider"></span>
+                    </label>
+                </td>
                 <td class="flag-col" style="background:#f0f9ff;">
                     <label class="toggle-switch">
                         <input type="checkbox" ${staff.canSched ? 'checked' : ''} data-flag="canSched" data-s="${sIdx}">
@@ -810,6 +862,39 @@ document.addEventListener('DOMContentLoaded', () => {
                 if (staffList[s].name !== e.target.value) {
                     pushHistory();
                     staffList[s].name = e.target.value;
+                }
+            });
+        });
+
+        // 不使用トグルのイベント
+        document.querySelectorAll('input[type="checkbox"][data-unused]').forEach(chk => {
+            chk.addEventListener('change', (e) => {
+                const s = parseInt(e.target.dataset.s, 10);
+                pushHistory();
+                staffList[s].isUnused = e.target.checked;
+                const tr = e.target.closest('tr');
+                if (tr) {
+                    if (e.target.checked) tr.classList.add('row-unused');
+                    else tr.classList.remove('row-unused');
+                }
+            });
+        });
+
+        // セクション排他トグルのイベント
+        document.querySelectorAll('input[type="checkbox"][data-section]').forEach(chk => {
+            chk.addEventListener('change', (e) => {
+                const s = parseInt(e.target.dataset.s, 10);
+                const sec = e.target.dataset.section;
+                pushHistory();
+                if (e.target.checked) {
+                    staffList[s].section = sec;
+                    document.querySelectorAll(`input[type="checkbox"][data-section][data-s="${s}"]`).forEach(other => {
+                        if (other !== e.target) other.checked = false;
+                    });
+                } else {
+                    if (staffList[s].section === sec) {
+                        staffList[s].section = '';
+                    }
                 }
             });
         });
@@ -1648,14 +1733,19 @@ document.addEventListener('DOMContentLoaded', () => {
         thead.innerHTML = headHtml;
 
         let bodyHtml = '';
+        const validStaffIndices = [];
         for (let s = 0; s < NUM_STAFF; s++) {
+            if (!staffList[s].isUnused) validStaffIndices.push(s);
+        }
+
+        validStaffIndices.forEach((s, outIdx) => {
             const staff = staffList[s];
             const staffStat = stats.staffStats[s];
-            const isLastStaff = (s === NUM_STAFF - 1);
+            const isLastStaff = (outIdx === validStaffIndices.length - 1);
             const rowBottomCls = isLastStaff ? 'border-thick-bottom' : '';
 
             bodyHtml += `<tr>`;
-            bodyHtml += `<td class="sticky-col-1 font-mono ${rowBottomCls}">${staff.id}</td>`;
+            bodyHtml += `<td class="sticky-col-1 font-mono ${rowBottomCls}">${outIdx + 1}</td>`;
             bodyHtml += `<td class="sticky-col-2 border-thick-right ${rowBottomCls}">${staff.name}</td>`;
 
             for (let d = 0; d < NUM_DAYS; d++) {
@@ -1679,17 +1769,18 @@ document.addEventListener('DOMContentLoaded', () => {
                 <td class="stat-cell ${rowBottomCls}" data-s="${s}" data-stat="h8" style="font-weight:600; color:#0d9488; background:#f8fafc;">${staffStat.h8}</td>
             `;
             bodyHtml += `</tr>`;
-        }
+        });
         tbody.innerHTML = bodyHtml;
 
-        const totalWorkSum = stats.staffStats.reduce((acc, s) => acc + s.workDays, 0);
-        const totalOffSum = stats.staffStats.reduce((acc, s) => acc + s.offDays, 0);
-        const totalPaidSum = stats.staffStats.reduce((acc, s) => acc + s.paidDays, 0);
-        const totalRefSum = stats.staffStats.reduce((acc, s) => acc + s.refDays, 0);
-        const totalEarlySum = stats.staffStats.reduce((acc, s) => acc + s.early, 0);
-        const totalLateSum = stats.staffStats.reduce((acc, s) => acc + s.late, 0);
-        const totalEveSum = stats.staffStats.reduce((acc, s) => acc + s.eve, 0);
-        const totalH8Sum = stats.staffStats.reduce((acc, s) => acc + s.h8, 0);
+        const validStaffStats = stats.staffStats.filter(s => !s.isUnused);
+        const totalWorkSum = validStaffStats.reduce((acc, s) => acc + s.workDays, 0);
+        const totalOffSum = validStaffStats.reduce((acc, s) => acc + s.offDays, 0);
+        const totalPaidSum = validStaffStats.reduce((acc, s) => acc + s.paidDays, 0);
+        const totalRefSum = validStaffStats.reduce((acc, s) => acc + s.refDays, 0);
+        const totalEarlySum = validStaffStats.reduce((acc, s) => acc + s.early, 0);
+        const totalLateSum = validStaffStats.reduce((acc, s) => acc + s.late, 0);
+        const totalEveSum = validStaffStats.reduce((acc, s) => acc + s.eve, 0);
+        const totalH8Sum = validStaffStats.reduce((acc, s) => acc + s.h8, 0);
 
         let footHtml = `
             <tr style="background:#f8fafc; font-weight:bold;">
@@ -2183,10 +2274,18 @@ document.addEventListener('DOMContentLoaded', () => {
         for (let d = 0; d < NUM_DAYS; d++) plainText += `\t${term.dates[d].label}`;
         plainText += '\t出勤\t公休\t有休\tリフ\t早\t遅\tE\t8時\r\n';
 
+        const validStaffIndices = [];
         for (let s = 0; s < NUM_STAFF; s++) {
+            if (!staffList[s].isUnused) validStaffIndices.push(s);
+        }
+
+        const startRow = 4;
+        const endRow = startRow + validStaffIndices.length - 1;
+
+        validStaffIndices.forEach((s, outIdx) => {
             const staff = staffList[s];
-            const rowNum = s + 4; // Excel上の行番号 (4〜53)
-            const isLastStaff = (s === NUM_STAFF - 1);
+            const rowNum = startRow + outIdx; // Excel上の行番号 (4〜)
+            const isLastStaff = (outIdx === validStaffIndices.length - 1);
             const rowBottom = isLastStaff ? borderThickB : '';
             const rng = `${startCol}${rowNum}:${endCol}${rowNum}`;
 
@@ -2201,10 +2300,10 @@ document.addEventListener('DOMContentLoaded', () => {
             const fH8 = `=COUNTIF(${rng},"8時")`;
 
             html += `  <tr>\n`;
-            html += `    <td style="${fontMeiryo} font-weight:bold; ${borderThin} ${rowBottom} text-align:center;">${staff.id}</td>\n`;
+            html += `    <td style="${fontMeiryo} font-weight:bold; ${borderThin} ${rowBottom} text-align:center;">${outIdx + 1}</td>\n`;
             html += `    <td style="${fontMeiryo} font-weight:bold; ${borderThin} ${borderThickR} ${rowBottom} text-align:left;">${staff.name}</td>\n`;
 
-            plainText += `${staff.id}\t${staff.name}`;
+            plainText += `${outIdx + 1}\t${staff.name}`;
 
             for (let d = 0; d < NUM_DAYS; d++) {
                 const cell = grid[s][d];
@@ -2235,17 +2334,14 @@ document.addEventListener('DOMContentLoaded', () => {
             html += `  </tr>\n`;
 
             plainText += `\t${fWork}\t${fOff}\t${fPaid}\t${fRef}\t${fEarly}\t${fLate}\t${fEve}\t${fH8}\r\n`;
-        }
+        });
 
         // ==========================================
-        // フッター行の定義 (54行目〜58行目を独立配置)
+        // フッター行の定義 (出勤人数合計および特殊勤務)
         // ==========================================
         html += `</tbody>\n<tfoot>\n`;
 
-        const startRow = 4;
-        const endRow = NUM_STAFF + 3; // 53行目
-
-        // 1. 54行目: 出勤人数合計
+        // 1. 出勤人数合計
         html += `  <tr style="background-color:#f8fafc; font-weight:bold;">\n`;
         html += `    <th colspan="2" style="${fontMeiryo} ${borderThin} ${borderThickR} border-bottom:1pt solid #64748b; text-align:center;">出勤人数合計</th>\n`;
         plainText += `出勤人数合計\t-`;
@@ -2618,12 +2714,15 @@ document.addEventListener('DOMContentLoaded', () => {
       <c r="AG3" s="2"/>
     </row>`;
 
-        // データ行（row 4〜53: スタッフ50名、希望枠は完全に空欄）
-        for (let s = 0; s < NUM_STAFF; s++) {
-            const staff = staffList[s];
-            const r = s + 4;
+        // 有効スタッフのみ抽出
+        const validStaff = staffList.filter(s => !s.isUnused);
+        const maxRow = 3 + validStaff.length;
+
+        // データ行（row 4〜: 有効スタッフ、希望枠は完全に空欄）
+        validStaff.forEach((staff, idx) => {
+            const r = idx + 4;
             sheet1 += `\n    <row r="${r}" ht="20" customHeight="1">`;
-            sheet1 += `\n      <c r="A${r}" s="5"><v>${staff.id}</v></c>`;
+            sheet1 += `\n      <c r="A${r}" s="5"><v>${idx + 1}</v></c>`;
             sheet1 += `\n      <c r="B${r}" s="6" t="inlineStr"><is><t>${staff.name}</t></is></c>`;
 
             // 28日間の希望入力セル (C〜AD: 列3〜30) - ★ 完全な空欄として出力
@@ -2639,13 +2738,13 @@ document.addEventListener('DOMContentLoaded', () => {
             sheet1 += `\n      <c r="AF${r}" s="7"><f>${fPaid}</f><v>0</v></c>`;
             sheet1 += `\n      <c r="AG${r}" s="5"/>`;
             sheet1 += `\n    </row>`;
-        }
+        });
 
         sheet1 += `\n  </sheetData>`;
 
-        // ★ ドロップダウンリスト（プルダウンデータ入力規則）を C4:AD53 に適用
+        // ★ ドロップダウンリスト（プルダウンデータ入力規則）を C4:AD{maxRow} に適用
         sheet1 += `\n  <dataValidations count="1">
-    <dataValidation type="list" allowBlank="1" showInputMessage="1" showErrorMessage="1" sqref="C4:AD53" promptTitle="希望勤務の選択" prompt="プルダウンから希望勤務記号を選択してください。" errorTitle="入力値エラー" error="一覧（プルダウン）にある記号のみ入力できます。">
+    <dataValidation type="list" allowBlank="1" showInputMessage="1" showErrorMessage="1" sqref="C4:AD${maxRow}" promptTitle="希望勤務の選択" prompt="プルダウンから希望勤務記号を選択してください。" errorTitle="入力値エラー" error="一覧（プルダウン）にある記号のみ入力できます。">
       <formula1>&quot;休,有,○,出,早,遅,E,8時,ハヤ,オソ,イブ,○/休,休/○,○/有,有/○,上1,上2,上3,上4,上5,下1,下2,下3&quot;</formula1>
     </dataValidation>
   </dataValidations>`;
@@ -2909,15 +3008,15 @@ document.addEventListener('DOMContentLoaded', () => {
             let dayIdx = -1;
 
             if (isNewLayout) {
-                // 新レイアウト: スタッフ行 4〜53, 日付列 C〜AD (列 3〜30)
+                // 新レイアウト: スタッフ行 4〜 (最大 4 + NUM_STAFF - 1), 日付列 C〜AD (列 3〜30)
                 // ※ 行3は曜日ヘッダーなので絶対にスタッフ行として扱わない！
-                if (row >= 4 && row <= 53 && col >= 3 && col <= 30) {
+                if (row >= 4 && row <= (3 + NUM_STAFF) && col >= 3 && col <= 30) {
                     staffIdx = row - 4;
                     dayIdx = col - 3;
                 }
             } else {
-                // 旧レイアウト互換: スタッフ行 3〜52, 日付列 L〜AM (列 12〜39)
-                if (row >= 3 && row <= 52 && col >= 12 && col <= 39) {
+                // 旧レイアウト互換: スタッフ行 3〜 (最大 3 + NUM_STAFF - 1), 日付列 L〜AM (列 12〜39)
+                if (row >= 3 && row <= (2 + NUM_STAFF) && col >= 12 && col <= 39) {
                     staffIdx = row - 3;
                     dayIdx = col - 12;
                 }
@@ -3369,14 +3468,22 @@ document.addEventListener('DOMContentLoaded', () => {
   <tbody>
 `;
 
+        const validStaffIndices = [];
         for (let s = 0; s < NUM_STAFF; s++) {
+            if (!staffList[s].isUnused) validStaffIndices.push(s);
+        }
+
+        const startRow = 4;
+        const endRow = startRow + validStaffIndices.length - 1;
+
+        validStaffIndices.forEach((s, outIdx) => {
             const staff = staffList[s];
             const stat = stats.staffStats[s];
-            const isLast = (s === NUM_STAFF - 1);
+            const isLast = (outIdx === validStaffIndices.length - 1);
             const rowBottom = isLast ? borderThickB : '';
 
             html += `    <tr>\n`;
-            html += `      <td style="font-weight:bold; ${borderThin} ${rowBottom}">${staff.id}</td>\n`;
+            html += `      <td style="font-weight:bold; ${borderThin} ${rowBottom}">${outIdx + 1}</td>\n`;
             html += `      <td style="text-align:left; font-weight:bold; ${borderThin} ${borderThickR} ${rowBottom}">${staff.name}</td>\n`;
 
             for (let d = 0; d < NUM_DAYS; d++) {
@@ -3392,7 +3499,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 }
             }
 
-            const rowNum = s + 4; // Excel行番号 4〜53
+            const rowNum = startRow + outIdx; // Excel行番号 4〜
             const startCol = 'C';
             const endCol = 'AD';
             const rng = `${startCol}${rowNum}:${endCol}${rowNum}`;
@@ -3416,15 +3523,13 @@ document.addEventListener('DOMContentLoaded', () => {
       <td style="${borderThin} ${rowBottom}">${fH8}</td>
     </tr>
 `;
-        }
+        });
 
         html += `  </tbody>
   <tfoot>
 `;
-        const startRow = 4;
-        const endRow = NUM_STAFF + 3; // 53行目
 
-        // 1. 54行目: 出勤人数合計
+        // 1. 出勤人数合計
         html += `    <tr class="foot-total">
       <th colspan="2" style="${borderThin} ${borderThickR} border-bottom:1pt solid #64748b;">出勤人数合計</th>
 `;
