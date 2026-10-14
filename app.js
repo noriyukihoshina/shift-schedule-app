@@ -4334,7 +4334,9 @@ document.addEventListener('DOMContentLoaded', () => {
 
     function exportExcelSpreadsheet(grid, stats) {
         const term = getTermInfo();
-        const title = term.title;
+        const safeTitle = `${term.first.m}月${term.first.day}日～${term.last.m}月${term.last.day}日 勤務表`;
+        const safeSheetName = `${term.first.m}月${term.first.day}日～${term.last.m}月${term.last.day}日勤務表`.substring(0, 31);
+        const title = safeTitle;
 
         const contentTypes = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 <Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">
@@ -4353,7 +4355,7 @@ document.addEventListener('DOMContentLoaded', () => {
         const workbook = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 <workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships">
   <sheets>
-    <sheet name="${term.title.substring(0, 31)}" sheetId="1" r:id="rId1"/>
+    <sheet name="${safeSheetName}" sheetId="1" r:id="rId1"/>
   </sheets>
 </workbook>`;
 
@@ -4698,7 +4700,7 @@ document.addEventListener('DOMContentLoaded', () => {
         const url = URL.createObjectURL(blob);
         const link = document.createElement('a');
         link.setAttribute('href', url);
-        link.setAttribute('download', `${term.title}.xlsx`);
+        link.setAttribute('download', `${safeTitle.replace(/\s+/g, '')}.xlsx`);
         document.body.appendChild(link);
         link.click();
         document.body.removeChild(link);
