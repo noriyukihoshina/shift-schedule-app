@@ -3052,7 +3052,7 @@ document.addEventListener('DOMContentLoaded', () => {
             const bg = di.wIdx === 5 ? '#e0f2fe' : (di.wIdx === 6 || di.isHoliday ? '#ffe4e6' : '#f1f5f9');
             const col = di.wIdx === 5 ? '#0284c7' : (di.wIdx === 6 || di.isHoliday ? '#e11d48' : '#1e293b');
             const rightBorder = ((d + 1) === NUM_DAYS) ? borderThickR : (((d + 1) % 7 === 0) ? borderMediumR : '');
-            tableHtml += `    <th style="width:65px; min-width:65px; max-width:65px; background-color:${bg}; color:${col}; font-weight:bold; ${borderThin} ${rightBorder} ${borderThickB} text-align:center;">${di.label}<br><small>${di.weekday}</small></th>\n`;
+            tableHtml += `    <th style="width:115px; min-width:115px; max-width:115px; background-color:${bg}; color:${col}; font-weight:bold; ${borderThin} ${rightBorder} ${borderThickB} text-align:center;">${di.label}<br><small>${di.weekday}</small></th>\n`;
         }
 
         tableHtml += `    <th style="width:105px; background-color:#f1f5f9; font-weight:bold; ${borderThin} ${borderThickB} text-align:center;">出勤</th>
@@ -3073,8 +3073,8 @@ document.addEventListener('DOMContentLoaded', () => {
             const isLast = (outIdx === validStaffIndices.length - 1);
             const rowBottom = isLast ? borderThickB : '';
 
-            tableHtml += `  <tr style="height:55px;">\n`;
-            tableHtml += `    <td style="width:135px; min-width:135px; max-width:135px; height:55px; text-align:left; font-weight:bold; ${borderThin} ${borderThickR} ${rowBottom} padding-left:8px;">${staff.name}</td>\n`;
+            tableHtml += `  <tr style="height:33px;">\n`;
+            tableHtml += `    <td style="width:175px; min-width:175px; max-width:175px; height:33px; text-align:left; font-weight:bold; ${borderThin} ${borderThickR} ${rowBottom} padding-left:8px;">${staff.name}</td>\n`;
 
             for (let d = 0; d < NUM_DAYS; d++) {
                 const cell = (grid && grid[s] && grid[s][d]) ? grid[s][d] : { symbol: '', isFixed: false };
@@ -3082,9 +3082,9 @@ document.addEventListener('DOMContentLoaded', () => {
                 let sym = rawSym.replace(/[◦•･◯○●]/g, '〇');
                 const rightBorder = ((d + 1) === NUM_DAYS) ? borderThickR : (((d + 1) % 7 === 0) ? borderMediumR : '');
                 if (cell.isFixed) {
-                    tableHtml += `    <td style="width:65px; min-width:65px; max-width:65px; height:55px; color:#DC2626 !important; font-weight:bold !important; background-color:transparent !important; ${borderThin} ${rightBorder} ${rowBottom} text-align:center; mso-number-format:'\\@';"><b style="color:#DC2626;">${sym}</b></td>\n`;
+                    tableHtml += `    <td style="width:115px; min-width:115px; max-width:115px; height:33px; color:#DC2626 !important; font-weight:bold !important; background-color:transparent !important; ${borderThin} ${rightBorder} ${rowBottom} text-align:center; mso-number-format:'\\@';"><b style="color:#DC2626;">${sym}</b></td>\n`;
                 } else {
-                    tableHtml += `    <td style="width:65px; min-width:65px; max-width:65px; height:55px; color:#1E293B !important; font-weight:normal; ${borderThin} ${rightBorder} ${rowBottom} text-align:center; mso-number-format:'\\@';">${sym}</td>\n`;
+                    tableHtml += `    <td style="width:115px; min-width:115px; max-width:115px; height:33px; color:#1E293B !important; font-weight:normal; ${borderThin} ${rightBorder} ${rowBottom} text-align:center; mso-number-format:'\\@';">${sym}</td>\n`;
                 }
             }
 
@@ -3100,14 +3100,14 @@ document.addEventListener('DOMContentLoaded', () => {
             const fEve = `=COUNTIF(${rng},"E")+COUNTIF(${rng},"イブ")`;
             const fH8 = `=COUNTIF(${rng},"8時")`;
 
-            tableHtml += `    <td style="width:105px; height:55px; font-weight:bold; ${borderThin} ${rowBottom} text-align:center;">${fWork}</td>
-    <td style="width:105px; height:55px; font-weight:bold; color:#000000; ${borderThin} ${rowBottom} text-align:center;">${fOff}</td>
-    <td style="width:105px; height:55px; font-weight:bold; color:#000000; background-color:transparent; ${borderThin} ${rowBottom} text-align:center;">${fPaid}</td>
-    <td style="width:75px; height:55px; font-weight:bold; color:#000000; ${borderThin} ${rowBottom} text-align:center;">${fRef}</td>
-    <td style="width:75px; min-width:75px; max-width:75px; height:55px; font-weight:bold; color:#334155; ${borderThin} ${rowBottom} text-align:center;">${fEarly}</td>
-    <td style="width:75px; min-width:75px; max-width:75px; height:55px; font-weight:bold; color:#334155; ${borderThin} ${rowBottom} text-align:center;">${fLate}</td>
-    <td style="width:75px; min-width:75px; max-width:75px; height:55px; font-weight:bold; color:#334155; ${borderThin} ${rowBottom} text-align:center;">${fEve}</td>
-    <td style="width:75px; min-width:75px; max-width:75px; height:55px; font-weight:bold; color:#334155; ${borderThin} ${rowBottom} text-align:center;">${fH8}</td>
+            tableHtml += `    <td style="width:105px; height:33px; font-weight:bold; ${borderThin} ${rowBottom} text-align:center;">${fWork}</td>
+    <td style="width:105px; height:33px; font-weight:bold; color:#000000; ${borderThin} ${rowBottom} text-align:center;">${fOff}</td>
+    <td style="width:105px; height:33px; font-weight:bold; color:#000000; background-color:transparent; ${borderThin} ${rowBottom} text-align:center;">${fPaid}</td>
+    <td style="width:75px; height:33px; font-weight:bold; color:#000000; ${borderThin} ${rowBottom} text-align:center;">${fRef}</td>
+    <td style="width:75px; min-width:75px; max-width:75px; height:33px; font-weight:bold; color:#334155; ${borderThin} ${rowBottom} text-align:center;">${fEarly}</td>
+    <td style="width:75px; min-width:75px; max-width:75px; height:33px; font-weight:bold; color:#334155; ${borderThin} ${rowBottom} text-align:center;">${fLate}</td>
+    <td style="width:75px; min-width:75px; max-width:75px; height:33px; font-weight:bold; color:#334155; ${borderThin} ${rowBottom} text-align:center;">${fEve}</td>
+    <td style="width:75px; min-width:75px; max-width:75px; height:33px; font-weight:bold; color:#334155; ${borderThin} ${rowBottom} text-align:center;">${fH8}</td>
   </tr>\n`;
         });
 
@@ -3115,13 +3115,13 @@ document.addEventListener('DOMContentLoaded', () => {
 
         // 1. 出勤人数合計（行高45px固定）
         tableHtml += `  <tr style="height:45px; background-color:#ffffff;">
-    <th style="width:135px; height:45px; ${borderThin} ${borderThickR} border-bottom:1pt solid #64748b; font-weight:bold; text-align:center;">出勤人数合計</th>
+    <th style="width:175px; height:45px; ${borderThin} ${borderThickR} border-bottom:1pt solid #64748b; font-weight:bold; text-align:center;">出勤人数合計</th>
 `;
         for (let d = 0; d < NUM_DAYS; d++) {
             const col = getExcelColName(d + 1);
             const rightBorder = ((d + 1) === NUM_DAYS) ? borderThickR : (((d + 1) % 7 === 0) ? borderMediumR : '');
             const fDayWork = `=${makeWorkCountFormula(`INDIRECT("${col}$4:${col}"&(ROW()-1))`)}`;
-            tableHtml += `    <td style="width:65px; min-width:65px; max-width:65px; height:45px; font-weight:bold; ${borderThin} ${rightBorder} border-bottom:1pt solid #64748b; text-align:center;">${fDayWork}</td>\n`;
+            tableHtml += `    <td style="width:115px; min-width:115px; max-width:115px; height:45px; font-weight:bold; ${borderThin} ${rightBorder} border-bottom:1pt solid #64748b; text-align:center;">${fDayWork}</td>\n`;
         }
         tableHtml += `    <td style="width:105px; height:45px; font-weight:bold; ${borderThin} border-bottom:1pt solid #64748b; text-align:center;">=SUM(INDIRECT("AD$4:AD"&(ROW()-1)))</td>
     <td style="width:105px; height:45px; font-weight:bold; color:#000000; ${borderThin} border-bottom:1pt solid #64748b; text-align:center;">=SUM(INDIRECT("AE$4:AE"&(ROW()-1)))</td>
@@ -3137,14 +3137,14 @@ document.addEventListener('DOMContentLoaded', () => {
         // 2. 実数合計（行高45px固定）
         const realRowIdx = endRow + 2;
         tableHtml += `  <tr style="height:45px; background-color:#ffffff;">
-    <th style="width:135px; height:45px; ${borderThin} ${borderThickR} border-bottom:0.5pt solid #cbd5e1; font-weight:bold; text-align:center;">実数合計</th>
+    <th style="width:175px; height:45px; ${borderThin} ${borderThickR} border-bottom:0.5pt solid #cbd5e1; font-weight:bold; text-align:center;">実数合計</th>
 `;
         for (let d = 0; d < NUM_DAYS; d++) {
             const col = getExcelColName(d + 1);
             const rightBorder = ((d + 1) === NUM_DAYS) ? borderThickR : (((d + 1) % 7 === 0) ? borderMediumR : '');
             const offset = (dayOffsets && dayOffsets[d]) ? dayOffsets[d] : 0;
             const fReal = offset === 0 ? `=INDIRECT("${col}"&(ROW()-1))` : `=INDIRECT("${col}"&(ROW()-1))-(${offset})`;
-            tableHtml += `    <td style="width:65px; min-width:65px; max-width:65px; height:45px; font-weight:bold; ${borderThin} ${rightBorder} border-bottom:0.5pt solid #cbd5e1; text-align:center;">${fReal}</td>\n`;
+            tableHtml += `    <td style="width:115px; min-width:115px; max-width:115px; height:45px; font-weight:bold; ${borderThin} ${rightBorder} border-bottom:0.5pt solid #cbd5e1; text-align:center;">${fReal}</td>\n`;
         }
         tableHtml += `    <td style="width:105px; height:45px; font-weight:bold; ${borderThin} border-bottom:0.5pt solid #cbd5e1; text-align:center;">=SUM(B${realRowIdx}:AC${realRowIdx})</td>
     <td colspan="7" style="height:45px; ${borderThin} border-bottom:0.5pt solid #cbd5e1; text-align:center; color:#94a3b8;">-</td>
@@ -3154,13 +3154,13 @@ document.addEventListener('DOMContentLoaded', () => {
         // 3. PT A 出勤
         const ptARowIdx = endRow + 3;
         tableHtml += `  <tr style="height:45px; background-color:#ffffff;">
-    <th style="width:135px; height:45px; color:#ea580c; font-weight:bold; ${borderThin} ${borderThickR} border-bottom:0.5pt solid #cbd5e1; text-align:center;">PT A 出勤</th>
+    <th style="width:175px; height:45px; color:#ea580c; font-weight:bold; ${borderThin} ${borderThickR} border-bottom:0.5pt solid #cbd5e1; text-align:center;">PT A 出勤</th>
 `;
         for (let d = 0; d < NUM_DAYS; d++) {
             const col = getExcelColName(d + 1);
             const rightBorder = ((d + 1) === NUM_DAYS) ? borderThickR : (((d + 1) % 7 === 0) ? borderMediumR : '');
             const fPtA = `=${makeWorkCountFormula(`${col}$${ptAStart}:${col}$${ptAEnd}`)}`;
-            tableHtml += `    <td style="width:65px; min-width:65px; max-width:65px; height:45px; color:#ea580c; font-weight:bold; ${borderThin} ${rightBorder} border-bottom:0.5pt solid #cbd5e1; text-align:center;">${fPtA}</td>\n`;
+            tableHtml += `    <td style="width:115px; min-width:115px; max-width:115px; height:45px; color:#ea580c; font-weight:bold; ${borderThin} ${rightBorder} border-bottom:0.5pt solid #cbd5e1; text-align:center;">${fPtA}</td>\n`;
         }
         tableHtml += `    <td style="width:105px; height:45px; color:#ea580c; font-weight:bold; ${borderThin} border-bottom:0.5pt solid #cbd5e1; text-align:center;">=SUM(B${ptARowIdx}:AC${ptARowIdx})</td>
     <td colspan="7" style="height:45px; ${borderThin} border-bottom:0.5pt solid #cbd5e1; text-align:center; color:#94a3b8;">-</td>
@@ -3170,13 +3170,13 @@ document.addEventListener('DOMContentLoaded', () => {
         // 4. OT A 出勤
         const otARowIdx = endRow + 4;
         tableHtml += `  <tr style="height:45px; background-color:#ffffff;">
-    <th style="width:135px; height:45px; color:#ea580c; font-weight:bold; ${borderThin} ${borderThickR} border-bottom:0.5pt solid #cbd5e1; text-align:center;">OT A 出勤</th>
+    <th style="width:175px; height:45px; color:#ea580c; font-weight:bold; ${borderThin} ${borderThickR} border-bottom:0.5pt solid #cbd5e1; text-align:center;">OT A 出勤</th>
 `;
         for (let d = 0; d < NUM_DAYS; d++) {
             const col = getExcelColName(d + 1);
             const rightBorder = ((d + 1) === NUM_DAYS) ? borderThickR : (((d + 1) % 7 === 0) ? borderMediumR : '');
             const fOtA = `=${makeWorkCountFormula(`${col}$${otAStart}:${col}$${otAEnd}`)}`;
-            tableHtml += `    <td style="width:65px; min-width:65px; max-width:65px; height:45px; color:#ea580c; font-weight:bold; ${borderThin} ${rightBorder} border-bottom:0.5pt solid #cbd5e1; text-align:center;">${fOtA}</td>\n`;
+            tableHtml += `    <td style="width:115px; min-width:115px; max-width:115px; height:45px; color:#ea580c; font-weight:bold; ${borderThin} ${rightBorder} border-bottom:0.5pt solid #cbd5e1; text-align:center;">${fOtA}</td>\n`;
         }
         tableHtml += `    <td style="width:105px; height:45px; color:#ea580c; font-weight:bold; ${borderThin} border-bottom:0.5pt solid #cbd5e1; text-align:center;">=SUM(B${otARowIdx}:AC${otARowIdx})</td>
     <td colspan="7" style="height:45px; ${borderThin} border-bottom:0.5pt solid #cbd5e1; text-align:center; color:#94a3b8;">-</td>
@@ -3186,13 +3186,13 @@ document.addEventListener('DOMContentLoaded', () => {
         // 5. PT B 出勤
         const ptBRowIdx = endRow + 5;
         tableHtml += `  <tr style="height:45px; background-color:#ffffff;">
-    <th style="width:135px; height:45px; color:#1d4ed8; font-weight:bold; ${borderThin} ${borderThickR} border-bottom:0.5pt solid #cbd5e1; text-align:center;">PT B 出勤</th>
+    <th style="width:175px; height:45px; color:#1d4ed8; font-weight:bold; ${borderThin} ${borderThickR} border-bottom:0.5pt solid #cbd5e1; text-align:center;">PT B 出勤</th>
 `;
         for (let d = 0; d < NUM_DAYS; d++) {
             const col = getExcelColName(d + 1);
             const rightBorder = ((d + 1) === NUM_DAYS) ? borderThickR : (((d + 1) % 7 === 0) ? borderMediumR : '');
             const fPtB = `=${makeWorkCountFormula(`${col}$${ptBStart}:${col}$${ptBEnd}`)}`;
-            tableHtml += `    <td style="width:65px; min-width:65px; max-width:65px; height:45px; color:#1d4ed8; font-weight:bold; ${borderThin} ${rightBorder} border-bottom:0.5pt solid #cbd5e1; text-align:center;">${fPtB}</td>\n`;
+            tableHtml += `    <td style="width:115px; min-width:115px; max-width:115px; height:45px; color:#1d4ed8; font-weight:bold; ${borderThin} ${rightBorder} border-bottom:0.5pt solid #cbd5e1; text-align:center;">${fPtB}</td>\n`;
         }
         tableHtml += `    <td style="width:105px; height:45px; color:#1d4ed8; font-weight:bold; ${borderThin} border-bottom:0.5pt solid #cbd5e1; text-align:center;">=SUM(B${ptBRowIdx}:AC${ptBRowIdx})</td>
     <td colspan="7" style="height:45px; ${borderThin} border-bottom:0.5pt solid #cbd5e1; text-align:center; color:#94a3b8;">-</td>
@@ -3202,13 +3202,13 @@ document.addEventListener('DOMContentLoaded', () => {
         // 6. OT B 出勤
         const otBRowIdx = endRow + 6;
         tableHtml += `  <tr style="height:45px; background-color:#ffffff;">
-    <th style="width:135px; height:45px; color:#1d4ed8; font-weight:bold; ${borderThin} ${borderThickR} border-bottom:0.5pt solid #cbd5e1; text-align:center;">OT B 出勤</th>
+    <th style="width:175px; height:45px; color:#1d4ed8; font-weight:bold; ${borderThin} ${borderThickR} border-bottom:0.5pt solid #cbd5e1; text-align:center;">OT B 出勤</th>
 `;
         for (let d = 0; d < NUM_DAYS; d++) {
             const col = getExcelColName(d + 1);
             const rightBorder = ((d + 1) === NUM_DAYS) ? borderThickR : (((d + 1) % 7 === 0) ? borderMediumR : '');
             const fOtB = `=${makeWorkCountFormula(`${col}$${otBStart}:${col}$${otBEnd}`)}`;
-            tableHtml += `    <td style="width:65px; min-width:65px; max-width:65px; height:45px; color:#1d4ed8; font-weight:bold; ${borderThin} ${rightBorder} border-bottom:0.5pt solid #cbd5e1; text-align:center;">${fOtB}</td>\n`;
+            tableHtml += `    <td style="width:115px; min-width:115px; max-width:115px; height:45px; color:#1d4ed8; font-weight:bold; ${borderThin} ${rightBorder} border-bottom:0.5pt solid #cbd5e1; text-align:center;">${fOtB}</td>\n`;
         }
         tableHtml += `    <td style="width:105px; height:45px; color:#1d4ed8; font-weight:bold; ${borderThin} border-bottom:0.5pt solid #cbd5e1; text-align:center;">=SUM(B${otBRowIdx}:AC${otBRowIdx})</td>
     <td colspan="7" style="height:45px; ${borderThin} border-bottom:0.5pt solid #cbd5e1; text-align:center; color:#94a3b8;">-</td>
@@ -3218,13 +3218,13 @@ document.addEventListener('DOMContentLoaded', () => {
         // 7. ST 出勤（51と52の間にSTが挟まれた場合に自動追従・集計）
         const stRowIdx = endRow + 7;
         tableHtml += `  <tr style="height:45px; background-color:#ffffff;">
-    <th style="width:135px; height:45px; color:#ec4899; font-weight:bold; ${borderThin} ${borderThickR} border-bottom:0.5pt solid #cbd5e1; text-align:center;">ST 出勤</th>
+    <th style="width:175px; height:45px; color:#ec4899; font-weight:bold; ${borderThin} ${borderThickR} border-bottom:0.5pt solid #cbd5e1; text-align:center;">ST 出勤</th>
 `;
         for (let d = 0; d < NUM_DAYS; d++) {
             const col = getExcelColName(d + 1);
             const rightBorder = ((d + 1) === NUM_DAYS) ? borderThickR : (((d + 1) % 7 === 0) ? borderMediumR : '');
             const fSt = `=IF((ROW()-7)<${stStartRow},0,${makeWorkCountFormula(`INDIRECT("${col}\$${stStartRow}:${col}"&(ROW()-7))`)} )`;
-            tableHtml += `    <td style="width:65px; min-width:65px; max-width:65px; height:45px; color:#ec4899; font-weight:bold; ${borderThin} ${rightBorder} border-bottom:0.5pt solid #cbd5e1; text-align:center;">${fSt}</td>\n`;
+            tableHtml += `    <td style="width:115px; min-width:115px; max-width:115px; height:45px; color:#ec4899; font-weight:bold; ${borderThin} ${rightBorder} border-bottom:0.5pt solid #cbd5e1; text-align:center;">${fSt}</td>\n`;
         }
         tableHtml += `    <td style="width:105px; height:45px; color:#ec4899; font-weight:bold; ${borderThin} border-bottom:0.5pt solid #cbd5e1; text-align:center;">=SUM(B${stRowIdx}:AC${stRowIdx})</td>
     <td colspan="7" style="height:45px; ${borderThin} border-bottom:0.5pt solid #cbd5e1; text-align:center; color:#94a3b8;">-</td>
@@ -3234,13 +3234,13 @@ document.addEventListener('DOMContentLoaded', () => {
         // 8. 早番
         const earlyRowIdx = endRow + 8;
         tableHtml += `  <tr style="height:45px; background-color:#ffffff;">
-    <th style="width:135px; height:45px; color:#334155; font-weight:bold; ${borderThin} ${borderThickR} border-bottom:0.5pt solid #cbd5e1; text-align:center;">早番</th>
+    <th style="width:175px; height:45px; color:#334155; font-weight:bold; ${borderThin} ${borderThickR} border-bottom:0.5pt solid #cbd5e1; text-align:center;">早番</th>
 `;
         for (let d = 0; d < NUM_DAYS; d++) {
             const col = getExcelColName(d + 1);
             const rightBorder = ((d + 1) === NUM_DAYS) ? borderThickR : (((d + 1) % 7 === 0) ? borderMediumR : '');
             const fEarly = `=COUNTIF(INDIRECT("${col}$4:${col}"&(ROW()-8)),"早")+COUNTIF(INDIRECT("${col}$4:${col}"&(ROW()-8)),"ハヤ")`;
-            tableHtml += `    <td style="width:65px; min-width:65px; max-width:65px; height:45px; color:#334155; font-weight:bold; ${borderThin} ${rightBorder} border-bottom:0.5pt solid #cbd5e1; text-align:center;">${fEarly}</td>\n`;
+            tableHtml += `    <td style="width:115px; min-width:115px; max-width:115px; height:45px; color:#334155; font-weight:bold; ${borderThin} ${rightBorder} border-bottom:0.5pt solid #cbd5e1; text-align:center;">${fEarly}</td>\n`;
         }
         tableHtml += `    <td style="width:105px; height:45px; color:#334155; font-weight:bold; ${borderThin} border-bottom:0.5pt solid #cbd5e1; text-align:center;">=SUM(B${earlyRowIdx}:AC${earlyRowIdx})</td>
     <td colspan="7" style="height:45px; ${borderThin} border-bottom:0.5pt solid #cbd5e1; text-align:center; color:#94a3b8;">-</td>
@@ -3250,13 +3250,13 @@ document.addEventListener('DOMContentLoaded', () => {
         // 9. 遅番
         const lateRowIdx = endRow + 9;
         tableHtml += `  <tr style="height:45px; background-color:#ffffff;">
-    <th style="width:135px; height:45px; color:#334155; font-weight:bold; ${borderThin} ${borderThickR} border-bottom:0.5pt solid #cbd5e1; text-align:center;">遅番</th>
+    <th style="width:175px; height:45px; color:#334155; font-weight:bold; ${borderThin} ${borderThickR} border-bottom:0.5pt solid #cbd5e1; text-align:center;">遅番</th>
 `;
         for (let d = 0; d < NUM_DAYS; d++) {
             const col = getExcelColName(d + 1);
             const rightBorder = ((d + 1) === NUM_DAYS) ? borderThickR : (((d + 1) % 7 === 0) ? borderMediumR : '');
             const fLate = `=COUNTIF(INDIRECT("${col}$4:${col}"&(ROW()-9)),"遅")+COUNTIF(INDIRECT("${col}$4:${col}"&(ROW()-9)),"オソ")`;
-            tableHtml += `    <td style="width:65px; min-width:65px; max-width:65px; height:45px; color:#334155; font-weight:bold; ${borderThin} ${rightBorder} border-bottom:0.5pt solid #cbd5e1; text-align:center;">${fLate}</td>\n`;
+            tableHtml += `    <td style="width:115px; min-width:115px; max-width:115px; height:45px; color:#334155; font-weight:bold; ${borderThin} ${rightBorder} border-bottom:0.5pt solid #cbd5e1; text-align:center;">${fLate}</td>\n`;
         }
         tableHtml += `    <td style="width:105px; height:45px; color:#334155; font-weight:bold; ${borderThin} border-bottom:0.5pt solid #cbd5e1; text-align:center;">=SUM(B${lateRowIdx}:AC${lateRowIdx})</td>
     <td colspan="7" style="height:45px; ${borderThin} border-bottom:0.5pt solid #cbd5e1; text-align:center; color:#94a3b8;">-</td>
@@ -3266,13 +3266,13 @@ document.addEventListener('DOMContentLoaded', () => {
         // 10. E
         const eveRowIdx = endRow + 10;
         tableHtml += `  <tr style="height:45px; background-color:#ffffff;">
-    <th style="width:135px; height:45px; color:#334155; font-weight:bold; ${borderThin} ${borderThickR} border-bottom:0.5pt solid #cbd5e1; text-align:center;">E</th>
+    <th style="width:175px; height:45px; color:#334155; font-weight:bold; ${borderThin} ${borderThickR} border-bottom:0.5pt solid #cbd5e1; text-align:center;">E</th>
 `;
         for (let d = 0; d < NUM_DAYS; d++) {
             const col = getExcelColName(d + 1);
             const rightBorder = ((d + 1) === NUM_DAYS) ? borderThickR : (((d + 1) % 7 === 0) ? borderMediumR : '');
             const fEve = `=COUNTIF(INDIRECT("${col}$4:${col}"&(ROW()-10)),"E")+COUNTIF(INDIRECT("${col}$4:${col}"&(ROW()-10)),"イブ")`;
-            tableHtml += `    <td style="width:65px; min-width:65px; max-width:65px; height:45px; color:#334155; font-weight:bold; ${borderThin} ${rightBorder} border-bottom:0.5pt solid #cbd5e1; text-align:center;">${fEve}</td>\n`;
+            tableHtml += `    <td style="width:115px; min-width:115px; max-width:115px; height:45px; color:#334155; font-weight:bold; ${borderThin} ${rightBorder} border-bottom:0.5pt solid #cbd5e1; text-align:center;">${fEve}</td>\n`;
         }
         tableHtml += `    <td style="width:105px; height:45px; color:#334155; font-weight:bold; ${borderThin} border-bottom:0.5pt solid #cbd5e1; text-align:center;">=SUM(B${eveRowIdx}:AC${eveRowIdx})</td>
     <td colspan="7" style="height:45px; ${borderThin} border-bottom:0.5pt solid #cbd5e1; text-align:center; color:#94a3b8;">-</td>
@@ -3282,13 +3282,13 @@ document.addEventListener('DOMContentLoaded', () => {
         // 11. 8時
         const h8RowIdx = endRow + 11;
         tableHtml += `  <tr style="height:45px; background-color:#ffffff;">
-    <th style="width:135px; height:45px; color:#334155; font-weight:bold; ${borderThin} ${borderThickR} ${borderThickB} text-align:center;">8時</th>
+    <th style="width:175px; height:45px; color:#334155; font-weight:bold; ${borderThin} ${borderThickR} ${borderThickB} text-align:center;">8時</th>
 `;
         for (let d = 0; d < NUM_DAYS; d++) {
             const col = getExcelColName(d + 1);
             const rightBorder = ((d + 1) === NUM_DAYS) ? borderThickR : (((d + 1) % 7 === 0) ? borderMediumR : '');
             const fH8 = `=COUNTIF(INDIRECT("${col}$4:${col}"&(ROW()-11)),"8時")`;
-            tableHtml += `    <td style="width:65px; min-width:65px; max-width:65px; height:45px; color:#334155; font-weight:bold; ${borderThin} ${rightBorder} ${borderThickB} text-align:center;">${fH8}</td>\n`;
+            tableHtml += `    <td style="width:115px; min-width:115px; max-width:115px; height:45px; color:#334155; font-weight:bold; ${borderThin} ${rightBorder} ${borderThickB} text-align:center;">${fH8}</td>\n`;
         }
         tableHtml += `    <td style="width:105px; height:45px; color:#334155; font-weight:bold; ${borderThin} ${borderThickB} text-align:center;">=SUM(B${h8RowIdx}:AC${h8RowIdx})</td>
     <td colspan="7" style="height:45px; ${borderThin} ${borderThickB}; text-align:center; color:#94a3b8;">-</td>
@@ -4454,10 +4454,10 @@ document.addEventListener('DOMContentLoaded', () => {
   <sheetViews><sheetView tabSelected="1" workbookViewId="0"/></sheetViews>
   <sheetFormatPr defaultRowHeight="18"/>
   <cols>
-    <col min="1" max="1" width="18.0" customWidth="1"/>
-    <col min="2" max="29" width="8.5" customWidth="1"/>
-    <col min="30" max="32" width="14.0" customWidth="1"/>
-    <col min="33" max="37" width="10.0" customWidth="1"/>
+    <col min="1" max="1" width="21.2" customWidth="1"/>
+    <col min="2" max="29" width="13.8" customWidth="1"/>
+    <col min="30" max="32" width="12.5" customWidth="1"/>
+    <col min="33" max="37" width="8.8" customWidth="1"/>
   </cols>
   <sheetData>
     <row r="1" ht="28" customHeight="1">
@@ -4496,13 +4496,13 @@ document.addEventListener('DOMContentLoaded', () => {
         sheet1 += `\n      <c r="AD3" s="2"/><c r="AE3" s="2"/><c r="AF3" s="2"/><c r="AG3" s="2"/><c r="AH3" s="2"/><c r="AI3" s="2"/><c r="AJ3" s="2"/><c r="AK3" s="2"/>
     </row>`;
 
-        // スタッフ行 (row 4〜: 行高55px固定 -> ht="41.25")
+        // スタッフ行 (row 4〜: 最新指示 行の幅/高さ33px固定 -> ht="24.75")
         validStaffIndices.forEach((s, idx) => {
             const staff = staffList[s];
             const r = 4 + idx;
             const rng = `B${r}:AC${r}`;
 
-            sheet1 += `\n    <row r="${r}" ht="41.25" customHeight="1">`;
+            sheet1 += `\n    <row r="${r}" ht="24.75" customHeight="1">`;
             sheet1 += `\n      <c r="A${r}" s="5" t="inlineStr"><is><t>${staff.name}</t></is></c>`;
 
             for (let d = 0; d < NUM_DAYS; d++) {
