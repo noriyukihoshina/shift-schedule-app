@@ -624,37 +624,118 @@ input:checked + .toggle-slider:before {
     display: flex;
 }
 
-/* 印刷用スタイル */
+/* ★ 印刷用スタイル（A3横向き・各階60名分完全収容対応） */
 @media print {
+    @page {
+        size: A3 landscape;
+        margin: 5mm 6mm;
+    }
+
+    /* 印刷不要なUI要素を完全非表示 */
     .app-header,
     .tab-container,
     .toolbar-card,
     .btn,
-    .modal-overlay {
+    .scroll-btn,
+    .conflict-alert-banner,
+    .modal-overlay,
+    .palette-group,
+    .app-toast {
+        display: none !important;
+    }
+
+    /* 非アクティブなタブを印刷から除外 */
+    .tab-panel:not(.active) {
         display: none !important;
     }
 
     body {
-        background: white;
+        background: white !important;
+        color: #000 !important;
+        margin: 0 !important;
+        padding: 0 !important;
+        font-family: 'Meiryo', 'Hiragino Kaku Gothic ProN', sans-serif !important;
+        -webkit-print-color-adjust: exact !important;
+        print-color-adjust: exact !important;
     }
 
     .main-content {
-        padding: 0;
+        padding: 0 !important;
+        margin: 0 !important;
     }
 
     .sheet-wrapper {
-        max-height: none;
-        overflow: visible;
-        border: none;
-        box-shadow: none;
+        max-height: none !important;
+        overflow: visible !important;
+        border: none !important;
+        box-shadow: none !important;
+        width: 100% !important;
     }
 
+    /* 印刷時のテーブル全体（60名枠が上下にピッタリ収まるタイト設定） */
     .sheet-table {
-        font-size: 0.65rem;
+        width: 100% !important;
+        font-size: 7pt !important;
+        border-collapse: collapse !important;
     }
 
+    /* ヘッダー・セルのパディングと高さの最小化（60名分をA3用紙の縦幅297mm内に収める） */
+    .sheet-table th,
+    .sheet-table td {
+        padding: 1px 1.5px !important;
+        height: 12.5px !important;
+        line-height: 1.1 !important;
+        font-size: 7pt !important;
+        border: 1px solid #94a3b8 !important;
+    }
+
+    /* 印刷時のsticky解除（紙面での座標ズレを防止） */
+    .sticky-col-1,
+    .sticky-col-2,
+    .sheet-table thead th {
+        position: static !important;
+        box-shadow: none !important;
+    }
+
+    .sticky-col-1 {
+        width: 22px !important;
+        min-width: 22px !important;
+    }
+    .sticky-col-2 {
+        width: 65px !important;
+        min-width: 65px !important;
+        font-weight: 700 !important;
+    }
+
+    /* 日付ヘッダーの印刷時スタイル */
+    .header-day-col {
+        min-width: 0 !important;
+        width: auto !important;
+        padding: 1px 0.5px !important;
+    }
+    .day-label {
+        font-size: 6.5pt !important;
+    }
+    .day-weekday {
+        font-size: 6pt !important;
+    }
+    /* 増減ボタンは印刷時非表示 */
+    .day-offset-ctrl {
+        display: none !important;
+    }
+
+    /* 事前希望枠は赤字太字を維持 */
     .fixed-cell {
         color: #dc2626 !important;
+        font-weight: bold !important;
+    }
+
+    /* 太線罫線 */
+    .border-thick-right {
+        border-right: 1.5px solid #000 !important;
+    }
+    .border-thick-bottom {
+        border-bottom: 1.5px solid #000 !important;
     }
 }
 
@@ -718,51 +799,51 @@ input:checked + .toggle-slider:before {
 
 /* 日付ヘッダーセルの縦積み＆横幅圧縮 */
 .header-day-col {
-    min-width: 42px !important;
-    width: 44px !important;
-    max-width: 48px !important;
+    min-width: 50px !important;
+    width: 52px !important;
+    max-width: 56px !important;
     padding: 3px 1px !important;
     text-align: center !important;
 }
 
 .day-label {
-    font-size: 0.82rem;
+    font-size: 0.84rem;
     font-weight: 700;
     line-height: 1.15;
 }
 
 .day-weekday {
-    font-size: 0.74rem;
+    font-size: 0.76rem;
     line-height: 1.15;
 }
 
-/* 日別出勤増減（オフセット）コントロール - 押しやすく視認性の高い縦積み対応 */
+/* 日別出勤増減（オフセット）コントロール - 14インチPCで押しやすく視認性の高いサイズ */
 .day-offset-ctrl {
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    gap: 1px;
+    gap: 2px;
     background: #ffffff;
     border: 1px solid #cbd5e1;
     border-radius: 3px;
-    padding: 0 2px;
+    padding: 0 3px;
     box-shadow: 0 1px 1px rgba(0, 0, 0, 0.05);
     user-select: none;
-    font-size: 0.72rem;
+    font-size: 0.75rem;
     margin-top: 2px;
-    height: 17px;
-    max-width: 40px;
+    height: 18px;
+    max-width: 46px;
 }
 
 .day-offset-btn {
     border: none;
     background: #f1f5f9;
     color: #475569;
-    font-size: 0.75rem;
+    font-size: 0.8rem;
     font-weight: 800;
-    width: 11px;
-    height: 13px;
-    line-height: 12px;
+    width: 12px;
+    height: 14px;
+    line-height: 13px;
     padding: 0;
     border-radius: 2px;
     cursor: pointer;
@@ -778,13 +859,13 @@ input:checked + .toggle-slider:before {
 }
 
 .day-offset-val {
-    min-width: 14px;
+    min-width: 16px;
     text-align: center;
     font-weight: 800;
-    font-size: 0.72rem;
+    font-size: 0.75rem;
     color: #64748b;
     padding: 0 1px;
-    line-height: 13px;
+    line-height: 14px;
 }
 
 .day-offset-val.offset-pos {

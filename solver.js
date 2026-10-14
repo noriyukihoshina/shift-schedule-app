@@ -1163,14 +1163,19 @@ class ShiftScheduler {
 
             for (const d of days) {
                 const currentOff = dailyOffCounts[d];
-                score -= currentOff * 15;
+                // ★ 出勤人数平準化の徹底強化:
+                // 日別加減枠（土日祝-2等）を加味した目標休日数（平日約16名、土日祝約18名）からの乖離をペナルティ化
+                const offset = (self.dayOffsets && self.dayOffsets[d]) ? self.dayOffsets[d] : 0;
+                const idealOff = 16 - offset;
+                const diffFromIdeal = currentOff - idealOff;
+                score -= diffFromIdeal * 25;
 
                 if (staff.can8) score -= dailyH8OffCounts[d] * 30;
                 if (staff.canSched) score -= dailySchedOffCounts[d] * 35;
                 if (staff.isRole) score -= dailyRoleOffCounts[d] * 30;
                 if (staff.isFullTime) score -= dailyFullTimeOffCounts[d] * 25;
 
-                const prev = (d === 0) ? staff.prevDays[4] : self.grid[s][d - 1].symbol;
+                const prev = (d === 0) ? (staff.prevDays ? staff.prevDays[4] : '') : self.grid[s][d - 1].symbol;
                 const next = (d + 1 < numDays) ? self.grid[s][d + 1].symbol : '';
                 if (isHolidaySymbol(prev)) score += 20;
                 if (isHolidaySymbol(next)) score += 20;

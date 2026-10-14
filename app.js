@@ -18,7 +18,27 @@ document.addEventListener('DOMContentLoaded', () => {
     let lastSolveResult = null;
     let lastScheduler = null;
     let currentWorkingStartDate = '2026-04-01';
-    let dayOffsets = new Array(NUM_DAYS).fill(0); // 日別出勤増減枠（プラス要因・マイナス要因）
+    let autoAssignedRefKeys = new Set(); // "s,d" 自動配分されたリフセル（通常文字・編集自由扱い）
+    let autoAssignedStaffIds = new Set(); // 自動配分対象となったスタッフID（誤消去検知用）
+
+    // ★ 日別出勤増減枠のデフォルト生成（ユーザー要望: 土日祝日はデフォルトで -2、平日は 0）
+    function createDefaultDayOffsets(dates) {
+        const curDates = dates || (typeof getTermInfo === 'function' ? getTermInfo().dates : null);
+        const arr = new Array(NUM_DAYS).fill(0);
+        if (!curDates || !Array.isArray(curDates)) return arr;
+        for (let d = 0; d < NUM_DAYS; d++) {
+            const dObj = curDates[d];
+            if (dObj) {
+                const isWeekendOrHol = dObj.isSun || dObj.isSat || dObj.isHoliday || dObj.isHol;
+                if (isWeekendOrHol) {
+                    arr[d] = -2;
+                }
+            }
+        }
+        return arr;
+    }
+
+    let dayOffsets = new Array(NUM_DAYS).fill(0); // 日別出勤増減枠（初期化時に土日祝日-2を適用）
 
     // ★ Web Audio API による心地よい短い「ポン♪」通知音の再生
     function playNotificationSound() {
@@ -263,16 +283,16 @@ document.addEventListener('DOMContentLoaded', () => {
                 }
             });
 
-            // 2.5 日別出勤増減枠（dayOffsets）の復元
-            dayOffsets = (Array.isArray(data.dayOffsets) && data.dayOffsets.length === NUM_DAYS)
-                ? [...data.dayOffsets]
-                : new Array(NUM_DAYS).fill(0);
-
             // 3. 日付セット & 期間タイトル更新
             const dateInput = document.getElementById('termStartDate');
             if (dateInput) dateInput.value = data.startDate;
             currentWorkingStartDate = data.startDate;
             const term = getTermInfo();
+
+            // 2.5 日別出勤増減枠（dayOffsets）の復元（未保存なら土日祝日-2のデフォルトを適用）
+            dayOffsets = (Array.isArray(data.dayOffsets) && data.dayOffsets.length === NUM_DAYS)
+                ? [...data.dayOffsets]
+                : createDefaultDayOffsets(term.dates);
 
             // 4. 入力テーブル描画
             renderInputTable();
@@ -418,7 +438,8 @@ document.addEventListener('DOMContentLoaded', () => {
             s.prevDays = ['', '', '', '', ''];
             s.days = new Array(NUM_DAYS).fill('');
         });
-        dayOffsets = new Array(NUM_DAYS).fill(0);
+        autoAssignedRefKeys.clear();
+        autoAssignedStaffIds.clear();
         lastSolveResult = null;
         lastScheduler = null;
 
@@ -432,7 +453,8 @@ document.addEventListener('DOMContentLoaded', () => {
             stdHolidaySelect.value = '8.0';
         }
 
-        getTermInfo();
+        const term = getTermInfo();
+        dayOffsets = createDefaultDayOffsets(term.dates);
 
         // ★ 直前タームが存在すれば、その最終5日間の勤務実績を自動連携！
         const prevTerm = findPreviousTerm(newStartDate);
@@ -1246,6 +1268,38 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     }
 
+    // ★ 自動配分されたリフの誤消去検知チェック（ユーザー要望: 自動配分リフを間違えて消した場合に検知）
+    function checkMissingAutoAssignedRef(grid, staffList, res) {
+        if (!autoAssignedStaffIds || autoAssignedStaffIds.size === 0) return;
+        if (!grid || !Array.isArray(grid)) return;
+
+        staffList.forEach((st, sIdx) => {
+            if (st.isUnused) return;
+            if (!autoAssignedStaffIds.has(st.id)) return;
+
+            // 当該スタッフのリフ（上1〜5、下1〜3）日数をグリッドから走査
+            let refCount = 0;
+            for (let d = 0; d < NUM_DAYS; d++) {
+                const cell = grid[sIdx] ? grid[sIdx][d] : null;
+                const sym = (cell && cell.symbol) ? cell.symbol : cell;
+                if (SYMBOLS.REF_SUMMER.includes(sym) || SYMBOLS.REF_WINTER.includes(sym)) {
+                    refCount++;
+                }
+            }
+
+            if (refCount === 0) {
+                const warnMsg = `【スタッフ No.${st.id} ${st.name}】リフレッシュ休暇が設定されていません（自動配分後に誤って消去された可能性があります）。`;
+                res.errors.push(warnMsg);
+                res.isValid = false;
+                res.conflictCells.push({
+                    staffIndex: sIdx,
+                    statType: 'ref',
+                    reason: 'リフレッシュ休暇が未設定（自動配分後の誤消去の可能性）'
+                });
+            }
+        });
+    }
+
     // ステージ2: 修正作業エリア用の制約チェック（※特殊勤務が入っていないことはエラーとしない）
     function checkWorkAreaConstraints(showModalOnError = true, showToastOnSuccess = false) {
         if (!lastSolveResult || !lastSolveResult.grid) {
@@ -1260,6 +1314,9 @@ document.addEventListener('DOMContentLoaded', () => {
             standardHolidays: stdHolidayVal,
             isFinal: false // ★ 特殊勤務なしはエラー外
         });
+
+        // 自動配分リフの誤消去チェック
+        checkMissingAutoAssignedRef(lastSolveResult.grid, staffList, res);
 
         if (!res.isValid) {
             applyOutputConflictHighlights(res.conflictCells, res.errors);
@@ -1313,6 +1370,9 @@ document.addEventListener('DOMContentLoaded', () => {
             standardHolidays: stdHolidayVal,
             isFinal: true // ★ 特殊勤務の過不足も含めてチェック
         });
+
+        // 自動配分リフの誤消去チェック
+        checkMissingAutoAssignedRef(lastSolveResult.grid, staffList, res);
 
         if (!res.isValid) {
             applyOutputConflictHighlights(res.conflictCells, res.errors);
@@ -1772,6 +1832,13 @@ document.addEventListener('DOMContentLoaded', () => {
         });
 
         if (res.assignedCount > 0) {
+            // ★ 自動配分されたリフのセルおよび対象スタッフを記録（通常文字・編集自由扱い＆誤消去検知用）
+            if (Array.isArray(res.assignments)) {
+                res.assignments.forEach(a => {
+                    autoAssignedRefKeys.add(`${a.staffIndex},${a.dayIndex}`);
+                    autoAssignedStaffIds.add(a.staffId);
+                });
+            }
             renderInputTable();
             saveCurrentTermToStorage();
             playNotificationSound();
@@ -2001,6 +2068,22 @@ document.addEventListener('DOMContentLoaded', () => {
 
                     if (result.success) {
                         clearConflictHighlights();
+                        // ★ 自動配分リフを通常文字・編集自由セル（isFixed: false）にする
+                        if (result.grid) {
+                            for (let s = 0; s < NUM_STAFF; s++) {
+                                if (!result.grid[s]) continue;
+                                for (let d = 0; d < NUM_DAYS; d++) {
+                                    const cell = result.grid[s][d];
+                                    if (!cell) continue;
+                                    const sym = cell.symbol || cell;
+                                    const isRef = SYMBOLS.REF_SUMMER.includes(sym) || SYMBOLS.REF_WINTER.includes(sym);
+                                    if (isRef && autoAssignedRefKeys.has(`${s},${d}`)) {
+                                        cell.isFixed = false;
+                                        cell.isAutoAssignedRef = true;
+                                    }
+                                }
+                            }
+                        }
                         lastScheduler = scheduler;
                         lastSolveResult = result;
                         renderOutputTable(result.grid, result.stats);
@@ -2017,6 +2100,21 @@ document.addEventListener('DOMContentLoaded', () => {
                             onForceSolve: () => {
                                 // エラーを無視して基本勤務表を強制生成！
                                 const forceResult = scheduler.solveBaseSchedule({ force: true });
+                                if (forceResult.grid) {
+                                    for (let s = 0; s < NUM_STAFF; s++) {
+                                        if (!forceResult.grid[s]) continue;
+                                        for (let d = 0; d < NUM_DAYS; d++) {
+                                            const cell = forceResult.grid[s][d];
+                                            if (!cell) continue;
+                                            const sym = cell.symbol || cell;
+                                            const isRef = SYMBOLS.REF_SUMMER.includes(sym) || SYMBOLS.REF_WINTER.includes(sym);
+                                            if (isRef && autoAssignedRefKeys.has(`${s},${d}`)) {
+                                                cell.isFixed = false;
+                                                cell.isAutoAssignedRef = true;
+                                            }
+                                        }
+                                    }
+                                }
                                 lastScheduler = scheduler;
                                 lastSolveResult = forceResult;
                                 renderOutputTable(forceResult.grid, forceResult.stats);
@@ -4296,7 +4394,8 @@ document.addEventListener('DOMContentLoaded', () => {
         if (dateInput) dateInput.value = targetDate;
         const stdHolidaySelect = document.getElementById('standardHolidaySelect');
         if (stdHolidaySelect) stdHolidaySelect.value = '8.0';
-        getTermInfo();
+        const term = getTermInfo();
+        dayOffsets = createDefaultDayOffsets(term.dates);
         renderInputTable();
         clearOutputTables();
         saveCurrentTermToStorage(); // 初期状態を自動保存
