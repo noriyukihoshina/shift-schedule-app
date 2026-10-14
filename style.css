@@ -907,20 +907,20 @@ input:checked + .toggle-slider:before {
 
 /* セクション別集計行（フッター）スタイル：背景色は完全除去（透明/白）、文字色指定 */
 .foot-sec-pt-a,
-.foot-sec-pt-b {
+.foot-sec-ot-a {
     background: transparent !important;
-    color: #1d4ed8 !important; /* 青 */
+    color: #ea580c !important; /* オレンジ (A系統) */
 }
 
-.foot-sec-ot-a,
+.foot-sec-pt-b,
 .foot-sec-ot-b {
     background: transparent !important;
-    color: #ea580c !important; /* オレンジ */
+    color: #1d4ed8 !important; /* 青 (B系統) */
 }
 
 .foot-sec-st {
     background: transparent !important;
-    color: #db2777 !important; /* ピンク */
+    color: #ec4899 !important; /* 薄いピンク */
 }
 
 .foot-duty-gray {
@@ -928,13 +928,15 @@ input:checked + .toggle-slider:before {
     color: #334155 !important; /* 早〜8時は濃い灰色 */
 }
 
-/* 右側集計列のスタイル：背景色完全除去、有休はオレンジ、早・遅・E・8時は濃い灰色 */
+/* 右側集計列のスタイル：背景色完全除去、公休・有休・リフは黒、早・遅・E・8時は濃い灰色 */
 .stat-cell {
     background: transparent !important;
 }
 
-.stat-cell[data-stat="paid"] {
-    color: #ea580c !important; /* 有休: オレンジ */
+.stat-cell[data-stat="off"],
+.stat-cell[data-stat="paid"],
+.stat-cell[data-stat="ref"] {
+    color: #1e293b !important; /* 公休・有休・リフ: 黒 */
 }
 
 .stat-cell[data-stat="early"],
