@@ -47,10 +47,15 @@
             <div class="toolbar-card" style="margin-bottom: 0.75rem; background: #f8fafc; border-left: 4px solid var(--primary);">
                 <div style="display: flex; flex-wrap: wrap; gap: 1rem; align-items: center; justify-content: space-between;">
                     <div style="display: flex; align-items: center; gap: 0.75rem; font-size: 0.88rem; flex-wrap: wrap;">
-                        <span style="font-weight: 700; color: #1e293b;">📅 対象期間:</span>
-                        <label style="color: #64748b;">開始日:</label>
-                        <input type="date" id="termStartDate" value="2026-04-01" style="padding: 4px 8px; border: 1px solid #cbd5e1; border-radius: 4px; font-weight: 600;">
+                        <span style="font-weight: 700; color: #1e293b;">📅 対象期間（ターム固定）:</span>
+                        <select id="termSelect" style="padding: 4px 8px; border: 1px solid #0284c7; background: #f0f9ff; border-radius: 4px; font-weight: 700; color: #0369a1; font-size: 0.88rem; cursor: pointer;" title="年度ごとの正規13ターム（第1〜12ターム:28日間、第13ターム:29日間）を選択します">
+                            <!-- JSで自動投入されます -->
+                        </select>
+                        <input type="hidden" id="termStartDate" value="2026-04-01">
                         <span style="color: #64748b;">〜 終了日:</span>
+                        <span id="termEndDateDisplay" style="font-weight: 700; color: #1e293b;">2026-04-28</span>
+                        <span style="background: #e0f2fe; color: #0284c7; padding: 2px 8px; border-radius: 4px; font-weight: 700; font-size: 0.85rem;" id="termTitleBadge">第1ターム (4/1～4/28)</span>
+                        <span id="termDaysBadge" style="background: #f1f5f9; color: #475569; padding: 2px 8px; border-radius: 4px; font-weight: 700; font-size: 0.82rem;">28日間</span>
                         <span id="termEndDateDisplay" style="font-weight: 700; color: #1e293b;">2026-04-28</span>
                         <span style="background: #e0f2fe; color: #0284c7; padding: 2px 8px; border-radius: 4px; font-weight: 700; font-size: 0.85rem;" id="termTitleBadge">4/1～4/28勤務表</span>
                         <span id="refreshTermBadge" style="display:none; background: #ecfdf5; color: #047857; border: 1px solid #a7f3d0; padding: 2px 8px; border-radius: 4px; font-weight: 700; font-size: 0.82rem;">🌴 リフ対象月</span>
@@ -119,6 +124,7 @@
                     <button class="palette-btn selected" data-sym="休" title="公休">休</button>
                     <button class="palette-btn" data-sym="有" title="有給休暇">有</button>
                     <button class="palette-btn" data-sym="○" title="日勤（基本勤務）">○</button>
+                    <button class="palette-btn" data-sym="ー" title="勤務対象外（異動・退職等。出勤・公休カウントから完全除外）" style="background:#f1f5f9; border-color:#cbd5e1; color:#64748b; font-weight:800;">ー</button>
                     <button class="palette-btn palette-btn-protect" data-sym="P" title="P（プロテクト保護）: クリックしたセルの勤務を赤文字で固定保護／解除します（他の勤務の誤上書き防止）" style="background:#fdf2f8; border-color:#f472b6; color:#be185d; font-weight:800;">🛡️ P</button>
                     <button class="palette-btn" data-sym="出" title="出張">出</button>
                     <button class="palette-btn" data-sym="早" title="早番 (7:00〜15:30)">早</button>
@@ -218,6 +224,7 @@
                     <button class="palette-btn output-palette-btn selected" data-sym="休" title="公休">休</button>
                     <button class="palette-btn output-palette-btn" data-sym="有" title="有給休暇">有</button>
                     <button class="palette-btn output-palette-btn" data-sym="○" title="日勤（基本勤務）">○</button>
+                    <button class="palette-btn" data-sym="ー" title="勤務対象外（異動・退職等。出勤・公休カウントから完全除外）" style="background:#f1f5f9; border-color:#cbd5e1; color:#64748b; font-weight:800;">ー</button>
                     <button class="palette-btn output-palette-btn palette-btn-protect" data-sym="P" title="P（プロテクト保護）: クリックしたセルの勤務を赤文字で固定保護／解除します（他の勤務の誤上書き防止）" style="background:#fdf2f8; border-color:#f472b6; color:#be185d; font-weight:800;">🛡️ P</button>
                     <button class="palette-btn output-palette-btn" data-sym="出" title="出張">出</button>
                     <button class="palette-btn output-palette-btn" data-sym="早" title="早番 (7:00〜15:30)">早</button>
@@ -318,6 +325,7 @@
                     <button class="palette-btn check-palette-btn selected" data-sym="休" title="公休">休</button>
                     <button class="palette-btn check-palette-btn" data-sym="有" title="有給休暇">有</button>
                     <button class="palette-btn check-palette-btn" data-sym="○" title="日勤（基本勤務）">○</button>
+                    <button class="palette-btn" data-sym="ー" title="勤務対象外（異動・退職等。出勤・公休カウントから完全除外）" style="background:#f1f5f9; border-color:#cbd5e1; color:#64748b; font-weight:800;">ー</button>
                     <button class="palette-btn check-palette-btn palette-btn-protect" data-sym="P" title="P（プロテクト保護）: クリックしたセルの勤務を赤文字で固定保護／解除します（他の勤務の誤上書き防止）" style="background:#fdf2f8; border-color:#f472b6; color:#be185d; font-weight:800;">🛡️ P</button>
                     <button class="palette-btn check-palette-btn" data-sym="出" title="出張">出</button>
                     <button class="palette-btn check-palette-btn" data-sym="早" title="早番 (7:00〜15:30)">早</button>
@@ -582,7 +590,7 @@
     </div>
 
     <!-- スクリプト読み込み -->
-    <script src="solver.js?v=20261014_rev9"></script>
-    <script src="app.js?v=20261014_rev9"></script>
+    <script src="solver.js?v=20261015_rev10"></script>
+    <script src="app.js?v=20261015_rev10"></script>
 </body>
 </html>

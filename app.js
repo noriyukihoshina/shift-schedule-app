@@ -9,6 +9,250 @@
  */
 
 document.addEventListener('DOMContentLoaded', () => {
+
+    // ==========================================
+    // ★ 正規13ターム定義 ＆ セレクター制御
+    // ==========================================
+    function generateAllTerms() {
+        const years = [2025, 2026, 2027];
+        const allTerms = [];
+
+        years.forEach(year => {
+            let cur = new Date(year, 3, 1); // 4月1日
+            for (let t = 1; t <= 12; t++) {
+                const sDate = new Date(cur);
+                const eDate = new Date(cur);
+                eDate.setDate(cur.getDate() + 27);
+
+                const sStr = `${sDate.getFullYear()}-${String(sDate.getMonth() + 1).padStart(2, '0')}-${String(sDate.getDate()).padStart(2, '0')}`;
+                const eStr = `${eDate.getFullYear()}-${String(eDate.getMonth() + 1).padStart(2, '0')}-${String(eDate.getDate()).padStart(2, '0')}`;
+
+                allTerms.push({
+                    year,
+                    termNo: t,
+                    startDate: sStr,
+                    endDate: eStr,
+                    numDays: 28,
+                    isTerm13: false,
+                    label: `【${year}年度 第${t}ターム】 ${sDate.getMonth() + 1}/${sDate.getDate()} 〜 ${eDate.getMonth() + 1}/${eDate.getDate()} (28日間)`
+                });
+
+                cur.setDate(cur.getDate() + 28);
+            }
+
+            // 第13ターム: 3月3日(平年) 〜 3月31日 (29日間・年度末)
+            const t13Start = new Date(cur);
+            const t13End = new Date(year + 1, 2, 31);
+            const diffDays = Math.round((t13End - t13Start) / (1000 * 60 * 60 * 24)) + 1;
+
+            const s13Str = `${t13Start.getFullYear()}-${String(t13Start.getMonth() + 1).padStart(2, '0')}-${String(t13Start.getDate()).padStart(2, '0')}`;
+            const e13Str = `${t13End.getFullYear()}-${String(t13End.getMonth() + 1).padStart(2, '0')}-${String(t13End.getDate()).padStart(2, '0')}`;
+
+            allTerms.push({
+                year,
+                termNo: 13,
+                startDate: s13Str,
+                endDate: e13Str,
+                numDays: diffDays,
+                isTerm13: true,
+                label: `【${year}年度 第13ターム】 ${t13Start.getMonth() + 1}/${t13Start.getDate()} 〜 ${t13End.getMonth() + 1}/${t13End.getDate()} (${diffDays}日間・年度末調整)`
+            });
+        });
+
+        return allTerms;
+    }
+
+    const GLOBAL_TERMS = generateAllTerms();
+
+    function findTermByStartDate(startDate) {
+        if (!startDate) return GLOBAL_TERMS.find(t => t.startDate === '2026-04-01') || GLOBAL_TERMS[0];
+        const match = GLOBAL_TERMS.find(t => t.startDate === startDate);
+        if (match) return match;
+
+        // もし一致しない日付の場合、最も近いターム、または自前計算
+        const d = new Date(startDate);
+        const y = (d.getMonth() + 1 >= 4) ? d.getFullYear() : d.getFullYear() - 1;
+        return GLOBAL_TERMS.find(t => t.year === y && t.startDate === startDate) || GLOBAL_TERMS.find(t => t.startDate === '2026-04-01') || GLOBAL_TERMS[0];
+    }
+
+    function initTermSelector() {
+        const select = document.getElementById('termSelect');
+        if (!select) return;
+
+        select.innerHTML = '';
+        GLOBAL_TERMS.forEach(t => {
+            const opt = document.createElement('option');
+            opt.value = t.startDate;
+            opt.textContent = t.label;
+            if (t.startDate === currentWorkingStartDate) opt.selected = true;
+            select.appendChild(opt);
+        });
+
+        select.addEventListener('change', () => {
+            const newDate = select.value;
+            if (!newDate || newDate === currentWorkingStartDate) return;
+
+            // 直前の期間データを保存
+            saveCurrentTermToStorage(currentWorkingStartDate);
+
+            // 切り替え
+            currentWorkingStartDate = newDate;
+            const startDateInput = document.getElementById('termStartDate');
+            if (startDateInput) startDateInput.value = newDate;
+
+            const term = findTermByStartDate(newDate);
+            const stdHolidaySelect = document.getElementById('standardHolidaySelect');
+            if (term && term.isTerm13) {
+                if (stdHolidaySelect) stdHolidaySelect.value = '8.5';
+                showToast(`📅 ${term.year}年度 第13ターム（年度末 ${term.numDays}日間）を選択しました。公休枠を 8.5日に設定しました。`);
+            } else {
+                if (stdHolidaySelect) stdHolidaySelect.value = '8.0';
+            }
+
+            if (localStorage.getItem(`${STORAGE_KEY_PREFIX}${newDate}`)) {
+                loadTermFromStorage(newDate);
+                showToast(`📁 期間「${term.label}」の保存データを読み込みました`);
+            } else {
+                resetTermDataKeepStaffSettings();
+                showToast(`🆕 新規期間「${term.label}」の編集を開始しました`);
+            }
+            localStorage.setItem(STORAGE_KEY_LAST_ACTIVE, newDate);
+            renderSavedTermsSelect();
+        });
+    }
+
+
+    // ★ スタッフ属性マスターの保存（タームを切り替えてもトグルや設定を完全維持）
+    function saveStaffMaster() {
+        try {
+            const masterList = staffList.map(s => ({
+                id: s.id,
+                name: s.name,
+                isUnused: !!s.isUnused,
+                section: s.section || '',
+                can8: !!s.can8,
+                noEarly: !!s.noEarly,
+                noLate: !!s.noLate,
+                noEve: !!s.noEve,
+                canSched: !!s.canSched,
+                isSectionChief: !!s.isSectionChief,
+                isChief: !!s.isChief,
+                isSubChief: !!s.isSubChief,
+                isHalf: !!s.isHalf,
+                isFullTime: !!s.isFullTime,
+                allow6Consec: !!s.allow6Consec,
+                prevName: s.prevName || '',
+                remarks: s.remarks || ''
+            }));
+            localStorage.setItem(STORAGE_KEY_STAFF_MASTER, JSON.stringify(masterList));
+        } catch (e) {
+            console.error('スタッフマスターの保存に失敗:', e);
+        }
+    }
+
+    function loadStaffMaster() {
+        try {
+            const raw = localStorage.getItem(STORAGE_KEY_STAFF_MASTER);
+            if (!raw) return false;
+            const masterList = JSON.parse(raw);
+            if (!Array.isArray(masterList)) return false;
+            masterList.forEach((ms, idx) => {
+                if (staffList[idx]) {
+                    staffList[idx].name = ms.name || staffList[idx].name;
+                    staffList[idx].isUnused = ms.isUnused !== undefined ? ms.isUnused : staffList[idx].isUnused;
+                    staffList[idx].section = ms.section || '';
+                    staffList[idx].can8 = !!ms.can8;
+                    staffList[idx].noEarly = !!ms.noEarly;
+                    staffList[idx].noLate = !!ms.noLate;
+                    staffList[idx].noEve = !!ms.noEve;
+                    staffList[idx].canSched = !!ms.canSched;
+                    staffList[idx].isSectionChief = !!ms.isSectionChief;
+                    staffList[idx].isChief = !!ms.isChief;
+                    staffList[idx].isSubChief = !!ms.isSubChief;
+                    staffList[idx].isHalf = !!ms.isHalf;
+                    staffList[idx].isFullTime = !!ms.isFullTime;
+                    staffList[idx].allow6Consec = !!ms.allow6Consec;
+                    staffList[idx].prevName = ms.prevName || '';
+                    staffList[idx].remarks = ms.remarks || '';
+                }
+            });
+            return true;
+        } catch (e) {
+            console.error('スタッフマスターの読込に失敗:', e);
+            return false;
+        }
+    }
+
+
+    // ==========================================
+    // ★ 部署別パスワード認証モーダル制御
+    // ==========================================
+    function checkDeptAuthentication() {
+        if (!window.APP_CONFIG || !window.APP_CONFIG.password) return;
+        const config = window.APP_CONFIG;
+
+        // ヘッダータイトルの更新
+        const titleEl = document.querySelector('.header-title h1');
+        if (titleEl && config.deptName) {
+            titleEl.textContent = `勤務予定表 自動作成システム 【${config.deptName}】`;
+            document.title = `勤務予定表 自動作成システム - ${config.deptName}`;
+        }
+
+        const authKey = `auth_${config.deptId}`;
+        if (sessionStorage.getItem(authKey) === 'true') {
+            return; // 認証済み
+        }
+
+        // 認証モーダルを動的生成して画面全体を安全にロック
+        const overlay = document.createElement('div');
+        overlay.id = 'deptAuthOverlay';
+        overlay.style.cssText = `
+            position: fixed; top: 0; left: 0; width: 100vw; height: 100vh;
+            background: rgba(15, 23, 42, 0.85); backdrop-filter: blur(8px);
+            z-index: 99999; display: flex; align-items: center; justify-content: center;
+        `;
+
+        overlay.innerHTML = `
+            <div style="background: white; border-radius: 12px; padding: 2rem; max-width: 400px; width: 90%; box-shadow: 0 20px 25px -5px rgba(0,0,0,0.3); text-align: center;">
+                <div style="font-size: 2.5rem; margin-bottom: 0.5rem;">🔒</div>
+                <h3 style="font-size: 1.25rem; font-weight: 800; color: #1e293b; margin-bottom: 0.25rem;">【${config.deptName}】認証</h3>
+                <p style="font-size: 0.85rem; color: #64748b; margin-bottom: 1.5rem;">パスワードを入力して勤務表を開いてください</p>
+                <div style="margin-bottom: 1rem;">
+                    <input type="password" id="deptAuthPasswordInput" placeholder="パスワードを入力" style="width: 100%; padding: 10px 14px; border: 2px solid #cbd5e1; border-radius: 8px; font-size: 1.1rem; text-align: center; letter-spacing: 4px; outline: none; box-sizing: border-box;">
+                    <div id="deptAuthErrorMsg" style="color: #dc2626; font-size: 0.8rem; margin-top: 6px; display: none; font-weight: 600;">パスワードが正しくありません</div>
+                </div>
+                <button type="button" id="deptAuthSubmitBtn" style="width: 100%; padding: 10px; background: #2563eb; color: white; border: none; border-radius: 8px; font-size: 1rem; font-weight: 700; cursor: pointer; transition: background 0.2s;">
+                    ロック解除
+                </button>
+            </div>
+        `;
+
+        document.body.appendChild(overlay);
+
+        const input = document.getElementById('deptAuthPasswordInput');
+        const submitBtn = document.getElementById('deptAuthSubmitBtn');
+        const errorMsg = document.getElementById('deptAuthErrorMsg');
+
+        function tryAuth() {
+            if (input.value === config.password) {
+                sessionStorage.setItem(authKey, 'true');
+                overlay.remove();
+            } else {
+                errorMsg.style.display = 'block';
+                input.value = '';
+                input.focus();
+            }
+        }
+
+        submitBtn.addEventListener('click', tryAuth);
+        input.addEventListener('keydown', (e) => {
+            if (e.key === 'Enter') tryAuth();
+        });
+
+        setTimeout(() => input.focus(), 100);
+    }
+
+    checkDeptAuthentication();
     const NUM_STAFF = 60;
     const NUM_DAYS = 28;
     const WEEKDAYS = ['月', '火', '水', '木', '金', '土', '日'];
@@ -85,9 +329,14 @@ document.addEventListener('DOMContentLoaded', () => {
                 noLate: false,      // 遅番不可
                 noEve: false,       // E不可
                 canSched: (i <= 8), // ★ スケ可（毎日2名以上必要・○のみ）
-                isRole: (i <= 6),   // ★ 役職（毎日2名以上必要・出張除く）
-                isFullTime: (i <= 10), // ★ 専従（毎日3名以上必要・出張除く）
-                allow6Consec: false, // ★ 6連勤可（日〜土週6勤務および6連勤の例外許可）
+                isSectionChief: (i === 1),  // ★ 係長（平日5連勤、不在時主任出勤）
+                isChief: (i === 2 || i === 3),       // ★ 主任（係長不在時に1名以上出勤）
+                isSubChief: (i === 4 || i === 5),    // ★ 副主任（係長主任不在時A1名B1名出勤）
+                isHalf: false,                       // ★ 0.5（出勤実数を0.5人換算）
+                isFullTime: (i <= 10),               // ★ 専従
+                allow6Consec: false,                 // ★ 6連勤可
+                prevName: '',                        // ★ 旧姓（改姓時の引き継ぎ用）
+                remarks: '',                         // ★ 備考メモ（AG列）
                 prevDays: ['', '', '', '', ''],
                 days: new Array(NUM_DAYS).fill('')
             });
@@ -97,9 +346,13 @@ document.addEventListener('DOMContentLoaded', () => {
     // ==========================================
     // ★ 期間別ローカルストレージ自動保存＆復元管理
     // ==========================================
-    const STORAGE_KEY_PREFIX = 'shift_schedule_term_';
-    const STORAGE_KEY_LAST_ACTIVE = 'shift_schedule_last_active_start_date';
-    const STORAGE_KEY_SAVED_TERMS = 'shift_schedule_saved_terms';
+    // ★ 部署別設定 (APP_CONFIG) に対応したストレージキー動的生成
+    const appConfig = window.APP_CONFIG || { deptId: 'master', deptName: 'マスター統括', password: '77777' };
+    const deptPrefix = appConfig.deptId ? `${appConfig.deptId}_` : '';
+    const STORAGE_KEY_PREFIX = `shift_schedule_${deptPrefix}term_`;
+    const STORAGE_KEY_LAST_ACTIVE = `shift_schedule_${deptPrefix}last_active_start_date`;
+    const STORAGE_KEY_SAVED_TERMS = `shift_schedule_${deptPrefix}saved_terms`;
+    const STORAGE_KEY_STAFF_MASTER = `shift_schedule_${deptPrefix}staff_master`;
 
     function updateSaveStatusUI(savedDate) {
         const badgeText = document.getElementById('autoSaveStatusText');
@@ -199,10 +452,10 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     }
 
-    function saveCurrentTermToStorage() {
+    function saveCurrentTermToStorage(explicitDate) {
         try {
             const startDateInput = document.getElementById('termStartDate');
-            const startDate = startDateInput ? startDateInput.value : currentWorkingStartDate;
+            const startDate = explicitDate || (startDateInput ? startDateInput.value : currentWorkingStartDate);
             if (!startDate) return;
 
             const stdHolidaySelect = document.getElementById('standardHolidaySelect');
@@ -224,8 +477,13 @@ document.addEventListener('DOMContentLoaded', () => {
                     noLate: s.noLate,
                     noEve: s.noEve,
                     canSched: s.canSched,
-                    isRole: s.isRole,
+                    isSectionChief: !!s.isSectionChief,
+                    isChief: !!s.chief || !!s.isChief,
+                    isSubChief: !!s.isSubChief,
+                    isHalf: !!s.isHalf,
                     isFullTime: s.isFullTime,
+                    prevName: s.prevName || '',
+                    remarks: s.remarks || '',
                     allow6Consec: s.allow6Consec,
                     prevDays: [...s.prevDays],
                     days: [...s.days]
@@ -245,6 +503,7 @@ document.addEventListener('DOMContentLoaded', () => {
             localStorage.setItem(STORAGE_KEY_LAST_ACTIVE, startDate);
 
             updateSavedTermsList(startDate);
+            saveStaffMaster();
             updateSaveStatusUI(new Date());
         } catch (err) {
             console.error('自動保存に失敗しました:', err);
@@ -278,8 +537,13 @@ document.addEventListener('DOMContentLoaded', () => {
                     staffList[idx].noLate = s.noLate;
                     staffList[idx].noEve = s.noEve;
                     staffList[idx].canSched = s.canSched;
-                    staffList[idx].isRole = s.isRole;
+                    staffList[idx].isSectionChief = !!s.isSectionChief;
+                    staffList[idx].isChief = !!s.isChief;
+                    staffList[idx].isSubChief = !!s.isSubChief;
+                    staffList[idx].isHalf = !!s.isHalf;
                     staffList[idx].isFullTime = s.isFullTime;
+                    staffList[idx].prevName = s.prevName || '';
+                    staffList[idx].remarks = s.remarks || '';
                     staffList[idx].allow6Consec = s.allow6Consec;
                     staffList[idx].prevDays = Array.isArray(s.prevDays) ? [...s.prevDays] : ['', '', '', '', ''];
                     staffList[idx].days = Array.isArray(s.days) ? [...s.days] : new Array(NUM_DAYS).fill('');
@@ -397,35 +661,49 @@ document.addEventListener('DOMContentLoaded', () => {
 
             let appliedCount = 0;
 
+            // 前タームのスタッフを氏名（正規化）でマップ化
+            const prevStaffByName = new Map();
+            if (Array.isArray(prevData.staffList)) {
+                prevData.staffList.forEach((pst, pIdx) => {
+                    const normName = (pst.name || '').trim();
+                    if (!normName) return;
+                    let last5 = ['', '', '', '', ''];
+                    if (prevData.outputGrid && prevData.outputGrid[pIdx] && prevData.outputGrid[pIdx].length >= NUM_DAYS) {
+                        const row = prevData.outputGrid[pIdx];
+                        last5 = [
+                            row[NUM_DAYS - 5]?.symbol || '',
+                            row[NUM_DAYS - 4]?.symbol || '',
+                            row[NUM_DAYS - 3]?.symbol || '',
+                            row[NUM_DAYS - 2]?.symbol || '',
+                            row[NUM_DAYS - 1]?.symbol || ''
+                        ];
+                    } else if (Array.isArray(pst.days)) {
+                        last5 = [
+                            pst.days[NUM_DAYS - 5] || '',
+                            pst.days[NUM_DAYS - 4] || '',
+                            pst.days[NUM_DAYS - 3] || '',
+                            pst.days[NUM_DAYS - 2] || '',
+                            pst.days[NUM_DAYS - 1] || ''
+                        ];
+                    }
+                    prevStaffByName.set(normName, last5);
+                });
+            }
+
             for (let s = 0; s < NUM_STAFF; s++) {
                 if (!staffList[s]) continue;
-                let last5 = ['', '', '', '', ''];
+                const curName = (staffList[s].name || '').trim();
+                const prevName = (staffList[s].prevName || '').trim();
 
-                // 優先1: 作成済み勤務表（outputGrid）から最後の5日分を取得
-                if (prevData.outputGrid && prevData.outputGrid[s] && prevData.outputGrid[s].length >= NUM_DAYS) {
-                    const row = prevData.outputGrid[s];
-                    last5 = [
-                        row[NUM_DAYS - 5]?.symbol || '',
-                        row[NUM_DAYS - 4]?.symbol || '',
-                        row[NUM_DAYS - 3]?.symbol || '',
-                        row[NUM_DAYS - 2]?.symbol || '',
-                        row[NUM_DAYS - 1]?.symbol || ''
-                    ];
+                // 照合優先: 1. 現在の氏名、2. 改姓・旧姓（prevName）
+                let last5 = prevStaffByName.get(curName) || (prevName ? prevStaffByName.get(prevName) : null);
+                if (last5) {
+                    staffList[s].prevDays = [...last5];
+                    if (last5.some(v => v !== '')) appliedCount++;
+                } else {
+                    // 過去に該当名がない新規中途採用等のスタッフ
+                    staffList[s].prevDays = ['', '', '', '', ''];
                 }
-                // 優先2: 事前希望入力枠（days）から最後の5日分を取得
-                else if (prevData.staffList && prevData.staffList[s] && prevData.staffList[s].days) {
-                    const days = prevData.staffList[s].days;
-                    last5 = [
-                        days[NUM_DAYS - 5] || '',
-                        days[NUM_DAYS - 4] || '',
-                        days[NUM_DAYS - 3] || '',
-                        days[NUM_DAYS - 2] || '',
-                        days[NUM_DAYS - 1] || ''
-                    ];
-                }
-
-                staffList[s].prevDays = [...last5];
-                if (last5.some(v => v !== '')) appliedCount++;
             }
 
             renderInputTable();
@@ -446,6 +724,8 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     function initNewTerm(newStartDate) {
+        // スタッフ基本設定マスターを引き継ぎ復元！
+        loadStaffMaster();
         staffList.forEach(s => {
             s.prevDays = ['', '', '', '', ''];
             s.days = new Array(NUM_DAYS).fill('');
@@ -642,7 +922,8 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // サンプルデータの生成（現場の運用に合わせて各属性を設定）
     function loadSampleData() {
-        initStaffData();
+        initTermSelector();
+    initStaffData();
 
         const names = [
             "佐藤 健一", "鈴木 美咲", "高橋 浩", "田中 優子", "伊藤 直樹",
@@ -748,14 +1029,15 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // ★ 日別出勤増減枠（プラス要因・マイナス要因）の操作
     function renderDayOffsetCtrl(d) {
-        const val = dayOffsets[d] || 0;
+        const rawVal = dayOffsets[d] || 0;
+        const val = Math.round(rawVal * 10) / 10;
         const valText = val > 0 ? `+${val}` : (val < 0 ? `${val}` : '±0');
         const cls = val > 0 ? 'offset-pos' : (val < 0 ? 'offset-neg' : '');
         return `
-            <div class="day-offset-ctrl" data-d="${d}" title="この日の出勤加減枠（例: 行事等で+2、減員で-1）">
-                <button type="button" class="day-offset-btn offset-minus" data-d="${d}" title="出勤人数を-1">-</button>
-                <span class="day-offset-val ${cls}" data-d="${d}">${valText}</span>
-                <button type="button" class="day-offset-btn offset-plus" data-d="${d}" title="出勤人数を+1">+</button>
+            <div class="day-offset-ctrl" data-d="${d}" title="この日の出勤加減枠（0.5刻み、例: 行事で+0.5、減員で-0.5）" style="display:inline-flex; align-items:center; gap:2px;">
+                <button type="button" class="day-offset-btn offset-minus" data-d="${d}" title="出勤人数を-0.5" style="width:16px; height:16px; font-size:10px; line-height:1; padding:0;">-</button>
+                <span class="day-offset-val ${cls}" data-d="${d}" style="min-width:28px; font-size:0.75rem; font-weight:700; text-align:center;">${valText}</span>
+                <button type="button" class="day-offset-btn offset-plus" data-d="${d}" title="出勤人数を+0.5" style="width:16px; height:16px; font-size:10px; line-height:1; padding:0;">+</button>
             </div>
         `;
     }
@@ -764,7 +1046,9 @@ document.addEventListener('DOMContentLoaded', () => {
         if (d < 0 || d >= NUM_DAYS) return;
         pushHistory();
         const cur = dayOffsets[d] || 0;
-        dayOffsets[d] = Math.max(-10, Math.min(10, cur + delta));
+        // 0.5刻みで加減算
+        const nextVal = Math.round((cur + delta) * 10) / 10;
+        dayOffsets[d] = Math.max(-10, Math.min(10, nextVal));
 
         updateDayOffsetDisplay();
 
@@ -817,9 +1101,14 @@ document.addEventListener('DOMContentLoaded', () => {
                 <th class="flag-col" rowspan="2" title="OT A セクション（この中で出勤平均化）" style="background:#fae8ff; color:#86198f;">OT<br>A</th>
                 <th class="flag-col" rowspan="2" title="OT B セクション（この中で出勤平均化）" style="background:#fce7f3; color:#9d174d;">OT<br>B</th>
                 <th class="flag-col" rowspan="2" title="スケ可（毎日2名以上必要・○のみ）" style="background:#e0f2fe; color:#0369a1;">スケ<br>可</th>
-                <th class="flag-col" rowspan="2" title="役職（毎日2名以上必要・出張除く）" style="background:#fef3c7; color:#92400e;">役職</th>
+                <th class="flag-col" rowspan="2" title="係長（基本平日5連勤、不在時主任1名以上出勤）" style="background:#fef3c7; color:#92400e;">係長</th>
+                <th class="flag-col" rowspan="2" title="主任（係長不在時に1名以上出勤）" style="background:#fef9c3; color:#854d0e;">主任</th>
+                <th class="flag-col" rowspan="2" title="副主任（係長主任不在時A1名B1名出勤）" style="background:#e0f2fe; color:#0369a1;">副主任</th>
+                <th class="flag-col" rowspan="2" title="0.5（実数合計計算時に0.5人で計算）" style="background:#f3e8ff; color:#6b21a8; font-weight:800;">0.5</th>
                 <th class="flag-col" rowspan="2" title="専従（毎日3名以上必要・出張除く）" style="background:#dcfce7; color:#166534;">専従</th>
                 <th class="flag-col" rowspan="2" title="6連勤例外許可（週6勤務＆6連勤を許容）" style="background:#fee2e2; color:#991b1b;">6連勤<br>可</th>
+                <th class="flag-col" rowspan="2" title="改姓・旧姓（前タームの氏名）" style="background:#f1f5f9; color:#475569; min-width:80px;">旧姓</th>
+                <th class="remarks-col" rowspan="2" title="委員会等のメモ（ExcelのAG列と自動連携）" style="background:#f8fafc; color:#1e293b; min-width:220px; max-width:320px;">備考（メモ）</th>
             </tr>
             <tr>
                 <th class="prev-col-header">前5</th>
@@ -928,22 +1217,46 @@ document.addEventListener('DOMContentLoaded', () => {
                     </label>
                 </td>
                 <td class="flag-col" style="background:#fefce8;">
-                    <label class="toggle-switch">
-                        <input type="checkbox" ${staff.isRole ? 'checked' : ''} data-flag="isRole" data-s="${sIdx}">
+                    <label class="toggle-switch" title="係長">
+                        <input type="checkbox" ${staff.isSectionChief ? 'checked' : ''} data-flag="isSectionChief" data-s="${sIdx}">
+                        <span class="toggle-slider"></span>
+                    </label>
+                </td>
+                <td class="flag-col" style="background:#fef9c3;">
+                    <label class="toggle-switch" title="主任">
+                        <input type="checkbox" ${staff.isChief ? 'checked' : ''} data-flag="isChief" data-s="${sIdx}">
+                        <span class="toggle-slider"></span>
+                    </label>
+                </td>
+                <td class="flag-col" style="background:#e0f2fe;">
+                    <label class="toggle-switch" title="副主任">
+                        <input type="checkbox" ${staff.isSubChief ? 'checked' : ''} data-flag="isSubChief" data-s="${sIdx}">
+                        <span class="toggle-slider"></span>
+                    </label>
+                </td>
+                <td class="flag-col" style="background:#f3e8ff;">
+                    <label class="toggle-switch" title="0.5（実数計算で0.5人換算）">
+                        <input type="checkbox" ${staff.isHalf ? 'checked' : ''} data-flag="isHalf" data-s="${sIdx}">
                         <span class="toggle-slider"></span>
                     </label>
                 </td>
                 <td class="flag-col" style="background:#f0fdf4;">
-                    <label class="toggle-switch">
+                    <label class="toggle-switch" title="専従">
                         <input type="checkbox" ${staff.isFullTime ? 'checked' : ''} data-flag="isFullTime" data-s="${sIdx}">
                         <span class="toggle-slider"></span>
                     </label>
                 </td>
-                <td class="flag-col" style="background:#fef2f2;">
-                    <label class="toggle-switch">
+                <td class="flag-col" style="background:#fef2e2;">
+                    <label class="toggle-switch" title="6連勤可">
                         <input type="checkbox" ${staff.allow6Consec ? 'checked' : ''} data-flag="allow6Consec" data-s="${sIdx}">
                         <span class="toggle-slider danger-slider"></span>
                     </label>
+                </td>
+                <td class="flag-col" style="background:#f8fafc; padding:2px;">
+                    <input type="text" class="staff-prevname-input" data-s="${sIdx}" value="${staff.prevName || ''}" placeholder="旧姓" title="改姓前の前ターム氏名を入力すると過去履歴が引き継がれます" style="width:100%; border:1px solid #cbd5e1; border-radius:3px; padding:2px 4px; font-size:0.75rem; text-align:center;">
+                </td>
+                <td class="remarks-col" style="padding:2px 4px;">
+                    <input type="text" class="staff-remarks-input" data-s="${sIdx}" value="${staff.remarks || ''}" placeholder="委員会・用事等のメモ" style="width:100%; border:1px solid #cbd5e1; border-radius:3px; padding:2px 6px; font-size:0.78rem; background:white;">
                 </td>
             `;
 
@@ -958,9 +1271,35 @@ document.addEventListener('DOMContentLoaded', () => {
         document.querySelectorAll('.staff-name-input').forEach(input => {
             input.addEventListener('change', (e) => {
                 const s = parseInt(e.target.dataset.s, 10);
-                if (staffList[s].name !== e.target.value) {
+                if (staffList[s] && staffList[s].name !== e.target.value) {
                     pushHistory();
-                    staffList[s].name = e.target.value;
+                    staffList[s].name = e.target.value.trim() || `スタッフ ${String(s + 1).padStart(2, '0')}`;
+                    saveCurrentTermToStorage();
+                }
+            });
+        });
+
+        document.querySelectorAll('.staff-prevname-input').forEach(input => {
+            input.addEventListener('change', (e) => {
+                const s = parseInt(e.target.dataset.s, 10);
+                if (staffList[s]) {
+                    pushHistory();
+                    staffList[s].prevName = e.target.value.trim();
+                    saveCurrentTermToStorage();
+                }
+            });
+        });
+
+        document.querySelectorAll('.staff-remarks-input').forEach(input => {
+            input.addEventListener('change', (e) => {
+                const s = parseInt(e.target.dataset.s, 10);
+                if (staffList[s]) {
+                    pushHistory();
+                    staffList[s].remarks = e.target.value.trim();
+                    saveCurrentTermToStorage();
+                    if (lastSolveResult && lastSolveResult.grid) {
+                        renderOutputTable(lastSolveResult.grid, lastSolveResult.stats);
+                    }
                 }
             });
         });
@@ -1465,9 +1804,9 @@ document.addEventListener('DOMContentLoaded', () => {
         const d = parseInt(btn.dataset.d, 10);
         if (isNaN(d)) return;
         if (btn.classList.contains('offset-plus')) {
-            setDayOffset(d, 1);
+            setDayOffset(d, 0.5);
         } else if (btn.classList.contains('offset-minus')) {
-            setDayOffset(d, -1);
+            setDayOffset(d, -0.5);
         }
     });
 
@@ -1632,8 +1971,8 @@ document.addEventListener('DOMContentLoaded', () => {
             const newDate = termStartDateInput.value;
             if (!newDate || newDate === currentWorkingStartDate) return;
 
-            // 1. 直前の期間データを自動保存
-            saveCurrentTermToStorage();
+            // 1. 直前の期間データをその日付キーで安全に保存！
+            saveCurrentTermToStorage(currentWorkingStartDate);
 
             // 2. 新しい期間の保存データが存在するかチェック
             const key = `${STORAGE_KEY_PREFIX}${newDate}`;
@@ -2273,6 +2612,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 <th title="遅番回数" class="border-thick-bottom" style="background:#f1f5f9;">遅</th>
                 <th title="イブニング回数" class="border-thick-bottom" style="background:#f1f5f9;">E</th>
                 <th title="8時開始回数" class="border-thick-bottom" style="background:#f1f5f9;">8時</th>
+                <th title="委員会・用事等の備考メモ" class="border-thick-bottom" style="background:#f8fafc; color:#1e293b; min-width:220px; max-width:320px;">備考（メモ）</th>
             </tr>
         `;
         thead.innerHTML = headHtml;
@@ -2312,6 +2652,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 <td class="stat-cell ${rowBottomCls}" data-s="${s}" data-stat="late" style="font-weight:600; color:#334155; background:transparent;">${staffStat.late}</td>
                 <td class="stat-cell ${rowBottomCls}" data-s="${s}" data-stat="eve" style="font-weight:600; color:#334155; background:transparent;">${staffStat.eve}</td>
                 <td class="stat-cell ${rowBottomCls}" data-s="${s}" data-stat="h8" style="font-weight:600; color:#334155; background:transparent;">${staffStat.h8}</td>
+                <td class="remarks-cell ${rowBottomCls}" style="min-width:220px; max-width:320px; text-align:left; font-size:0.8rem; color:#475569; padding:2px 8px; white-space:normal; word-break:break-all; background:transparent;">${staff.remarks || ''}</td>
             `;
             bodyHtml += `</tr>`;
         });
@@ -2349,19 +2690,19 @@ document.addEventListener('DOMContentLoaded', () => {
         </tr>`;
 
         // 2行目: 実数合計（リハビリ実働人数: 出勤人数合計 - 加減枠）
-        const totalRealSum = stats.daily.reduce((sum, dStat, d) => sum + (dStat.totalWork - ((dayOffsets && dayOffsets[d]) || 0)), 0);
+        // 2行目: 実数合計（案B: 出勤実働 - 増員分。減員時は実数変更なし）
+        const totalRealSum = stats.daily.reduce((sum, dStat) => sum + (dStat.realWork !== undefined ? dStat.realWork : dStat.totalWork), 0);
         footHtml += `
             <tr style="background:#f8fafc; font-weight:bold;">
-                <th class="sticky-col-1" colspan="2" style="color:#1e293b;" title="行事等の出勤加減枠を除いた実際のリハビリ業務稼働人数">実数合計</th>
+                <th class="sticky-col-1" colspan="2" style="color:#1e293b;" title="行事等の出勤加減枠を除いた実際のリハビリ業務稼働人数（案B: 増員分のみ減算、減員時は変更なし）">実数合計</th>
         `;
         for (let d = 0; d < NUM_DAYS; d++) {
             const dStat = stats.daily[d];
             const thickCls = ((d + 1) % 7 === 0) ? 'border-thick-right' : '';
-            const offset = (dayOffsets && dayOffsets[d]) ? dayOffsets[d] : 0;
-            const real = dStat.totalWork - offset;
+            const real = dStat.realWork !== undefined ? dStat.realWork : dStat.totalWork;
             footHtml += `<td class="${thickCls}" style="vertical-align:middle; font-weight:800; color:#1e293b; font-size:0.95rem;">${real}</td>`;
         }
-        footHtml += `<td style="font-weight:700; color:#1e293b;">${totalRealSum}</td><td colspan="7" style="color:#94a3b8;">-</td></tr>`;
+        footHtml += `<td style="font-weight:700; color:#1e293b;">${totalRealSum}</td><td colspan="8" style="color:#94a3b8;">-</td></tr>`;
 
         // ★ セクション別出勤人数（PT A, OT A, PT B, OT B, ST）
         const secList = [
@@ -2387,7 +2728,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 const thickCls = ((d + 1) % 7 === 0) ? 'border-thick-right' : '';
                 footHtml += `<td class="${thickCls}" style="color:${sec.color}; font-weight:800;">${secVal > 0 ? secVal : '-'}</td>`;
             }
-            footHtml += `<td style="font-weight:800; color:${sec.color};">${secTotalSum}</td><td colspan="7" style="color:#94a3b8;">-</td></tr>`;
+            footHtml += `<td style="font-weight:800; color:${sec.color};">${secTotalSum}</td><td colspan="8" style="color:#94a3b8;">-</td></tr>`;
         });
 
         // 早番
@@ -3143,7 +3484,7 @@ document.addEventListener('DOMContentLoaded', () => {
             const col = getExcelColName(d + 1);
             const rightBorder = ((d + 1) === NUM_DAYS) ? borderThickR : (((d + 1) % 7 === 0) ? borderMediumR : '');
             const offset = (dayOffsets && dayOffsets[d]) ? dayOffsets[d] : 0;
-            const fReal = offset === 0 ? `=INDIRECT("${col}"&(ROW()-1))` : `=INDIRECT("${col}"&(ROW()-1))-(${offset})`;
+            const fReal = (offset > 0) ? `=INDIRECT("${col}"&(ROW()-1))-(${offset})` : `=INDIRECT("${col}"&(ROW()-1))`;
             tableHtml += `    <td style="width:115px; min-width:115px; max-width:115px; height:38px; font-weight:bold; ${borderThin} ${rightBorder} border-bottom:0.5pt solid #cbd5e1; text-align:center;">${fReal}</td>\n`;
         }
         tableHtml += `    <td style="width:105px; height:38px; font-weight:bold; ${borderThin} border-bottom:0.5pt solid #cbd5e1; text-align:center;">=SUM(B${realRowIdx}:AC${realRowIdx})</td>
@@ -3492,7 +3833,13 @@ document.addEventListener('DOMContentLoaded', () => {
 
     function downloadBlankXlsx() {
         const term = getTermInfo();
+        const numDays = term.dates.length;
         const title = `${term.first.m}月${term.first.day}日～${term.last.m}月${term.last.day}日 スタッフ希望勤務入力シート（希望勤務はプルダウンから選択してください）`;
+
+        const lastDayCol = toColLetter(2 + numDays); // 28日: AD(列30), 29日: AE(列31)
+        const colOff = toColLetter(3 + numDays);    // 28日: AE(列31), 29日: AF(列32)
+        const colPaid = toColLetter(4 + numDays);   // 28日: AF(列32), 29日: AG(列33)
+        const colRemarks = toColLetter(5 + numDays);// 28日: AG(列33), 29日: AH(列34)
 
         const contentTypes = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 <Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">
@@ -3562,7 +3909,6 @@ document.addEventListener('DOMContentLoaded', () => {
 </styleSheet>`;
 
         // sheet1.xml の組み立て
-        // 列構成: A: No, B: 氏名, C〜AD: 28日間の各日, AE: 希望休数, AF: 希望有休数, AG: 備考
         let sheet1 = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 <worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">
   <sheetViews><sheetView tabSelected="1" workbookViewId="0"/></sheetViews>
@@ -3570,9 +3916,9 @@ document.addEventListener('DOMContentLoaded', () => {
   <cols>
     <col min="1" max="1" width="5" customWidth="1"/>
     <col min="2" max="2" width="16" customWidth="1"/>
-    <col min="3" max="30" width="6" customWidth="1"/>
-    <col min="31" max="32" width="11" customWidth="1"/>
-    <col min="33" max="33" width="16" customWidth="1"/>
+    <col min="3" max="${2 + numDays}" width="6" customWidth="1"/>
+    <col min="${3 + numDays}" max="${4 + numDays}" width="11" customWidth="1"/>
+    <col min="${5 + numDays}" max="${5 + numDays}" width="162" customWidth="1"/>
   </cols>
   <sheetData>
     <row r="1" ht="24" customHeight="1">
@@ -3582,67 +3928,66 @@ document.addEventListener('DOMContentLoaded', () => {
       <c r="A2" s="2" t="inlineStr"><is><t>No</t></is></c>
       <c r="B2" s="2" t="inlineStr"><is><t>氏名</t></is></c>`;
 
-        // 日付ヘッダー (C2〜AD2: 列3〜30)
-        for (let d = 0; d < NUM_DAYS; d++) {
+        // 日付ヘッダー (C2〜)
+        for (let d = 0; d < numDays; d++) {
             const di = term.dates[d];
             const colLetter = toColLetter(3 + d);
             const dateStr = `${di.m}/${di.day}`;
             sheet1 += `\n      <c r="${colLetter}2" s="2" t="inlineStr"><is><t>${dateStr}</t></is></c>`;
         }
-        sheet1 += `\n      <c r="AE2" s="2" t="inlineStr"><is><t>希望休数</t></is></c>`;
-        sheet1 += `\n      <c r="AF2" s="2" t="inlineStr"><is><t>希望有休数</t></is></c>`;
-        sheet1 += `\n      <c r="AG2" s="2" t="inlineStr"><is><t>備考</t></is></c>`;
+        sheet1 += `\n      <c r="${colOff}2" s="2" t="inlineStr"><is><t>希望休数</t></is></c>`;
+        sheet1 += `\n      <c r="${colPaid}2" s="2" t="inlineStr"><is><t>希望有休数</t></is></c>`;
+        sheet1 += `\n      <c r="${colRemarks}2" s="2" t="inlineStr"><is><t>備考</t></is></c>`;
         sheet1 += `\n    </row>`;
 
-        // 3行目: 曜日ヘッダー行（曜日のみを記載）
+        // 3行目: 曜日ヘッダー行
         sheet1 += `\n    <row r="3" ht="20" customHeight="1">
       <c r="A3" s="2"/>
       <c r="B3" s="2"/>`;
-        for (let d = 0; d < NUM_DAYS; d++) {
+        for (let d = 0; d < numDays; d++) {
             const di = term.dates[d];
             const colLetter = toColLetter(3 + d);
             let sIdx = 2; // 平日
-            if (di.weekday === '土') sIdx = 3;
-            else if (di.weekday === '日' || di.isHoliday) sIdx = 4;
-            sheet1 += `\n      <c r="${colLetter}3" s="${sIdx}" t="inlineStr"><is><t>${di.weekday}</t></is></c>`;
+            if (di.weekday === '土' || di.wIdx === 5) sIdx = 3;
+            else if (di.weekday === '日' || di.wIdx === 6 || di.isHoliday) sIdx = 4;
+            sheet1 += `\n      <c r="${colLetter}3" s="${sIdx}" t="inlineStr"><is><t>${di.weekday || di.w}</t></is></c>`;
         }
-        sheet1 += `\n      <c r="AE3" s="2"/>
-      <c r="AF3" s="2"/>
-      <c r="AG3" s="2"/>
+        sheet1 += `\n      <c r="${colOff}3" s="2"/>
+      <c r="${colPaid}3" s="2"/>
+      <c r="${colRemarks}3" s="2"/>
     </row>`;
 
         // 有効スタッフのみ抽出
         const validStaff = staffList.filter(s => !s.isUnused);
         const maxRow = 3 + validStaff.length;
 
-        // データ行（row 4〜: 有効スタッフ、希望枠は完全に空欄）
+        // データ行（row 4〜: 希望枠は完全空欄）
         validStaff.forEach((staff, idx) => {
             const r = idx + 4;
-            sheet1 += `\n    <row r="${r}" ht="20" customHeight="1">`;
-            sheet1 += `\n      <c r="A${r}" s="5"><v>${idx + 1}</v></c>`;
-            sheet1 += `\n      <c r="B${r}" s="6" t="inlineStr"><is><t>${staff.name}</t></is></c>`;
+            sheet1 += `\n    <row r="${r}" ht="20" customHeight="1">
+      <c r="A${r}" s="5"><v>${idx + 1}</v></c>
+      <c r="B${r}" s="6" t="inlineStr"><is><t>${staff.name}</t></is></c>`;
 
-            // 28日間の希望入力セル (C〜AD: 列3〜30) - ★ 完全な空欄として出力
-            for (let d = 0; d < NUM_DAYS; d++) {
+            for (let d = 0; d < numDays; d++) {
                 const colLetter = toColLetter(3 + d);
                 sheet1 += `\n      <c r="${colLetter}${r}" s="5"/>`;
             }
 
-            // AE列: 希望休自動集計数式, AF列: 希望有休自動集計数式, AG列: 備考
-            const fOff = `COUNTIF(C${r}:AD${r},&quot;休&quot;)+0.5*(COUNTIF(C${r}:AD${r},&quot;○/休&quot;)+COUNTIF(C${r}:AD${r},&quot;〇/休&quot;)+COUNTIF(C${r}:AD${r},&quot;休/○&quot;)+COUNTIF(C${r}:AD${r},&quot;休/〇&quot;))`;
-            const fPaid = `COUNTIF(C${r}:AD${r},&quot;有&quot;)+0.5*(COUNTIF(C${r}:AD${r},&quot;○/有&quot;)+COUNTIF(C${r}:AD${r},&quot;〇/有&quot;)+COUNTIF(C${r}:AD${r},&quot;有/○&quot;)+COUNTIF(C${r}:AD${r},&quot;有/〇&quot;))`;
-            sheet1 += `\n      <c r="AE${r}" s="7"><f>${fOff}</f><v>0</v></c>`;
-            sheet1 += `\n      <c r="AF${r}" s="7"><f>${fPaid}</f><v>0</v></c>`;
-            sheet1 += `\n      <c r="AG${r}" s="5"/>`;
-            sheet1 += `\n    </row>`;
+            const rng = `C${r}:${lastDayCol}${r}`;
+            const fOff = `COUNTIF(${rng},&quot;休&quot;)+0.5*(COUNTIF(${rng},&quot;○/休&quot;)+COUNTIF(${rng},&quot;〇/休&quot;)+COUNTIF(${rng},&quot;休/○&quot;)+COUNTIF(${rng},&quot;休/〇&quot;))`;
+            const fPaid = `COUNTIF(${rng},&quot;有&quot;)+0.5*(COUNTIF(${rng},&quot;○/有&quot;)+COUNTIF(${rng},&quot;〇/有&quot;)+COUNTIF(${rng},&quot;有/○&quot;)+COUNTIF(${rng},&quot;有/〇&quot;))`;
+            sheet1 += `\n      <c r="${colOff}${r}" s="7"><f>${fOff}</f><v>0</v></c>
+      <c r="${colPaid}${r}" s="7"><f>${fPaid}</f><v>0</v></c>
+      <c r="${colRemarks}${r}" s="5"/>
+    </row>`;
         });
 
         sheet1 += `\n  </sheetData>`;
 
-        // ★ ドロップダウンリスト（プルダウンデータ入力規則）を C4:AD{maxRow} に適用
+        // ドロップダウンリスト（プルダウンデータ入力規則）を C4:{lastDayCol}{maxRow} に適用
         sheet1 += `\n  <dataValidations count="1">
-    <dataValidation type="list" allowBlank="1" showInputMessage="1" showErrorMessage="1" sqref="C4:AD${maxRow}" promptTitle="希望勤務の選択" prompt="プルダウンから希望勤務記号を選択してください。" errorTitle="入力値エラー" error="一覧（プルダウン）にある記号のみ入力できます。">
-      <formula1>&quot;休,有,○,出,早,遅,E,8時,ハヤ,オソ,イブ,○/休,休/○,○/有,有/○,上1,上2,上3,上4,上5,下1,下2,下3&quot;</formula1>
+    <dataValidation type="list" allowBlank="1" showInputMessage="1" showErrorMessage="1" sqref="C4:${lastDayCol}${maxRow}" promptTitle="希望勤務の選択" prompt="プルダウンから希望勤務記号を選択してください。" errorTitle="入力値エラー" error="一覧（プルダウン）にある記号のみ入力できます。">
+      <formula1>&quot;休,有,○,出,早,遅,E,8時,ハヤ,オソ,イブ,○/休,休/○,○/有,有/○,上1,上2,上3,上4,上5,下1,下2,下3,ー&quot;</formula1>
     </dataValidation>
   </dataValidations>`;
         sheet1 += `\n  <pageMargins left="0.7" right="0.7" top="0.75" bottom="0.75" header="0.3" footer="0.3"/>\n</worksheet>`;
@@ -3661,24 +4006,15 @@ document.addEventListener('DOMContentLoaded', () => {
         const url = URL.createObjectURL(blob);
         const link = document.createElement('a');
         link.setAttribute('href', url);
-        link.setAttribute('download', `スタッフ希望入力用_空白勤務表_${term.first.m}月${term.first.day}日～${term.last.m}月${term.last.day}日.xlsx`);
+        link.setAttribute('download', `${title.split('（')[0].replace(/\s+/g, '')}.xlsx`);
         document.body.appendChild(link);
         link.click();
-        document.body.removeChild(link);
-        showToast('📄 プルダウン付きのスタッフ希望入力用シート（.xlsx）をダウンロードしました！');
+        setTimeout(() => {
+            if (document.body.contains(link)) document.body.removeChild(link);
+            URL.revokeObjectURL(url);
+        }, 2000);
+        showToast('📄 スタッフ配布用の空白勤務表（.xlsx）をダウンロードしました！');
     }
-
-    // ==========================================
-    // 希望記号の正規化とバリデーション
-    // ==========================================
-    const ALLOWED_SYMBOLS = new Set([
-        '休', '有', '○', '出', '早', '遅', 'E', '8時',
-        'ハヤ', 'オソ', 'イブ',
-        '○/休', '休/○', '○/有', '有/○',
-        '上1', '上2', '上3', '上4', '上5',
-        '下1', '下2', '下3'
-    ]);
-
     function normalizeSymbol(val) {
         if (!val) return null;
         let s = val.toString().trim();
@@ -3906,10 +4242,28 @@ document.addEventListener('DOMContentLoaded', () => {
 
             if (isNewLayout) {
                 // 新レイアウト: スタッフ行 4〜 (最大 4 + NUM_STAFF - 1), 日付列 C〜AD (列 3〜30)
-                // ※ 行3は曜日ヘッダーなので絶対にスタッフ行として扱わない！
                 if (row >= 4 && row <= (3 + NUM_STAFF) && col >= 3 && col <= 30) {
                     staffIdx = row - 4;
                     dayIdx = col - 3;
+                }
+                // ★ 列33 (AG列) は備考欄！
+                if (row >= 4 && row <= (3 + NUM_STAFF) && col === 33) {
+                    const stIdx = row - 4;
+                    let memoText = '';
+                    const t = c.getAttribute('t');
+                    if (t === 's') {
+                        const vNode = c.getElementsByTagName('v')[0];
+                        if (vNode) memoText = sharedStrings[parseInt(vNode.textContent, 10)] || '';
+                    } else if (t === 'inlineStr') {
+                        const isNode = c.getElementsByTagName('is')[0];
+                        if (isNode) memoText = isNode.textContent || '';
+                    } else {
+                        const vNode = c.getElementsByTagName('v')[0];
+                        if (vNode) memoText = vNode.textContent || '';
+                    }
+                    if (memoText && staffList[stIdx]) {
+                        staffList[stIdx].remarks = memoText.trim();
+                    }
                 }
             } else {
                 // 旧レイアウト互換: スタッフ行 3〜 (最大 3 + NUM_STAFF - 1), 日付列 L〜AM (列 12〜39)
@@ -4334,9 +4688,26 @@ document.addEventListener('DOMContentLoaded', () => {
 
     function exportExcelSpreadsheet(grid, stats) {
         const term = getTermInfo();
+        const numDays = term.dates.length;
         const safeTitle = `${term.first.m}月${term.first.day}日～${term.last.m}月${term.last.day}日 勤務表`;
-        const safeSheetName = `${term.first.m}月${term.first.day}日～${term.last.m}月${term.last.day}日勤務表`.substring(0, 31);
+        // シート名禁則文字 (: \ / ? * [ ]) を全角またはハイフンにサニタイズ
+        const sanitizedSheetName = `${term.first.m}月${term.first.day}日～${term.last.m}月${term.last.day}日勤務表`
+            .replace(/[/\\?*\[\]:]/g, '_')
+            .substring(0, 31);
         const title = safeTitle;
+
+        // 動的列レターの算出
+        const firstDayCol = 'B'; // 列2
+        const lastDayCol = toColLetter(1 + numDays); // 28日: AC(列29), 29日: AD(列30)
+        const colWork = toColLetter(2 + numDays);    // 28日: AD, 29日: AE
+        const colOff = toColLetter(3 + numDays);     // 28日: AE, 29日: AF
+        const colPaid = toColLetter(4 + numDays);    // 28日: AF, 29日: AG
+        const colRef = toColLetter(5 + numDays);     // 28日: AG, 29日: AH
+        const colEarly = toColLetter(6 + numDays);   // 28日: AH, 29日: AI
+        const colLate = toColLetter(7 + numDays);    // 28日: AI, 29日: AJ
+        const colEve = toColLetter(8 + numDays);     // 28日: AJ, 29日: AK
+        const colH8 = toColLetter(9 + numDays);      // 28日: AK, 29日: AL
+        const colRemarks = toColLetter(10 + numDays); // 28日: AL, 29日: AM
 
         const contentTypes = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 <Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">
@@ -4355,7 +4726,7 @@ document.addEventListener('DOMContentLoaded', () => {
         const workbook = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 <workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships">
   <sheets>
-    <sheet name="${safeSheetName}" sheetId="1" r:id="rId1"/>
+    <sheet name="${sanitizedSheetName}" sheetId="1" r:id="rId1"/>
   </sheets>
 </workbook>`;
 
@@ -4375,19 +4746,20 @@ document.addEventListener('DOMContentLoaded', () => {
     <font><b/><sz val="9"/><name val="Meiryo"/><color rgb="EA580C"/></font>
     <font><b/><sz val="9"/><name val="Meiryo"/><color rgb="1D4ED8"/></font>
     <font><b/><sz val="9"/><name val="Meiryo"/><color rgb="EC4899"/></font>
-    <font><b/><sz val="9"/><name val="Meiryo"/><color rgb="334155"/></font>
-    <font><b/><sz val="9"/><name val="Meiryo"/><color rgb="0284C7"/></font>
-    <font><b/><sz val="9"/><name val="Meiryo"/><color rgb="E11D48"/></font>
+    <font><b/><sz val="9"/><name val="Meiryo"/><color rgb="15803D"/></font>
+    <font><b/><sz val="9"/><name val="Meiryo"/><color rgb="7C3AED"/></font>
+    <font><sz val="9"/><name val="Meiryo"/><color rgb="64748B"/></font>
   </fonts>
-  <fills count="6">
+  <fills count="7">
     <fill><patternFill patternType="none"/></fill>
     <fill><patternFill patternType="gray125"/></fill>
     <fill><patternFill patternType="solid"><fgColor rgb="F1F5F9"/></patternFill></fill>
-    <fill><patternFill patternType="solid"><fgColor rgb="E0F2FE"/></patternFill></fill>
-    <fill><patternFill patternType="solid"><fgColor rgb="FFE4E6"/></patternFill></fill>
+    <fill><patternFill patternType="solid"><fgColor rgb="EFF6FF"/></patternFill></fill>
+    <fill><patternFill patternType="solid"><fgColor rgb="FEF2F2"/></patternFill></fill>
     <fill><patternFill patternType="solid"><fgColor rgb="F8FAFC"/></patternFill></fill>
+    <fill><patternFill patternType="solid"><fgColor rgb="F0FDF4"/></patternFill></fill>
   </fills>
-  <borders count="2">
+  <borders count="4">
     <border><left/><right/><top/><bottom/></border>
     <border>
       <left style="thin"><color rgb="CBD5E1"/></left>
@@ -4395,117 +4767,125 @@ document.addEventListener('DOMContentLoaded', () => {
       <top style="thin"><color rgb="CBD5E1"/></top>
       <bottom style="thin"><color rgb="CBD5E1"/></bottom>
     </border>
+    <border>
+      <left style="thin"><color rgb="CBD5E1"/></left>
+      <right style="medium"><color rgb="64748B"/></right>
+      <top style="thin"><color rgb="CBD5E1"/></top>
+      <bottom style="thin"><color rgb="CBD5E1"/></bottom>
+    </border>
+    <border>
+      <left style="thin"><color rgb="CBD5E1"/></left>
+      <right style="thin"><color rgb="CBD5E1"/></right>
+      <top style="thin"><color rgb="CBD5E1"/></top>
+      <bottom style="medium"><color rgb="64748B"/></bottom>
+    </border>
   </borders>
-  <cellStyleXfs count="1">
-    <xf numFmtId="0" fontId="0" fillId="0" borderId="0"/>
-  </cellStyleXfs>
+  <cellStyleXfs count="1"><xf numFmtId="0" fontId="0" fillId="0" borderId="0"/></cellStyleXfs>
   <cellXfs count="15">
     <xf numFmtId="0" fontId="0" fillId="0" borderId="0" xfId="0"/>
-    <xf numFmtId="0" fontId="3" fillId="0" borderId="0" xfId="0"><alignment horizontal="left" vertical="center"/></xf>
-    <xf numFmtId="0" fontId="1" fillId="2" borderId="1" xfId="0"><alignment horizontal="center" vertical="center"/></xf>
-    <xf numFmtId="0" fontId="8" fillId="3" borderId="1" xfId="0"><alignment horizontal="center" vertical="center"/></xf>
-    <xf numFmtId="0" fontId="9" fillId="4" borderId="1" xfId="0"><alignment horizontal="center" vertical="center"/></xf>
-    <xf numFmtId="0" fontId="1" fillId="0" borderId="1" xfId="0"><alignment horizontal="left" vertical="center"/></xf>
-    <xf numFmtId="0" fontId="0" fillId="0" borderId="1" xfId="0"><alignment horizontal="center" vertical="center"/></xf>
-    <xf numFmtId="0" fontId="2" fillId="0" borderId="1" xfId="0"><alignment horizontal="center" vertical="center"/></xf>
-    <xf numFmtId="0" fontId="1" fillId="0" borderId="1" xfId="0"><alignment horizontal="center" vertical="center"/></xf>
-    <xf numFmtId="0" fontId="1" fillId="5" borderId="1" xfId="0"><alignment horizontal="center" vertical="center"/></xf>
-    <xf numFmtId="0" fontId="4" fillId="0" borderId="1" xfId="0"><alignment horizontal="center" vertical="center"/></xf>
-    <xf numFmtId="0" fontId="5" fillId="0" borderId="1" xfId="0"><alignment horizontal="center" vertical="center"/></xf>
-    <xf numFmtId="0" fontId="6" fillId="0" borderId="1" xfId="0"><alignment horizontal="center" vertical="center"/></xf>
-    <xf numFmtId="0" fontId="7" fillId="0" borderId="1" xfId="0"><alignment horizontal="center" vertical="center"/></xf>
-    <xf numFmtId="0" fontId="1" fillId="0" borderId="1" xfId="0"><alignment horizontal="center" vertical="center"/></xf>
+    <xf numFmtId="0" fontId="3" fillId="0" borderId="0" xfId="0" applyFont="1"><alignment horizontal="left" vertical="center"/></xf>
+    <xf numFmtId="0" fontId="1" fillId="2" borderId="1" xfId="0" applyFont="1" applyFill="1" applyBorder="1"><alignment horizontal="center" vertical="center"/></xf>
+    <xf numFmtId="0" fontId="5" fillId="3" borderId="1" xfId="0" applyFont="1" applyFill="1" applyBorder="1"><alignment horizontal="center" vertical="center"/></xf>
+    <xf numFmtId="0" fontId="2" fillId="4" borderId="1" xfId="0" applyFont="1" applyFill="1" applyBorder="1"><alignment horizontal="center" vertical="center"/></xf>
+    <xf numFmtId="0" fontId="0" fillId="0" borderId="1" xfId="0" applyBorder="1"><alignment horizontal="left" vertical="center"/></xf>
+    <xf numFmtId="0" fontId="0" fillId="0" borderId="1" xfId="0" applyBorder="1"><alignment horizontal="center" vertical="center"/></xf>
+    <xf numFmtId="0" fontId="2" fillId="0" borderId="1" xfId="0" applyFont="1" applyBorder="1"><alignment horizontal="center" vertical="center"/></xf>
+    <xf numFmtId="0" fontId="1" fillId="5" borderId="1" xfId="0" applyFont="1" applyFill="1" applyBorder="1"><alignment horizontal="center" vertical="center"/></xf>
+    <xf numFmtId="0" fontId="1" fillId="2" borderId="1" xfId="0" applyFont="1" applyFill="1" applyBorder="1"><alignment horizontal="center" vertical="center"/></xf>
+    <xf numFmtId="0" fontId="4" fillId="0" borderId="1" xfId="0" applyFont="1" applyBorder="1"><alignment horizontal="center" vertical="center"/></xf>
+    <xf numFmtId="0" fontId="5" fillId="0" borderId="1" xfId="0" applyFont="1" applyBorder="1"><alignment horizontal="center" vertical="center"/></xf>
+    <xf numFmtId="0" fontId="6" fillId="0" borderId="1" xfId="0" applyFont="1" applyBorder="1"><alignment horizontal="center" vertical="center"/></xf>
+    <xf numFmtId="0" fontId="1" fillId="0" borderId="1" xfId="0" applyFont="1" applyBorder="1"><alignment horizontal="center" vertical="center"/></xf>
+    <xf numFmtId="0" fontId="9" fillId="0" borderId="1" xfId="0" applyFont="1" applyBorder="1"><alignment horizontal="left" vertical="center"/></xf>
   </cellXfs>
 </styleSheet>`;
 
+        // 有効スタッフのみ抽出
         const validStaffIndices = [];
-        for (let s = 0; s < staffList.length; s++) {
-            if (!staffList[s].isUnused) validStaffIndices.push(s);
-        }
-        const endRow = 3 + validStaffIndices.length;
-
-        // 各セクションの開始行・終了行
-        let ptAStart = 0, ptAEnd = 0;
-        let otAStart = 0, otAEnd = 0;
-        let ptBStart = 0, ptBEnd = 0;
-        let otBStart = 0, otBEnd = 0;
-        let stStart = 0, stEnd = 0;
-
-        validStaffIndices.forEach((s, idx) => {
-            const staff = staffList[s];
-            const row = 4 + idx;
-            if (staff.section === 'PT A') { if (ptAStart === 0) ptAStart = row; ptAEnd = row; }
-            if (staff.section === 'OT A') { if (otAStart === 0) otAStart = row; otAEnd = row; }
-            if (staff.section === 'PT B') { if (ptBStart === 0) ptBStart = row; ptBEnd = row; }
-            if (staff.section === 'OT B') { if (otBStart === 0) otBStart = row; otBEnd = row; }
-            if (staff.section === 'ST')   { if (stStart === 0) stStart = row; stEnd = row; }
+        staffList.forEach((s, idx) => {
+            if (!s.isUnused) validStaffIndices.push(idx);
         });
 
-        function makeWorkCountFormulaXml(range) {
-            const symbols = ['○', '〇', '出', '早', '遅', 'E', '8時', 'ハヤ', 'オソ', 'イブ'];
-            return `SUM(${symbols.map(s => `COUNTIF(${range},&quot;${s}&quot;)`).join(',')})`;
+        // ワークカウント数式ヘルパー (○, 〇, 出, 早, 遅, E, 8時, ハヤ, オソ, イブ + 半休0.5)
+        function makeWorkCountFormulaXml(rRng) {
+            return `COUNTIF(${rRng},&quot;○&quot;)+COUNTIF(${rRng},&quot;〇&quot;)+COUNTIF(${rRng},&quot;出&quot;)+COUNTIF(${rRng},&quot;早&quot;)+COUNTIF(${rRng},&quot;遅&quot;)+COUNTIF(${rRng},&quot;E&quot;)+COUNTIF(${rRng},&quot;8時&quot;)+COUNTIF(${rRng},&quot;ハヤ&quot;)+COUNTIF(${rRng},&quot;オソ&quot;)+COUNTIF(${rRng},&quot;イブ&quot;)+0.5*(COUNTIF(${rRng},&quot;○/休&quot;)+COUNTIF(${rRng},&quot;〇/休&quot;)+COUNTIF(${rRng},&quot;休/○&quot;)+COUNTIF(${rRng},&quot;休/〇&quot;)+COUNTIF(${rRng},&quot;○/有&quot;)+COUNTIF(${rRng},&quot;〇/有&quot;)+COUNTIF(${rRng},&quot;有/○&quot;)+COUNTIF(${rRng},&quot;有/〇&quot;))`;
+        }
+
+        // リフレッシュ休暇数式ヘルパー
+        function makeRefHolidayFormulaXml(rRng) {
+            return `COUNTIF(${rRng},&quot;上1&quot;)+COUNTIF(${rRng},&quot;上2&quot;)+COUNTIF(${rRng},&quot;上3&quot;)+COUNTIF(${rRng},&quot;上4&quot;)+COUNTIF(${rRng},&quot;上5&quot;)+COUNTIF(${rRng},&quot;下1&quot;)+COUNTIF(${rRng},&quot;下2&quot;)+COUNTIF(${rRng},&quot;下3&quot;)`;
         }
 
         let sheet1 = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
-<worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">
-  <sheetPr>
-    <pageSetUpPr fitToPage="1"/>
-  </sheetPr>
-  <sheetViews><sheetView tabSelected="1" workbookViewId="0"/></sheetViews>
-  <sheetFormatPr defaultRowHeight="18"/>
+<worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships">
+  <sheetViews>
+    <sheetView tabSelected="1" workbookViewId="0">
+      <pane ySplit="3" xSplit="1" topLeftCell="B4" activePane="bottomRight" state="frozen"/>
+    </sheetView>
+  </sheetViews>
+  <sheetFormatPr defaultRowHeight="18" customHeight="1"/>
   <cols>
-    <col min="1" max="1" width="21.2" customWidth="1"/>
-    <col min="2" max="29" width="13.8" customWidth="1"/>
-    <col min="30" max="32" width="12.5" customWidth="1"/>
-    <col min="33" max="37" width="8.8" customWidth="1"/>
-  </cols>
+    <col min="1" max="1" width="16" customWidth="1"/>`;
+
+        // 日付列: 幅4.2
+        for (let d = 0; d < numDays; d++) {
+            sheet1 += `\n    <col min="${2 + d}" max="${2 + d}" width="4.2" customWidth="1"/>`;
+        }
+        // 集計列: 幅5.5
+        for (let c = 2 + numDays; c <= 9 + numDays; c++) {
+            sheet1 += `\n    <col min="${c}" max="${c}" width="5.5" customWidth="1"/>`;
+        }
+        // 備考欄 (メモ): 幅162 (約1300ピクセル相当)
+        sheet1 += `\n    <col min="${10 + numDays}" max="${10 + numDays}" width="162" customWidth="1"/>`;
+        sheet1 += `\n  </cols>
   <sheetData>
     <row r="1" ht="28" customHeight="1">
       <c r="A1" s="1" t="inlineStr"><is><t>${title}</t></is></c>
-      <c r="AD1" s="2" t="inlineStr"><is><t>勤務・休暇 集計</t></is></c>
+      <c r="${colWork}1" s="2" t="inlineStr"><is><t>勤務・休暇 集計</t></is></c>
     </row>
     <row r="2" ht="24" customHeight="1">
       <c r="A2" s="2" t="inlineStr"><is><t>氏名</t></is></c>`;
 
-        for (let d = 0; d < NUM_DAYS; d++) {
+        for (let d = 0; d < numDays; d++) {
             const di = term.dates[d];
             const col = toColLetter(2 + d);
-            sheet1 += `\n      <c r="${col}2" s="2" t="inlineStr"><is><t>${di.label}</t></is></c>`;
+            sheet1 += `\n      <c r="${col}2" s="2" t="inlineStr"><is><t>${di.label || di.day}</t></is></c>`;
         }
-        sheet1 += `\n      <c r="AD2" s="2" t="inlineStr"><is><t>出勤</t></is></c>
-      <c r="AE2" s="2" t="inlineStr"><is><t>公休</t></is></c>
-      <c r="AF2" s="2" t="inlineStr"><is><t>有休</t></is></c>
-      <c r="AG2" s="2" t="inlineStr"><is><t>リフ</t></is></c>
-      <c r="AH2" s="2" t="inlineStr"><is><t>早</t></is></c>
-      <c r="AI2" s="2" t="inlineStr"><is><t>遅</t></is></c>
-      <c r="AJ2" s="2" t="inlineStr"><is><t>E</t></is></c>
-      <c r="AK2" s="2" t="inlineStr"><is><t>8時</t></is></c>
+        sheet1 += `\n      <c r="${colWork}2" s="2" t="inlineStr"><is><t>出勤</t></is></c>
+      <c r="${colOff}2" s="2" t="inlineStr"><is><t>公休</t></is></c>
+      <c r="${colPaid}2" s="2" t="inlineStr"><is><t>有休</t></is></c>
+      <c r="${colRef}2" s="2" t="inlineStr"><is><t>リフ</t></is></c>
+      <c r="${colEarly}2" s="2" t="inlineStr"><is><t>早</t></is></c>
+      <c r="${colLate}2" s="2" t="inlineStr"><is><t>遅</t></is></c>
+      <c r="${colEve}2" s="2" t="inlineStr"><is><t>E</t></is></c>
+      <c r="${colH8}2" s="2" t="inlineStr"><is><t>8時</t></is></c>
+      <c r="${colRemarks}2" s="2" t="inlineStr"><is><t>備考（メモ）</t></is></c>
     </row>`;
 
         // 3行目: 曜日ヘッダー行
         sheet1 += `\n    <row r="3" ht="20" customHeight="1">
       <c r="A3" s="2"/>`;
-        for (let d = 0; d < NUM_DAYS; d++) {
+        for (let d = 0; d < numDays; d++) {
             const di = term.dates[d];
             const col = toColLetter(2 + d);
             let sIdx = 2;
             if (di.wIdx === 5) sIdx = 3; // 土曜青
             else if (di.wIdx === 6 || di.isHoliday) sIdx = 4; // 日祝赤
-            sheet1 += `\n      <c r="${col}3" s="${sIdx}" t="inlineStr"><is><t>${di.weekday}</t></is></c>`;
+            sheet1 += `\n      <c r="${col}3" s="${sIdx}" t="inlineStr"><is><t>${di.weekday || di.w}</t></is></c>`;
         }
-        sheet1 += `\n      <c r="AD3" s="2"/><c r="AE3" s="2"/><c r="AF3" s="2"/><c r="AG3" s="2"/><c r="AH3" s="2"/><c r="AI3" s="2"/><c r="AJ3" s="2"/><c r="AK3" s="2"/>
+        sheet1 += `\n      <c r="${colWork}3" s="2"/><c r="${colOff}3" s="2"/><c r="${colPaid}3" s="2"/><c r="${colRef}3" s="2"/><c r="${colEarly}3" s="2"/><c r="${colLate}3" s="2"/><c r="${colEve}3" s="2"/><c r="${colH8}3" s="2"/><c r="${colRemarks}3" s="2"/>
     </row>`;
 
-        // スタッフ行 (row 4〜: 最新指示 行の幅/高さ33px固定 -> ht="24.75")
+        // スタッフ行 (row 4〜: 行高 ht="24.75")
         validStaffIndices.forEach((s, idx) => {
             const staff = staffList[s];
             const r = 4 + idx;
-            const rng = `B${r}:AC${r}`;
+            const rng = `${firstDayCol}${r}:${lastDayCol}${r}`;
 
             sheet1 += `\n    <row r="${r}" ht="24.75" customHeight="1">`;
             sheet1 += `\n      <c r="A${r}" s="5" t="inlineStr"><is><t>${staff.name}</t></is></c>`;
 
-            for (let d = 0; d < NUM_DAYS; d++) {
+            for (let d = 0; d < numDays; d++) {
                 const col = toColLetter(2 + d);
                 const cell = (grid && grid[s] && grid[s][d]) ? grid[s][d] : { symbol: '', isFixed: false };
                 let rawSym = cell.symbol || '';
@@ -4517,177 +4897,108 @@ document.addEventListener('DOMContentLoaded', () => {
             const fWork = makeWorkCountFormulaXml(rng);
             const fOff = `COUNTIF(${rng},&quot;休&quot;)+0.5*(COUNTIF(${rng},&quot;○/休&quot;)+COUNTIF(${rng},&quot;〇/休&quot;)+COUNTIF(${rng},&quot;休/○&quot;)+COUNTIF(${rng},&quot;休/〇&quot;))`;
             const fPaid = `COUNTIF(${rng},&quot;有&quot;)+0.5*(COUNTIF(${rng},&quot;○/有&quot;)+COUNTIF(${rng},&quot;〇/有&quot;)+COUNTIF(${rng},&quot;有/○&quot;)+COUNTIF(${rng},&quot;有/〇&quot;))`;
-            const fRef = `COUNTIF(${rng},&quot;上1&quot;)+COUNTIF(${rng},&quot;上2&quot;)+COUNTIF(${rng},&quot;上3&quot;)+COUNTIF(${rng},&quot;上4&quot;)+COUNTIF(${rng},&quot;上5&quot;)+COUNTIF(${rng},&quot;下1&quot;)+COUNTIF(${rng},&quot;下2&quot;)+COUNTIF(${rng},&quot;下3&quot;)`;
+            const fRef = makeRefHolidayFormulaXml(rng);
             const fEarly = `COUNTIF(${rng},&quot;早&quot;)+COUNTIF(${rng},&quot;ハヤ&quot;)`;
             const fLate = `COUNTIF(${rng},&quot;遅&quot;)+COUNTIF(${rng},&quot;オソ&quot;)`;
             const fEve = `COUNTIF(${rng},&quot;E&quot;)+COUNTIF(${rng},&quot;イブ&quot;)`;
             const fH8 = `COUNTIF(${rng},&quot;8時&quot;)`;
 
-            sheet1 += `\n      <c r="AD${r}" s="8"><f>${fWork}</f><v>0</v></c>`;
-            sheet1 += `\n      <c r="AE${r}" s="8"><f>${fOff}</f><v>0</v></c>`;
-            sheet1 += `\n      <c r="AF${r}" s="8"><f>${fPaid}</f><v>0</v></c>`;
-            sheet1 += `\n      <c r="AG${r}" s="8"><f>${fRef}</f><v>0</v></c>`;
-            sheet1 += `\n      <c r="AH${r}" s="13"><f>${fEarly}</f><v>0</v></c>`;
-            sheet1 += `\n      <c r="AI${r}" s="13"><f>${fLate}</f><v>0</v></c>`;
-            sheet1 += `\n      <c r="AJ${r}" s="13"><f>${fEve}</f><v>0</v></c>`;
-            sheet1 += `\n      <c r="AK${r}" s="13"><f>${fH8}</f><v>0</v></c>`;
-            sheet1 += `\n    </row>`;
+            sheet1 += `\n      <c r="${colWork}${r}" s="8"><f>${fWork}</f><v>0</v></c>
+      <c r="${colOff}${r}" s="8"><f>${fOff}</f><v>0</v></c>
+      <c r="${colPaid}${r}" s="8"><f>${fPaid}</f><v>0</v></c>
+      <c r="${colRef}${r}" s="8"><f>${fRef}</f><v>0</v></c>
+      <c r="${colEarly}${r}" s="8"><f>${fEarly}</f><v>0</v></c>
+      <c r="${colLate}${r}" s="8"><f>${fLate}</f><v>0</v></c>
+      <c r="${colEve}${r}" s="8"><f>${fEve}</f><v>0</v></c>
+      <c r="${colH8}${r}" s="8"><f>${fH8}</f><v>0</v></c>
+      <c r="${colRemarks}${r}" s="14" t="inlineStr"><is><t>${staff.remarks || ''}</t></is></c>
+    </row>`;
         });
 
-        // 集計フッター行 (静的範囲参照に統一：保護ビュー完全対応、行高38px固定 -> ht="28.5")
-        // 1. 出勤人数合計
+        // 集計フッター行
+        const endRow = 3 + validStaffIndices.length;
+
+        // 1. 出勤人数合計行
         const rWork = endRow + 1;
         sheet1 += `\n    <row r="${rWork}" ht="28.5" customHeight="1">
       <c r="A${rWork}" s="9" t="inlineStr"><is><t>出勤人数合計</t></is></c>`;
-        for (let d = 0; d < NUM_DAYS; d++) {
+
+        for (let d = 0; d < numDays; d++) {
             const col = toColLetter(2 + d);
-            sheet1 += `\n      <c r="${col}${rWork}" s="9"><f>${makeWorkCountFormulaXml(`${col}$4:${col}$${endRow}`)}</f><v>0</v></c>`;
+            const rngCol = `${col}$4:${col}$${endRow}`;
+            const fColWork = makeWorkCountFormulaXml(rngCol);
+            sheet1 += `\n      <c r="${col}${rWork}" s="9"><f>${fColWork}</f><v>0</v></c>`;
         }
-        sheet1 += `\n      <c r="AD${rWork}" s="9"><f>SUM(AD$4:AD$${endRow})</f><v>0</v></c>`;
-        sheet1 += `\n      <c r="AE${rWork}" s="9"><f>SUM(AE$4:AE$${endRow})</f><v>0</v></c>`;
-        sheet1 += `\n      <c r="AF${rWork}" s="9"><f>SUM(AF$4:AF$${endRow})</f><v>0</v></c>`;
-        sheet1 += `\n      <c r="AG${rWork}" s="9"><f>SUM(AG$4:AG$${endRow})</f><v>0</v></c>`;
-        sheet1 += `\n      <c r="AH${rWork}" s="13"><f>SUM(AH$4:AH$${endRow})</f><v>0</v></c>`;
-        sheet1 += `\n      <c r="AI${rWork}" s="13"><f>SUM(AI$4:AI$${endRow})</f><v>0</v></c>`;
-        sheet1 += `\n      <c r="AJ${rWork}" s="13"><f>SUM(AJ$4:AJ$${endRow})</f><v>0</v></c>`;
-        sheet1 += `\n      <c r="AK${rWork}" s="13"><f>SUM(AK$4:AK$${endRow})</f><v>0</v></c>`;
+        sheet1 += `\n      <c r="${colWork}${rWork}" s="9"><f>SUM(${firstDayCol}${rWork}:${lastDayCol}${rWork})</f><v>0</v></c>`;
+        sheet1 += `\n      <c r="${colOff}${rWork}" s="13"><f>SUM(${colOff}$4:${colOff}$${endRow})</f><v>0</v></c>`;
+        sheet1 += `\n      <c r="${colPaid}${rWork}" s="13"><f>SUM(${colPaid}$4:${colPaid}$${endRow})</f><v>0</v></c>`;
+        sheet1 += `\n      <c r="${colRef}${rWork}" s="13"><f>SUM(${colRef}$4:${colRef}$${endRow})</f><v>0</v></c>`;
+        sheet1 += `\n      <c r="${colEarly}${rWork}" s="13"><f>SUM(${colEarly}$4:${colEarly}$${endRow})</f><v>0</v></c>`;
+        sheet1 += `\n      <c r="${colLate}${rWork}" s="13"><f>SUM(${colLate}$4:${colLate}$${endRow})</f><v>0</v></c>`;
+        sheet1 += `\n      <c r="${colEve}${rWork}" s="13"><f>SUM(${colEve}$4:${colEve}$${endRow})</f><v>0</v></c>`;
+        sheet1 += `\n      <c r="${colH8}${rWork}" s="13"><f>SUM(${colH8}$4:${colH8}$${endRow})</f><v>0</v></c>`;
+        sheet1 += `\n      <c r="${colRemarks}${rWork}" s="9" t="inlineStr"><is><t>-</t></is></c>`;
         sheet1 += `\n    </row>`;
 
-        // 2. 実数合計
+        // 2. 実数合計行 (案B仕様: offset > 0 のみ減算)
         const rReal = endRow + 2;
         sheet1 += `\n    <row r="${rReal}" ht="28.5" customHeight="1">
       <c r="A${rReal}" s="9" t="inlineStr"><is><t>実数合計</t></is></c>`;
-        for (let d = 0; d < NUM_DAYS; d++) {
+        for (let d = 0; d < numDays; d++) {
             const col = toColLetter(2 + d);
             const offset = (dayOffsets && dayOffsets[d]) ? dayOffsets[d] : 0;
-            const fReal = offset === 0 ? `${col}${rWork}` : `${col}${rWork}-(${offset})`;
+            const fReal = (offset > 0) ? `${col}${rWork}-(${offset})` : `${col}${rWork}`;
             sheet1 += `\n      <c r="${col}${rReal}" s="9"><f>${fReal}</f><v>0</v></c>`;
         }
-        sheet1 += `\n      <c r="AD${rReal}" s="9"><f>SUM(B${rReal}:AC${rReal})</f><v>0</v></c>`;
-        for (let c = 31; c <= 37; c++) {
+        sheet1 += `\n      <c r="${colWork}${rReal}" s="9"><f>SUM(${firstDayCol}${rReal}:${lastDayCol}${rReal})</f><v>0</v></c>`;
+        for (let c = 3 + numDays; c <= 10 + numDays; c++) {
             sheet1 += `\n      <c r="${toColLetter(c)}${rReal}" s="9" t="inlineStr"><is><t>-</t></is></c>`;
         }
         sheet1 += `\n    </row>`;
 
-        // 3. PT A 出勤
-        const rPtA = endRow + 3;
-        sheet1 += `\n    <row r="${rPtA}" ht="28.5" customHeight="1">
-      <c r="A${rPtA}" s="10" t="inlineStr"><is><t>PT A 出勤</t></is></c>`;
-        for (let d = 0; d < NUM_DAYS; d++) {
-            const col = toColLetter(2 + d);
-            const fPtA = ptAStart > 0 ? makeWorkCountFormulaXml(`${col}$${ptAStart}:${col}$${ptAEnd}`) : '0';
-            sheet1 += `\n      <c r="${col}${rPtA}" s="10"><f>${fPtA}</f><v>0</v></c>`;
+        // 特殊勤務集計ヘルパー行の生成関数
+        function renderSpecialRow(rNum, label, sIdx, symList) {
+            sheet1 += `\n    <row r="${rNum}" ht="20" customHeight="1">
+      <c r="A${rNum}" s="${sIdx}" t="inlineStr"><is><t>${label}</t></is></c>`;
+            for (let d = 0; d < numDays; d++) {
+                const col = toColLetter(2 + d);
+                const rngCol = `${col}$4:${col}$${endRow}`;
+                const formula = symList.map(sym => `COUNTIF(${rngCol},&quot;${sym}&quot;)`).join('+');
+                sheet1 += `\n      <c r="${col}${rNum}" s="${sIdx}"><f>${formula}</f><v>0</v></c>`;
+            }
+            sheet1 += `\n      <c r="${colWork}${rNum}" s="${sIdx}"><f>SUM(${firstDayCol}${rNum}:${lastDayCol}${rNum})</f><v>0</v></c>`;
+            for (let c = 3 + numDays; c <= 10 + numDays; c++) {
+                sheet1 += `\n      <c r="${toColLetter(c)}${rNum}" s="${sIdx}" t="inlineStr"><is><t>-</t></is></c>`;
+            }
+            sheet1 += `\n    </row>`;
         }
-        sheet1 += `\n      <c r="AD${rPtA}" s="10"><f>SUM(B${rPtA}:AC${rPtA})</f><v>0</v></c>`;
-        for (let c = 31; c <= 37; c++) sheet1 += `\n      <c r="${toColLetter(c)}${rPtA}" s="10" t="inlineStr"><is><t>-</t></is></c>`;
-        sheet1 += `\n    </row>`;
 
-        // 4. OT A 出勤
-        const rOtA = endRow + 4;
-        sheet1 += `\n    <row r="${rOtA}" ht="28.5" customHeight="1">
-      <c r="A${rOtA}" s="10" t="inlineStr"><is><t>OT A 出勤</t></is></c>`;
-        for (let d = 0; d < NUM_DAYS; d++) {
-            const col = toColLetter(2 + d);
-            const fOtA = otAStart > 0 ? makeWorkCountFormulaXml(`${col}$${otAStart}:${col}$${otAEnd}`) : '0';
-            sheet1 += `\n      <c r="${col}${rOtA}" s="10"><f>${fOtA}</f><v>0</v></c>`;
-        }
-        sheet1 += `\n      <c r="AD${rOtA}" s="10"><f>SUM(B${rOtA}:AC${rOtA})</f><v>0</v></c>`;
-        for (let c = 31; c <= 37; c++) sheet1 += `\n      <c r="${toColLetter(c)}${rOtA}" s="10" t="inlineStr"><is><t>-</t></is></c>`;
-        sheet1 += `\n    </row>`;
+        renderSpecialRow(endRow + 3, '早番 (早/ハヤ)', 10, ['早', 'ハヤ']);
+        renderSpecialRow(endRow + 4, '遅番 (遅/オソ)', 11, ['遅', 'オソ']);
+        renderSpecialRow(endRow + 5, 'イブニング (E/イブ)', 12, ['E', 'イブ']);
+        renderSpecialRow(endRow + 6, '8:00 (8時)', 13, ['8時']);
 
-        // 5. PT B 出勤
-        const rPtB = endRow + 5;
-        sheet1 += `\n    <row r="${rPtB}" ht="28.5" customHeight="1">
-      <c r="A${rPtB}" s="11" t="inlineStr"><is><t>PT B 出勤</t></is></c>`;
-        for (let d = 0; d < NUM_DAYS; d++) {
+        // 専従人数
+        const rFull = endRow + 7;
+        sheet1 += `\n    <row r="${rFull}" ht="20" customHeight="1">
+      <c r="A${rFull}" s="9" t="inlineStr"><is><t>専従</t></is></c>`;
+        for (let d = 0; d < numDays; d++) {
             const col = toColLetter(2 + d);
-            const fPtB = ptBStart > 0 ? makeWorkCountFormulaXml(`${col}$${ptBStart}:${col}$${ptBEnd}`) : '0';
-            sheet1 += `\n      <c r="${col}${rPtB}" s="11"><f>${fPtB}</f><v>0</v></c>`;
+            const terms = validStaffIndices.filter(s => staffList[s].isFullTime).map(s => {
+                const r = 4 + validStaffIndices.indexOf(s);
+                return `IF(OR(${col}${r}=&quot;休&quot;,${col}${r}=&quot;有&quot;,${col}${r}=&quot;出&quot;,${col}${r}=&quot;上1&quot;,${col}${r}=&quot;上2&quot;,${col}${r}=&quot;上3&quot;,${col}${r}=&quot;上4&quot;,${col}${r}=&quot;上5&quot;,${col}${r}=&quot;下1&quot;,${col}${r}=&quot;下2&quot;,${col}${r}=&quot;下3&quot;,${col}${r}=&quot;ー&quot;),0,1)`;
+            });
+            const f = terms.length > 0 ? terms.join('+') : '0';
+            sheet1 += `\n      <c r="${col}${rFull}" s="9"><f>${f}</f><v>0</v></c>`;
         }
-        sheet1 += `\n      <c r="AD${rPtB}" s="11"><f>SUM(B${rPtB}:AC${rPtB})</f><v>0</v></c>`;
-        for (let c = 31; c <= 37; c++) sheet1 += `\n      <c r="${toColLetter(c)}${rPtB}" s="11" t="inlineStr"><is><t>-</t></is></c>`;
-        sheet1 += `\n    </row>`;
-
-        // 6. OT B 出勤
-        const rOtB = endRow + 6;
-        sheet1 += `\n    <row r="${rOtB}" ht="28.5" customHeight="1">
-      <c r="A${rOtB}" s="11" t="inlineStr"><is><t>OT B 出勤</t></is></c>`;
-        for (let d = 0; d < NUM_DAYS; d++) {
-            const col = toColLetter(2 + d);
-            const fOtB = otBStart > 0 ? makeWorkCountFormulaXml(`${col}$${otBStart}:${col}$${otBEnd}`) : '0';
-            sheet1 += `\n      <c r="${col}${rOtB}" s="11"><f>${fOtB}</f><v>0</v></c>`;
+        sheet1 += `\n      <c r="${colWork}${rFull}" s="9" t="inlineStr"><is><t>-</t></is></c>`;
+        for (let c = 3 + numDays; c <= 10 + numDays; c++) {
+            sheet1 += `\n      <c r="${toColLetter(c)}${rFull}" s="9" t="inlineStr"><is><t>-</t></is></c>`;
         }
-        sheet1 += `\n      <c r="AD${rOtB}" s="11"><f>SUM(B${rOtB}:AC${rOtB})</f><v>0</v></c>`;
-        for (let c = 31; c <= 37; c++) sheet1 += `\n      <c r="${toColLetter(c)}${rOtB}" s="11" t="inlineStr"><is><t>-</t></is></c>`;
-        sheet1 += `\n    </row>`;
-
-        // 7. ST 出勤
-        const rSt = endRow + 7;
-        sheet1 += `\n    <row r="${rSt}" ht="28.5" customHeight="1">
-      <c r="A${rSt}" s="12" t="inlineStr"><is><t>ST 出勤</t></is></c>`;
-        for (let d = 0; d < NUM_DAYS; d++) {
-            const col = toColLetter(2 + d);
-            const fSt = stStart > 0 ? makeWorkCountFormulaXml(`${col}$${stStart}:${col}$${stEnd}`) : '0';
-            sheet1 += `\n      <c r="${col}${rSt}" s="12"><f>${fSt}</f><v>0</v></c>`;
-        }
-        sheet1 += `\n      <c r="AD${rSt}" s="12"><f>SUM(B${rSt}:AC${rSt})</f><v>0</v></c>`;
-        for (let c = 31; c <= 37; c++) sheet1 += `\n      <c r="${toColLetter(c)}${rSt}" s="12" t="inlineStr"><is><t>-</t></is></c>`;
-        sheet1 += `\n    </row>`;
-
-        // 8. 早番
-        const rEarly = endRow + 8;
-        sheet1 += `\n    <row r="${rEarly}" ht="28.5" customHeight="1">
-      <c r="A${rEarly}" s="13" t="inlineStr"><is><t>早番</t></is></c>`;
-        for (let d = 0; d < NUM_DAYS; d++) {
-            const col = toColLetter(2 + d);
-            sheet1 += `\n      <c r="${col}${rEarly}" s="13"><f>COUNTIF(${col}$4:${col}$${endRow},&quot;早&quot;)+COUNTIF(${col}$4:${col}$${endRow},&quot;ハヤ&quot;)</f><v>0</v></c>`;
-        }
-        sheet1 += `\n      <c r="AD${rEarly}" s="13"><f>SUM(B${rEarly}:AC${rEarly})</f><v>0</v></c>`;
-        for (let c = 31; c <= 37; c++) sheet1 += `\n      <c r="${toColLetter(c)}${rEarly}" s="13" t="inlineStr"><is><t>-</t></is></c>`;
-        sheet1 += `\n    </row>`;
-
-        // 9. 遅番
-        const rLate = endRow + 9;
-        sheet1 += `\n    <row r="${rLate}" ht="28.5" customHeight="1">
-      <c r="A${rLate}" s="13" t="inlineStr"><is><t>遅番</t></is></c>`;
-        for (let d = 0; d < NUM_DAYS; d++) {
-            const col = toColLetter(2 + d);
-            sheet1 += `\n      <c r="${col}${rLate}" s="13"><f>COUNTIF(${col}$4:${col}$${endRow},&quot;遅&quot;)+COUNTIF(${col}$4:${col}$${endRow},&quot;オソ&quot;)</f><v>0</v></c>`;
-        }
-        sheet1 += `\n      <c r="AD${rLate}" s="13"><f>SUM(B${rLate}:AC${rLate})</f><v>0</v></c>`;
-        for (let c = 31; c <= 37; c++) sheet1 += `\n      <c r="${toColLetter(c)}${rLate}" s="13" t="inlineStr"><is><t>-</t></is></c>`;
-        sheet1 += `\n    </row>`;
-
-        // 10. E
-        const rEve = endRow + 10;
-        sheet1 += `\n    <row r="${rEve}" ht="28.5" customHeight="1">
-      <c r="A${rEve}" s="13" t="inlineStr"><is><t>E</t></is></c>`;
-        for (let d = 0; d < NUM_DAYS; d++) {
-            const col = toColLetter(2 + d);
-            sheet1 += `\n      <c r="${col}${rEve}" s="13"><f>COUNTIF(${col}$4:${col}$${endRow},&quot;E&quot;)+COUNTIF(${col}$4:${col}$${endRow},&quot;イブ&quot;)</f><v>0</v></c>`;
-        }
-        sheet1 += `\n      <c r="AD${rEve}" s="13"><f>SUM(B${rEve}:AC${rEve})</f><v>0</v></c>`;
-        for (let c = 31; c <= 37; c++) sheet1 += `\n      <c r="${toColLetter(c)}${rEve}" s="13" t="inlineStr"><is><t>-</t></is></c>`;
-        sheet1 += `\n    </row>`;
-
-        // 11. 8時
-        const rH8 = endRow + 11;
-        sheet1 += `\n    <row r="${rH8}" ht="28.5" customHeight="1">
-      <c r="A${rH8}" s="13" t="inlineStr"><is><t>8時</t></is></c>`;
-        for (let d = 0; d < NUM_DAYS; d++) {
-            const col = toColLetter(2 + d);
-            sheet1 += `\n      <c r="${col}${rH8}" s="13"><f>COUNTIF(${col}$4:${col}$${endRow},&quot;8時&quot;)</f><v>0</v></c>`;
-        }
-        sheet1 += `\n      <c r="AD${rH8}" s="13"><f>SUM(B${rH8}:AC${rH8})</f><v>0</v></c>`;
-        for (let c = 31; c <= 37; c++) sheet1 += `\n      <c r="${toColLetter(c)}${rH8}" s="13" t="inlineStr"><is><t>-</t></is></c>`;
         sheet1 += `\n    </row>`;
 
         sheet1 += `\n  </sheetData>
-  <mergeCells count="2">
-    <mergeCell ref="A1:AC1"/>
-    <mergeCell ref="AD1:AK1"/>
-  </mergeCells>
-  <pageMargins left="0.25" right="0.25" top="0.3" bottom="0.3" header="0.2" footer="0.2"/>
+  <pageMargins left="0.2" right="0.2" top="0.3" bottom="0.3" header="0.1" footer="0.1"/>
   <pageSetup paperSize="8" orientation="landscape" fitToWidth="1" fitToHeight="1"/>
 </worksheet>`;
 
@@ -4708,10 +5019,12 @@ document.addEventListener('DOMContentLoaded', () => {
         link.setAttribute('download', `${safeTitle.replace(/\s+/g, '')}.xlsx`);
         document.body.appendChild(link);
         link.click();
-        document.body.removeChild(link);
+        setTimeout(() => {
+            if (document.body.contains(link)) document.body.removeChild(link);
+            URL.revokeObjectURL(url);
+        }, 2000);
         showToast('📊 本物のExcelファイル（.xlsx）をダウンロードしました！（A3横・1ページ印刷設定・動的数式・赤字太字付き）');
     }
-
     // 初期起動（直前に作業していた期間、または保存データを自動復元）
     initStaffData();
 
