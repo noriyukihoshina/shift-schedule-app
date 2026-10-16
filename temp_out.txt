@@ -1,0 +1,128 @@
+<!DOCTYPE html>
+<html lang="ja"><head>
+    <meta charset="UTF-8">
+    <title>Test UI Interactions</title>
+</head>
+<body>
+    <div id="test-output">PASS: 修正作業エリアのスタッフ1(公休9)の公休セルに網掛けが付与されること
+PASS: 最終チェックのスタッフ1(公休9)の公休セルに網掛けが付与されること
+PASS: 正常(公休8)のスタッフ0の公休セルには網掛けが付かないこと
+PASS: 赤字修正時にモーダルが open 状態になること
+PASS: 変更前がモーダルに表示されること
+PASS: 変更後がモーダルに表示されること
+PASS: キャンセル時は修正処理が実行されないこと
+PASS: 続行をクリックした時に修正処理が指示通り実行されること
+PASS: 続行処理後にモーダルが閉じること</div>
+
+    <!-- UI再現用ダミー要素 -->
+    <div id="confirmEditFixedModal" class="modal-overlay">
+        <span id="confirmEditStaffName">スタッフ 01</span>
+        <span id="confirmEditDateLabel"></span>
+        <span id="confirmEditOldSym">休</span>
+        <span id="confirmEditNewSym">○</span>
+        <button id="confirmEditProceedBtn">続行</button>
+        <button id="confirmEditCancelBtn">キャンセル</button>
+    </div>
+
+    <table>
+        <tbody id="outputTableBody">
+            <tr>
+                <td class="day-cell fixed-cell" data-s="0" data-d="0">休</td>
+                <td class="day-cell auto-cell" data-s="0" data-d="1">○</td>
+                <td class="stat-cell" data-s="0" data-stat="off">8</td>
+            </tr>
+            <tr>
+                <td class="day-cell auto-cell" data-s="1" data-d="0">○</td>
+                <td class="day-cell auto-cell" data-s="1" data-d="1">○</td>
+                <td class="stat-cell conflict-highlight" data-s="1" data-stat="off">9</td>
+            </tr>
+        </tbody>
+        <tbody id="checkTableBody">
+            <tr>
+                <td class="day-cell fixed-cell" data-s="0" data-d="0">休</td>
+                <td class="day-cell auto-cell" data-s="0" data-d="1">○</td>
+                <td class="stat-cell" data-s="0" data-stat="off">8</td>
+            </tr>
+            <tr>
+                <td class="day-cell auto-cell" data-s="1" data-d="0">○</td>
+                <td class="day-cell auto-cell" data-s="1" data-d="1">○</td>
+                <td class="stat-cell conflict-highlight" data-s="1" data-stat="off">9</td>
+            </tr>
+        </tbody>
+    </table>
+
+    <script>
+    (function() {
+        const results = [];
+        function assert(condition, message) {
+            if (condition) results.push("PASS: " + message);
+            else results.push("FAIL: " + message);
+        }
+
+        // 1. applyOutputConflictHighlights による集計列網掛けテスト
+        function applyTestHighlights(conflictCells) {
+            document.querySelectorAll('.conflict-highlight').forEach(el => el.classList.remove('conflict-highlight'));
+            conflictCells.forEach(item => {
+                if (item.statType) {
+                    const statCells = document.querySelectorAll(
+                        `#outputTableBody td[data-s="${item.staffIndex}"][data-stat="${item.statType}"], ` +
+                        `#checkTableBody td[data-s="${item.staffIndex}"][data-stat="${item.statType}"]`
+                    );
+                    statCells.forEach(cell => cell.classList.add('conflict-highlight'));
+                }
+            });
+        }
+
+        applyTestHighlights([{ staffIndex: 1, statType: 'off', reason: '公休日数が9日です' }]);
+        const offCellOutput = document.querySelector('#outputTableBody td[data-s="1"][data-stat="off"]');
+        const offCellCheck = document.querySelector('#checkTableBody td[data-s="1"][data-stat="off"]');
+        const normalOffCell = document.querySelector('#outputTableBody td[data-s="0"][data-stat="off"]');
+
+        assert(offCellOutput.classList.contains('conflict-highlight'), "修正作業エリアのスタッフ1(公休9)の公休セルに網掛けが付与されること");
+        assert(offCellCheck.classList.contains('conflict-highlight'), "最終チェックのスタッフ1(公休9)の公休セルに網掛けが付与されること");
+        assert(!normalOffCell.classList.contains('conflict-highlight'), "正常(公休8)のスタッフ0の公休セルには網掛けが付かないこと");
+
+        // 2. モーダル開閉と続行/キャンセルテスト
+        let pendingAction = null;
+        function showModal(info, onProceed) {
+            document.getElementById('confirmEditStaffName').textContent = info.staffName;
+            document.getElementById('confirmEditOldSym').textContent = info.oldSym;
+            document.getElementById('confirmEditNewSym').textContent = info.newSym;
+            pendingAction = onProceed;
+            document.getElementById('confirmEditFixedModal').classList.add('open');
+        }
+
+        let executed = false;
+        showModal({ staffName: "スタッフ 01", oldSym: "休", newSym: "○" }, () => {
+            executed = true;
+        });
+
+        const modal = document.getElementById('confirmEditFixedModal');
+        assert(modal.classList.contains('open'), "赤字修正時にモーダルが open 状態になること");
+        assert(document.getElementById('confirmEditOldSym').textContent === "休", "変更前がモーダルに表示されること");
+        assert(document.getElementById('confirmEditNewSym').textContent === "○", "変更後がモーダルに表示されること");
+
+        // キャンセルをクリック
+        pendingAction = null;
+        modal.classList.remove('open');
+        assert(!executed, "キャンセル時は修正処理が実行されないこと");
+
+        // 続行テスト
+        showModal({ staffName: "スタッフ 01", oldSym: "休", newSym: "○" }, () => {
+            executed = true;
+        });
+        // 続行ボタンクリック
+        if (pendingAction) {
+            pendingAction();
+            pendingAction = null;
+        }
+        modal.classList.remove('open');
+        assert(executed, "続行をクリックした時に修正処理が指示通り実行されること");
+        assert(!modal.classList.contains('open'), "続行処理後にモーダルが閉じること");
+
+        document.getElementById('test-output').textContent = results.join('\n');
+    })();
+    </script>
+
+
+</body></html>

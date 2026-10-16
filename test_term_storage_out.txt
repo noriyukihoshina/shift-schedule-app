@@ -1,0 +1,157 @@
+<!DOCTYPE html>
+<html lang="ja"><head>
+    <meta charset="UTF-8">
+    <title>Term Storage Test</title>
+</head>
+<body>
+    <div id="testStatus">TEST_RUNNING</div>
+    <div id="testLogs"></div>
+
+    <iframe id="appFrame" src="index.html" style="width: 1200px; height: 800px;"></iframe>
+
+    <script>
+        const logs = [];
+        function log(msg) {
+            console.log(msg);
+            logs.push(msg);
+            document.getElementById('testLogs').innerText = logs.join('\n');
+        }
+
+        window.addEventListener('load', async () => {
+            const frame = document.getElementById('appFrame');
+            
+            // iframeのロード完了を待つ
+            await new Promise(r => {
+                if (frame.contentDocument && frame.contentDocument.readyState === 'complete') {
+                    r();
+                } else {
+                    frame.onload = r;
+                }
+            });
+
+            await new Promise(r => setTimeout(r, 800));
+
+            const win = frame.contentWindow;
+            const doc = frame.contentDocument;
+
+            try {
+                log('=== ステップ1: 初期状態検証 ===');
+                const lastActive = win.localStorage.getItem('shift_schedule_last_active_start_date');
+                log('Initial lastActive: ' + lastActive);
+                if (lastActive !== '2026-04-01') throw new Error('初期期間が2026-04-01ではありません: ' + lastActive);
+
+                const rawTerm401 = win.localStorage.getItem('shift_schedule_term_2026-04-01');
+                if (!rawTerm401) throw new Error('shift_schedule_term_2026-04-01 が保存されていません');
+                log('✓ 4/1の初期自動保存を確認');
+
+                log('=== ステップ2: 4/1〜4/28 へのデータ入力と自動生成 ===');
+                // 記号パレットで「休」を選択（デフォルトで休）
+                // スタッフ1(idx 0)の1日目(idx 0)をクリック
+                const cellS0D0 = doc.querySelector('#inputTableBody td.day-cell[data-s="0"][data-d="0"]');
+                if (!cellS0D0) throw new Error('セル (0,0) が見つかりません');
+                cellS0D0.click();
+
+                // 記号パレットで「有」をクリック
+                const palettePaid = doc.querySelector('#inputTab .palette-btn[data-sym="有"]');
+                if (!palettePaid) throw new Error('パレット「有」が見つかりません');
+                palettePaid.click();
+
+                // スタッフ2(idx 1)の2日目(idx 1)をクリック
+                const cellS1D1 = doc.querySelector('#inputTableBody td.day-cell[data-s="1"][data-d="1"]');
+                if (!cellS1D1) throw new Error('セル (1,1) が見つかりません');
+                cellS1D1.click();
+
+                // 自動保存の確認
+                const data401AfterInput = JSON.parse(win.localStorage.getItem('shift_schedule_term_2026-04-01'));
+                log('Staff 1 Day 1 pref: ' + data401AfterInput.staffList[0].days[0]);
+                log('Staff 2 Day 2 pref: ' + data401AfterInput.staffList[1].days[1]);
+                if (data401AfterInput.staffList[0].days[0] !== '休') throw new Error('スタッフ1の1日目が休ではありません');
+                if (data401AfterInput.staffList[1].days[1] !== '有') throw new Error('スタッフ2の2日目が有ではありません');
+                log('✓ 4/1のセル入力自動保存を確認');
+
+                // 勤務表自動生成ボタンをクリック
+                const solveBtn = doc.getElementById('inputSolveBtn');
+                solveBtn.click();
+                await new Promise(r => setTimeout(r, 600));
+
+                const data401AfterSolve = JSON.parse(win.localStorage.getItem('shift_schedule_term_2026-04-01'));
+                if (!data401AfterSolve.outputGrid) throw new Error('4/1の出力グリッドが保存されていません');
+                log('✓ 4/1の勤務表生成＆自動保存を確認');
+
+                log('=== ステップ3: 期間を 4/3〜4/30（重なる期間）に変更 ===');
+                const dateInput = doc.getElementById('termStartDate');
+                dateInput.value = '2026-04-03';
+                dateInput.dispatchEvent(new win.Event('change'));
+                await new Promise(r => setTimeout(r, 600));
+
+                const lastActive403 = win.localStorage.getItem('shift_schedule_last_active_start_date');
+                log('Current lastActive: ' + lastActive403);
+                if (lastActive403 !== '2026-04-03') throw new Error('アクティブ期間が2026-04-03になっていません');
+
+                const data403 = JSON.parse(win.localStorage.getItem('shift_schedule_term_2026-04-03'));
+                if (!data403) throw new Error('4/3の期間データが作成されていません');
+                // 4/3のスタッフ1の1日目は白紙であること（4/1の休が混ざっていないこと）
+                log('4/3 Staff 1 Day 1: "' + data403.staffList[0].days[0] + '"');
+                if (data403.staffList[0].days[0] !== '') throw new Error('4/3の新規期間に4/1の希望が混ざっています！');
+                log('✓ 4/3が独立した白紙期間として開始されたことを確認');
+
+                // 4/3でスタッフ1の1日目に「○」を入力
+                const paletteCircle = doc.querySelector('#inputTab .palette-btn[data-sym="○"]');
+                paletteCircle.click();
+                const cell403S0D0 = doc.querySelector('#inputTableBody td.day-cell[data-s="0"][data-d="0"]');
+                cell403S0D0.click();
+
+                // 4/3で自動生成実行
+                doc.getElementById('inputSolveBtn').click();
+                await new Promise(r => setTimeout(r, 600));
+
+                const data403AfterSolve = JSON.parse(win.localStorage.getItem('shift_schedule_term_2026-04-03'));
+                if (data403AfterSolve.staffList[0].days[0] !== '○') throw new Error('4/3のスタッフ1の1日目が○になっていません');
+                log('✓ 4/3のデータ入力・生成・独立保存を確認');
+
+                log('=== ステップ4: 4/1〜4/28 への再切り替え＆完全復元検証 ===');
+                dateInput.value = '2026-04-01';
+                dateInput.dispatchEvent(new win.Event('change'));
+                await new Promise(r => setTimeout(r, 600));
+
+                // 4/1のデータが復元されていること
+                const restoredS0D0 = doc.querySelector('#inputTableBody td.day-cell[data-s="0"][data-d="0"]');
+                const restoredS1D1 = doc.querySelector('#inputTableBody td.day-cell[data-s="1"][data-d="1"]');
+                log('Restored 4/1 Staff 1 Day 1 text: ' + restoredS0D0.textContent.trim());
+                log('Restored 4/1 Staff 2 Day 2 text: ' + restoredS1D1.textContent.trim());
+
+                if (restoredS0D0.textContent.trim() !== '休') throw new Error('4/1のスタッフ1の希望「休」が復元されていません！');
+                if (restoredS1D1.textContent.trim() !== '有') throw new Error('4/1のスタッフ2の希望「有」が復元されていません！');
+
+                // 4/1の出力グリッドも復元されていること
+                const outCellS0D0 = doc.querySelector('#outputTableBody td.day-cell[data-s="0"][data-d="0"]');
+                if (!outCellS0D0) throw new Error('4/1の出力テーブルが復元されていません！');
+                log('Restored 4/1 Output S0D0: ' + outCellS0D0.textContent.trim());
+                if (outCellS0D0.textContent.trim() !== '休') throw new Error('4/1の出力テーブルに事前希望「休」が反映されていません');
+
+                log('✓ 4/1への切り替えで過去の全データが完全に復元されました！');
+
+                log('=== ステップ5: 再度 4/3〜4/30 への切り替え＆復元検証 ===');
+                const savedTermsSelect = doc.getElementById('savedTermsSelect');
+                savedTermsSelect.value = '2026-04-03';
+                savedTermsSelect.dispatchEvent(new win.Event('change'));
+                await new Promise(r => setTimeout(r, 600));
+
+                const restored403S0D0 = doc.querySelector('#inputTableBody td.day-cell[data-s="0"][data-d="0"]');
+                log('Restored 4/3 Staff 1 Day 1 text: ' + restored403S0D0.textContent.trim());
+                if (restored403S0D0.textContent.trim() !== '○') throw new Error('4/3のスタッフ1の希望「○」が復元されていません！');
+
+                log('✓ 4/3のデータも完全に独立して保持・復元されました！');
+
+                log('=== ALL_TESTS_PASSED ===');
+                document.getElementById('testStatus').innerText = 'ALL_TESTS_PASSED';
+            } catch (e) {
+                log('ERROR: ' + e.message);
+                console.error(e);
+                document.getElementById('testStatus').innerText = 'TEST_FAILED: ' + e.message;
+            }
+        });
+    </script>
+
+
+</body></html>

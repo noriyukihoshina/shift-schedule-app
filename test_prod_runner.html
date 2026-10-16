@@ -1,0 +1,123 @@
+﻿<!DOCTYPE html>
+<html>
+<head><meta charset="utf-8"></head>
+<body>
+<div id="output" style="white-space:pre; font-family:monospace;"></div>
+
+<!-- 譛ｬ逡ｪ迺ｰ蠅・°繧蛾・菫｡縺輔ｌ縺ｦ縺・ｋ譛譁ｰJS繧ｹ繧ｯ繝ｪ繝励ヨ繧堤峩謗･隱ｭ縺ｿ霎ｼ縺ｿ -->
+<script src="https://shift-schedule-app-ruby.vercel.app/solver.js"></script>
+<script>
+const out = document.getElementById('output');
+function log(msg) { out.textContent += msg + '\n'; }
+
+async function runProductionTests() {
+    log('=== 譛ｬ逡ｪ迺ｰ蠅・(https://shift-schedule-app-ruby.vercel.app) 驟堺ｿ｡繧ｳ繝ｼ繝・蜴ｳ譬ｼ讀懆ｨｼ ===\n');
+    let passCount = 0;
+    let totalCount = 0;
+    function assert(desc, cond) {
+        totalCount++;
+        if (cond) {
+            passCount++;
+            log('[PASS] ' + desc);
+        } else {
+            log('[FAIL] ' + desc);
+        }
+    }
+
+    try {
+        // 1. 譛ｬ逡ｪ縺ｮ ShiftScheduler 縺ｨ譁ｰ險ｭ髢｢謨ｰ縺ｮ蟄伜惠繝√ぉ繝・け
+        assert('1. 譛ｬ逡ｪ solver.js 縺ｫ ShiftScheduler 縺悟ｭ伜惠縺吶ｋ縺薙→', typeof ShiftScheduler === 'function');
+        assert('2. 譛ｬ逡ｪ solver.js 縺ｫ validateScheduleGrid 縺悟ｭ伜惠縺吶ｋ縺薙→', typeof validateScheduleGrid === 'function');
+        assert('3. 譛ｬ逡ｪ solver.js 縺ｫ balanceDailyWorkforce 繝｡繧ｽ繝・ラ縺悟ｭ伜惠縺吶ｋ縺薙→', typeof ShiftScheduler.prototype.balanceDailyWorkforce === 'function');
+
+        // 2. 50蜷阪せ繧ｿ繝・ヵ繝・・繧ｿ縺ｫ繧医ｋ隨ｬ1谿ｵ髫趣ｼ亥渕譛ｬ蜍､蜍呵｡ｨ逕滓・・峨ユ繧ｹ繝・        const patterns = [
+            ['笳・, '笳・, '莨・, '笳・, '笳・],
+            ['莨・, '莨・, '笳・, '笳・, '笳・],
+            ['笳・, '莨・, '笳・, '笳・, '莨・],
+            ['笳・, '笳・, '笳・, '笳・, '莨・],
+            ['莨・, '笳・, '笳・, '笳・, '笳・]
+        ];
+        const staffList = [];
+        for (let i = 1; i <= 50; i++) {
+            staffList.push({
+                id: i,
+                name: 繧ｹ繧ｿ繝・ヵ ,
+                can8: (i <= 9),
+                noEarly: (i === 13),
+                noLate: (i === 13),
+                noEve: (i === 13 || i === 15 || i === 16),
+                canSched: (i <= 8),
+                isRole: (i <= 6),
+                isFullTime: (i <= 10),
+                allow6Consec: (i === 20 || i === 21),
+                prevDays: [...patterns[(i - 1) % patterns.length]],
+                days: new Array(28).fill('')
+            });
+        }
+        staffList[0].days[3] = '莨・;
+        staffList[1].days[4] = '譛・; staffList[1].days[8] = '莨・;
+        staffList[2].days[13] = '莨・;
+        staffList[5].days[0] = '莨・;
+        staffList[5].days[9] = '荳・'; staffList[5].days[10] = '荳・'; staffList[5].days[11] = '荳・'; staffList[5].days[12] = '荳・'; staffList[5].days[13] = '荳・';
+        staffList[10].days[13] = '蜃ｺ'; staffList[10].days[14] = '蜃ｺ';
+        staffList[3].days[10] = '繝上Ζ';
+        staffList[4].days[15] = '繧ｪ繧ｽ';
+        staffList[6].days[20] = '繧､繝・;
+
+        const scheduler = new ShiftScheduler(staffList, { standardHolidays: 8.0 });
+        const baseRes = scheduler.solveBaseSchedule();
+        assert('4. 隨ｬ1谿ｵ髫・(蝓ｺ譛ｬ蜍､蜍呵｡ｨ逕滓・) 縺梧・蜉溘☆繧九％縺ｨ', baseRes && baseRes.success);
+
+        // 3. 隨ｬ2谿ｵ髫趣ｼ育音谿雁共蜍吝牡繧雁ｽ薙※・・        const specRes = scheduler.assignSpecialDutiesToGrid();
+        assert('5. 隨ｬ2谿ｵ髫・(迚ｹ谿雁共蜍吶ｒ蜈･繧後ｋ) 縺梧・蜉溘☆繧九％縺ｨ', specRes && specRes.success);
+
+        // 4. 蜃ｺ蜍､莠ｺ謨ｰ蟷ｳ貅門喧縺ｮ讀懆ｨｼ・医ヶ繝ｬ蟷・縲・蜷堺ｻ･蜀・ｼ・        const counts = [];
+        for (let d = 0; d < 28; d++) {
+            let w = 0;
+            for (let s = 0; s < 50; s++) {
+                const sym = scheduler.grid[s][d].symbol;
+                if (sym && !['莨・, '譛・, '荳・', '荳・', '荳・', '荳・', '荳・', '荳・', '荳・', '荳・'].includes(sym)) {
+                    w++;
+                }
+            }
+            counts.push(w);
+        }
+        const minW = Math.min(...counts);
+        const maxW = Math.max(...counts);
+        const diff = maxW - minW;
+        log(  -> 蜃ｺ蜍､莠ｺ謨ｰ蛻・ｸ・ 譛蟆・蜷・縲・譛螟ｧ 蜷・(繝悶Ξ蟷・ 蜷・);
+        assert('6. 蜃ｺ蜍､莠ｺ謨ｰ縺ｮ譌･蛻･蟷ｳ貅門喧縺碁＃謌舌＆繧後※縺・ｋ縺薙→ (繝悶Ξ蟷・' + diff + '蜷・<= 4蜷・', diff <= 4);
+
+        // 5. 譛ｬ逡ｪ validateScheduleGrid 縺ｫ繧医ｋ蜈ｨ蛻ｶ邏・､懆ｨｼ
+        const valRes = validateScheduleGrid(scheduler.grid, scheduler.staffList, { standardHolidays: 8.0, isFinal: true });
+        assert('7. 譛ｬ逡ｪ validateScheduleGrid() 縺悟ｮ悟・蜷域ｼ縺吶ｋ縺薙→ (繧ｨ繝ｩ繝ｼ謨ｰ: ' + valRes.errors.length + ')', valRes.isValid && valRes.errors.length === 0);
+
+        // 6. 諢丞峙逧・＆蜿阪↓蟇ｾ縺吶ｋ繧ｨ繝ｩ繝ｼ讀懷・繝ｻ髱偵＞邯ｲ謗帙￠繧ｻ繝ｫ謚ｽ蜃ｺ繝・せ繝・        const testGrid = JSON.parse(JSON.stringify(scheduler.grid));
+        for (let d = 0; d < 6; d++) testGrid[0][d].symbol = '笳・;
+        testGrid[0][6].symbol = '莨・;
+        testGrid[1][10].symbol = '譌ｩ';
+        testGrid[1][11].symbol = '笳・;
+        const testVal = validateScheduleGrid(testGrid, scheduler.staffList, { standardHolidays: 8.0, isFinal: true });
+        assert('8. 蛻ｶ邏・＆蜿搾ｼ・騾｣蜍､繝ｻ鄙梧律蜃ｺ蜍､・峨′讀懷・縺輔ｌ縲・搨縺・ｶｲ謗帙￠蟇ｾ雎｡繧ｻ繝ｫ縺梧歓蜃ｺ縺輔ｌ繧九％縺ｨ (謚ｽ蜃ｺ繧ｻ繝ｫ謨ｰ: ' + testVal.conflictCells.length + ')',
+            !testVal.isValid && testVal.conflictCells.length > 0);
+
+        // 7. 驕募渚隗｣豸亥ｾ後・蝗槫ｾｩ繝・せ繝・        testGrid[0][3].symbol = '莨・;
+        testGrid[1][11].symbol = '莨・;
+        const recVal = validateScheduleGrid(scheduler.grid, scheduler.staffList, { standardHolidays: 8.0, isFinal: true });
+        assert('9. 驕募渚繧ｻ繝ｫ隗｣豸亥ｾ後↓蛻ｶ邏・メ繧ｧ繝・け縺悟ｮ悟・蝗槫ｾｩ縺吶ｋ縺薙→', recVal.isValid);
+
+    } catch (e) {
+        log('[ERROR] ' + e.message + '\n' + e.stack);
+    } finally {
+        log(\n=== 譛ｬ逡ｪ驟堺ｿ｡繧ｳ繝ｼ繝画､懆ｨｼ繧ｵ繝槭Μ繝ｼ:  /  PASSED ===);
+        fetch('http://localhost:8095/result', {
+            method: 'POST',
+            headers: {'Content-Type': 'text/plain; charset=utf-8'},
+            body: out.textContent
+        }).catch(err => console.log(err));
+    }
+}
+window.onload = runProductionTests;
+</script>
+</body>
+</html>

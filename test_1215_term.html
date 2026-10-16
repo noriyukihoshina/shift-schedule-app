@@ -1,0 +1,109 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <title>Reproduce 12/15 Term Issue</title>
+</head>
+<body>
+    <div id="test-output"></div>
+    <script src="solver.js"></script>
+    <script>
+    (function() {
+        try {
+            // 12/15開始の28日間 dates を生成
+            const WEEKDAYS = ['月', '火', '水', '木', '金', '土', '日'];
+            const startDate = new Date(2026, 11, 15); // 2026-12-15 (火)
+            const dates = [];
+            for (let i = 0; i < 28; i++) {
+                const d = new Date(startDate.getFullYear(), startDate.getMonth(), startDate.getDate() + i);
+                const wIdx = (d.getDay() + 6) % 7;
+                dates.push({
+                    y: d.getFullYear(),
+                    m: d.getMonth() + 1,
+                    day: d.getDate(),
+                    weekday: WEEKDAYS[wIdx],
+                    wIdx,
+                    isHoliday: isJapaneseHoliday(d.getFullYear(), d.getMonth() + 1, d.getDate())
+                });
+            }
+
+            const patterns = [
+                ['休', '○', '○', '○', '○'],
+                ['○', '○', '休', '○', '○'],
+                ['休', '休', '○', '○', '○'],
+                ['○', '休', '○', '○', '休'],
+                ['○', '○', '○', '○', '休']
+            ];
+            // 50名スタッフ初期化
+            const staffList = [];
+            for (let i = 1; i <= 50; i++) {
+                staffList.push({
+                    id: i,
+                    name: 'スタッフ ' + (i < 10 ? '0' + i : i),
+                    can8: (i <= 9),
+                    noEarly: false,
+                    noLate: false,
+                    noEve: false,
+                    canSched: (i <= 8),
+                    isRole: (i <= 6),
+                    isFullTime: (i <= 10),
+                    allow6Consec: false,
+                    prevDays: [...patterns[(i - 1) % patterns.length]],
+                    days: new Array(28).fill('')
+                });
+            }
+
+            // ユーザーの画像と同じ希望を設定
+            // スタッフ 05: 12/24 (d = 9) に「休」
+            staffList[4].days[9] = '休';
+            // スタッフ 10: 12/18 (d = 3) に「早」
+            staffList[9].days[3] = '早';
+
+            const scheduler = new ShiftScheduler(staffList, {
+                dates: dates,
+                standardHolidays: 8.0
+            });
+
+            const res = scheduler.solveBaseSchedule();
+            const output = [];
+            output.push("Success: " + res.success);
+
+            // 修正作業エリア相当の検証 (isFinal = false)
+            const valRes = validateScheduleGrid(scheduler.grid, staffList, { dates: dates, standardHolidays: 8.0, isFinal: false });
+            output.push("WorkArea isValid: " + valRes.isValid);
+            output.push("WorkArea Error Count: " + valRes.errors.length);
+            if (valRes.errors.length > 0) {
+                output.push("WorkArea Errors:\n" + valRes.errors.slice(0, 10).join("\n"));
+            }
+
+            // 特殊勤務割り当て後の最終チェック＆完成エリア相当の検証 (isFinal = true)
+            const specRes = scheduler.assignSpecialDutiesToGrid();
+            output.push("SpecialDuties Success: " + specRes.success);
+            const finalValRes = validateScheduleGrid(scheduler.grid, staffList, { dates: dates, standardHolidays: 8.0, isFinal: true });
+            output.push("Final isValid: " + finalValRes.isValid);
+            output.push("Final Error Count: " + finalValRes.errors.length);
+            if (finalValRes.errors.length > 0) {
+                output.push("Final Errors:\n" + finalValRes.errors.slice(0, 10).join("\n"));
+            }
+
+            for (let s = 0; s < 50; s++) {
+                let offCount = 0;
+                let workCount = 0;
+                for (let d = 0; d < 28; d++) {
+                    const sym = scheduler.grid[s][d].symbol;
+                    if (sym === '休') offCount++;
+                    else if (sym === '○') workCount++;
+                }
+                if (offCount !== 8 || s === 4 || s === 9) {
+                    output.push(`Staff ${s+1} (${staffList[s].name}): 出勤=${workCount}, 公休=${offCount}`);
+                }
+            }
+
+            document.getElementById('test-output').textContent = output.join('\n');
+        } catch (e) {
+            document.getElementById('test-output').textContent = 'ERROR: ' + e.message + '\n' + e.stack;
+        }
+    })();
+    </script>
+</body>
+</html>

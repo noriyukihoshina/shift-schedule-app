@@ -1,8 +1,5 @@
-*.ps1
-*.txt
-*.png
-*.xlsx
-test_*
-debug_*
-run_*
-cap_*
+setup_cloud_storage.ps1
+*.xlsm
+pv_*.xlsx
+zone_test_*.xlsx
+*_test_*.xlsx

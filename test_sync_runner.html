@@ -1,0 +1,92 @@
+﻿<!DOCTYPE html>
+<html>
+<head><meta charset="utf-8"></head>
+<body>
+<div id="test-log">PENDING</div>
+<div id="test-result"></div>
+
+<input type="date" id="termStartDate" value="2026-06-01">
+<span id="termEndDateDisplay"></span>
+<span id="termTitleBadge"></span>
+<span id="outputTitleDisplay"></span>
+<table><thead id="inputTableHead"></thead><tbody id="inputTableBody"></tbody></table>
+
+<script src="solver.js"></script>
+<script src="app.js"></script>
+<script>
+(function runTests() {
+    const logs = [];
+    function log(msg) { logs.push(msg); }
+
+    try {
+        log("1. 騾｣蜍､繝ｫ繝ｼ繝ｫ・亥・莨大渕貅悶き繧ｦ繝ｳ繝茨ｼ峨・蜊倅ｽ薙ユ繧ｹ繝・);
+        const testStaff = [
+            { id: 1, name: "繝・せ繝・", can8: false, noEarly: false, noLate: false, noEve: false, prevDays: ['莨・,'莨・,'莨・,'莨・,'莨・], days: new Array(28).fill('') },
+            { id: 2, name: "繝・せ繝・", can8: false, noEarly: false, noLate: false, noEve: false, prevDays: ['莨・,'莨・,'莨・,'莨・,'莨・], days: new Array(28).fill('') },
+            { id: 3, name: "繝・せ繝・", can8: false, noEarly: false, noLate: false, noEve: false, prevDays: ['莨・,'莨・,'莨・,'莨・,'莨・], days: new Array(28).fill('') }
+        ];
+
+        // 繝・せ繝・: 莨・笳・笳・笳・笳・笳・莨・(5騾｣蜍､) -> OK
+        testStaff[0].days[0] = '莨・;
+        for(let i=1; i<=5; i++) testStaff[0].days[i] = '笳・;
+        testStaff[0].days[6] = '莨・;
+
+        // 繝・せ繝・: 莨・笳・笳・笳・笳・笳・譛・笳・笳・笳・笳・笳・莨・(11騾｣蜍､) -> NG
+        testStaff[1].days[0] = '莨・;
+        for(let i=1; i<=5; i++) testStaff[1].days[i] = '笳・;
+        testStaff[1].days[6] = '譛・;
+        for(let i=7; i<=11; i++) testStaff[1].days[i] = '笳・;
+        testStaff[1].days[12] = '莨・;
+
+        // 繝・せ繝・: 莨・笳・笳・笳・笳・笳・荳・ 莨・(6譌･) -> NG
+        testStaff[2].days[0] = '莨・;
+        for(let i=1; i<=5; i++) testStaff[2].days[i] = '笳・;
+        testStaff[2].days[6] = '荳・';
+        testStaff[2].days[7] = '莨・;
+
+        const valRes = validateInitialState(testStaff);
+        const errStr = valRes.errors.join("\n");
+        if (!errStr.includes("繝・せ繝・")) throw new Error("譛我ｼ第検縺ｿ11騾｣蜍､縺梧､懃衍縺輔ｌ縺ｾ縺帙ｓ縺ｧ縺励◆");
+        if (!errStr.includes("繝・せ繝・")) throw new Error("繝ｪ繝穂ｼ第検縺ｿ6騾｣蜍､縺梧､懃衍縺輔ｌ縺ｾ縺帙ｓ縺ｧ縺励◆");
+        if (errStr.includes("繝・せ繝・")) throw new Error("5騾｣蜍､OK縺瑚ｪ､讀懃衍縺輔ｌ縺ｾ縺励◆");
+        log("OK: 蜊倅ｽ薙ユ繧ｹ繝亥粋譬ｼ");
+
+        log("2. 繧ｽ繝ｫ繝舌・縺ｮ閾ｪ蜍慕函謌仙ｮ溯｡・);
+        initStaffData();
+        loadSampleData();
+        const solver = new ScheduleSolver(staffList, { standardHolidays: 8.0, termTitle: "繝・せ繝域悄髢・ });
+        const solution = solver.solve();
+        if (!solution || !solution.grid) throw new Error("繧ｽ繝ｫ繝舌・逕滓・螟ｱ謨・);
+
+        log("3. 蜈ｨ繧ｹ繧ｿ繝・ヵ縺ｮ騾｣蜍､蜴ｳ蟇・メ繧ｧ繝・け");
+        let maxObservedStreak = 0;
+        for (let s = 0; s < 50; s++) {
+            const seq = [];
+            for (let p = 0; p < 5; p++) seq.push(staffList[s].prevDays[p]);
+            for (let d = 0; d < 28; d++) seq.push(solution.grid[s][d].symbol);
+
+            let consec = 0;
+            for (let i = 0; i < seq.length; i++) {
+                if (seq[i] !== '莨・) {
+                    consec++;
+                    if (consec > maxObservedStreak) maxObservedStreak = consec;
+                    if (consec > 5) {
+                        throw new Error("繧ｹ繧ｿ繝・ヵ" + staffList[s].name + "縺ｧ蜈ｬ莨代↑縺・ + consec + "譌･騾｣邯夐＆蜿・);
+                    }
+                } else {
+                    consec = 0;
+                }
+            }
+        }
+        log("OK: 譛螟ｧ騾｣邯壽律謨ｰ=" + maxObservedStreak);
+
+        document.getElementById('test-log').textContent = "ALL_TESTS_PASSED";
+        document.getElementById('test-result').textContent = JSON.stringify({ status: "SUCCESS", maxStreak: maxObservedStreak, logs });
+    } catch (e) {
+        document.getElementById('test-log').textContent = "ERROR: " + e.message;
+        document.getElementById('test-result').textContent = JSON.stringify({ status: "ERROR", error: e.message });
+    }
+})();
+</script>
+</body>
+</html>

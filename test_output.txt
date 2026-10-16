@@ -1,0 +1,13 @@
+﻿<!DOCTYPE html>
+<html><head>
+    <meta charset="utf-8">
+    <title>Solver Test</title>
+</head>
+<body>
+    <div id="result">FORMULA_TESTS_PASSED</div>
+    <script src="solver.js"></script>
+    <script src="test_runner.js"></script>
+    <script src="test_formula.js"></script>
+
+
+</body></html>

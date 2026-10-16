@@ -1,0 +1,82 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <title>Direct Bug Test</title>
+</head>
+<body>
+    <div id="testStatus">TEST_RUNNING</div>
+    <div id="testLogs"></div>
+
+    <!-- index.htmlの必要なDOM要素をインラインで配置 -->
+    <input type="date" id="termStartDate" value="2026-04-01">
+    <span id="termEndDateDisplay">2026-04-28</span>
+    <span id="termTitleBadge">4/1～4/28勤務表</span>
+    <span id="outputTitleDisplay"></span>
+    <span id="checkTitleDisplay"></span>
+    <select id="savedTermsSelect"></select>
+    <button id="resetCurrentTermBtn"></button>
+    <select id="standardHolidaySelect"><option value="8.0" selected></option></select>
+    <button id="downloadBlankTemplateBtn"></button>
+    <button id="inputSolveBtn"></button>
+    <div id="inputTableHead"></div>
+    <table id="inputTable"><tbody id="inputTableBody"></tbody></table>
+
+    <script src="solver.js"></script>
+    <script src="app.js"></script>
+
+    <script>
+        const logs = [];
+        function log(msg) {
+            logs.push(msg);
+            document.getElementById('testLogs').innerText = logs.join('\n');
+            console.log(msg);
+        }
+
+        window.addEventListener('DOMContentLoaded', async () => {
+            await new Promise(r => setTimeout(r, 400));
+            try {
+                log('1. 初期状態チェック');
+                const dateInput = document.getElementById('termStartDate');
+                const endDisplay = document.getElementById('termEndDateDisplay');
+                const badge = document.getElementById('termTitleBadge');
+                log('Initial start: ' + dateInput.value + ', end: ' + endDisplay.textContent + ', badge: ' + badge.textContent);
+
+                log('2. 日付を 2026-04-29 に変更');
+                dateInput.value = '2026-04-29';
+                dateInput.dispatchEvent(new Event('change'));
+                await new Promise(r => setTimeout(r, 300));
+
+                log('After change start: ' + dateInput.value + ', end: ' + endDisplay.textContent + ', badge: ' + badge.textContent);
+                if (endDisplay.textContent !== '2026-05-26') {
+                    throw new Error('終了日が更新されていません！ 期待: 2026-05-26, 実際: ' + endDisplay.textContent);
+                }
+                if (!badge.textContent.includes('4/29～5/26')) {
+                    throw new Error('バッジが更新されていません！ 実際: ' + badge.textContent);
+                }
+                log('✓ 日付変更時の終了日・バッジの更新が正常に成功！');
+
+                log('3. 空白勤務表ボタンの動作確認');
+                let downloaded = false;
+                window.URL.createObjectURL = function(blob) {
+                    downloaded = true;
+                    return 'blob:mock';
+                };
+                const blankBtn = document.getElementById('downloadBlankTemplateBtn');
+                blankBtn.click();
+                await new Promise(r => setTimeout(r, 200));
+
+                if (!downloaded) {
+                    throw new Error('downloadBlankTemplateBtn を押してもダウンロード処理が呼ばれませんでした');
+                }
+                log('✓ 空白勤務表ダウンロードが正常に呼び出されました！');
+
+                document.getElementById('testStatus').innerText = 'ALL_TESTS_PASSED';
+            } catch(e) {
+                log('FAILED: ' + e.message);
+                document.getElementById('testStatus').innerText = 'TEST_FAILED: ' + e.message;
+            }
+        });
+    </script>
+</body>
+</html>

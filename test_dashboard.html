@@ -1,0 +1,133 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <title>Dashboard Verification Test</title>
+</head>
+<body>
+    <div id="test-results"></div>
+
+    <!-- 必要なDOM要素 -->
+    <div style="display:none;">
+        <input type="date" id="termStartDate" value="2026-04-01">
+        <span id="termEndDateDisplay"></span>
+        <span id="termTitleBadge"></span>
+        <span id="outputTitleDisplay"></span>
+        <span id="checkTitleDisplay"></span>
+        <select id="standardHolidaySelect"><option value="8.0" selected>8.0</option></select>
+        <button id="solveBtn">生成</button>
+        <button id="loadSampleBtn">サンプル</button>
+        <table id="inputTableBody"></table>
+        <table id="inputTableHead"></table>
+        <table id="outputTableHead"></table>
+        <table id="outputTableBody"></table>
+        <table id="outputTableFoot"></table>
+        <table id="checkTableHead"></table>
+        <table id="checkTableBody"></table>
+        <table id="checkTableFoot"></table>
+    </div>
+
+    <!-- ダッシュボードカード -->
+    <span id="statWeekdayBadge"></span>
+    <span id="statWeekdayWorkRange"></span>
+    <span id="statWeekdayAvgWork"></span>
+
+    <span id="statHolidayBadge"></span>
+    <span id="statHolidayWorkRange"></span>
+    <span id="statHolidayAvgWork"></span>
+    <span id="statSunHolSubInfo"></span>
+
+    <span id="statTotalPaidDays"></span>
+    <span id="statPaidStaffCount"></span>
+
+    <span id="statWorkRange"></span>
+    <span id="statAvgWork"></span>
+    <span id="statSpecialCounts"></span>
+    <div id="dailyWorkChart"></div>
+
+    <script src="solver.js"></script>
+    <script src="app.js"></script>
+    <script>
+        const results = [];
+        function assert(desc, condition) {
+            results.push({ desc, pass: !!condition });
+        }
+
+        window.addEventListener('load', () => {
+            try {
+                // 1. サンプルデータ投入と自動生成（2026-04-01: 祝日なし期間）
+                const startInput = document.getElementById('termStartDate');
+                startInput.value = '2026-04-01';
+                document.getElementById('loadSampleBtn').click();
+                document.getElementById('solveBtn').click();
+
+                setTimeout(() => {
+                    try {
+                        const wBadge = document.getElementById('statWeekdayBadge').textContent;
+                        const wRange = document.getElementById('statWeekdayWorkRange').textContent;
+                        const wAvg = document.getElementById('statWeekdayAvgWork').textContent;
+
+                        const hBadge = document.getElementById('statHolidayBadge').textContent;
+                        const hRange = document.getElementById('statHolidayWorkRange').textContent;
+                        const hAvg = document.getElementById('statHolidayAvgWork').textContent;
+                        const sunHol = document.getElementById('statSunHolSubInfo').textContent;
+
+                        const paidDays = document.getElementById('statTotalPaidDays').textContent;
+                        const paidStaff = document.getElementById('statPaidStaffCount').textContent;
+
+                        const workRange = document.getElementById('statWorkRange').textContent;
+                        const avgWork = document.getElementById('statAvgWork').textContent;
+
+                        assert("4/1期間: 平日日数が20日間 (月〜金の計20日)", wBadge.includes('20'));
+                        assert("4/1期間: 平日出勤人数範囲が表示されている", wRange.includes('名') && !wRange.includes('-'));
+                        assert("4/1期間: 平日平均が表示されている", wAvg.includes('名') && !wAvg.includes('-'));
+
+                        assert("4/1期間: 土日祝日数が8日間 (土4日+日4日)", hBadge.includes('8'));
+                        assert("4/1期間: 土日祝出勤人数範囲が表示されている", hRange.includes('名') && !hRange.includes('-'));
+                        assert("4/1期間: 土日祝平均が表示されている", hAvg.includes('名') && !hAvg.includes('-'));
+                        assert("4/1期間: 土日祝の注記が表示されている", sunHol.includes('土曜日・日曜日・国民の祝日'));
+
+                        assert("4/1期間: 平日(20)+土日祝(8)=全28日間", parseInt(wBadge) + parseInt(hBadge) === 28);
+
+                        assert("4/1期間: 有休合計数が表示されている", paidDays.includes('日') && !paidDays.includes('-'));
+                        assert("4/1期間: 全日範囲が表示されている", workRange.includes('名') && !workRange.includes('-'));
+                        assert("4/1期間: 全日平均が表示されている", avgWork.includes('名') && !avgWork.includes('-'));
+
+                        // 2. 祝日あり期間（2026-04-29: ゴールデンウィーク含む期間）
+                        startInput.value = '2026-04-29';
+                        startInput.dispatchEvent(new Event('change'));
+                        document.getElementById('loadSampleBtn').click();
+                        document.getElementById('solveBtn').click();
+
+                        setTimeout(() => {
+                            try {
+                                const wBadge2 = document.getElementById('statWeekdayBadge').textContent;
+                                const hBadge2 = document.getElementById('statHolidayBadge').textContent;
+                                const hRange2 = document.getElementById('statHolidayWorkRange').textContent;
+                                const hAvg2 = document.getElementById('statHolidayAvgWork').textContent;
+
+                                assert("4/29期間: 平日(15)+土日祝(13)=全28日間", parseInt(wBadge2) + parseInt(hBadge2) === 28);
+                                assert("4/29期間: 土日祝出勤人数範囲が表示されている", hRange2.includes('名') && !hRange2.includes('-'));
+                                assert("4/29期間: 土日祝平均が表示されている", hAvg2.includes('名') && !hAvg2.includes('-'));
+
+                                document.getElementById('test-results').textContent = JSON.stringify(results, null, 2);
+                            } catch (e2) {
+                                results.push({ desc: "Error in 4/29 check: " + e2.message, pass: false });
+                                document.getElementById('test-results').textContent = JSON.stringify(results, null, 2);
+                            }
+                        }, 500);
+
+                    } catch (e1) {
+                        results.push({ desc: "Error in 4/1 check: " + e1.message, pass: false });
+                        document.getElementById('test-results').textContent = JSON.stringify(results, null, 2);
+                    }
+                }, 500);
+
+            } catch (err) {
+                results.push({ desc: "Execution error: " + err.message, pass: false });
+                document.getElementById('test-results').textContent = JSON.stringify(results, null, 2);
+            }
+        });
+    </script>
+</body>
+</html>

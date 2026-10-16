@@ -1,0 +1,117 @@
+<!DOCTYPE html>
+<html>
+<head><meta charset="utf-8"></head>
+<body>
+<iframe id="appFrame" src="index.html" style="width:1200px; height:800px;"></iframe>
+<script>
+window.onload = () => {
+    const frame = document.getElementById("appFrame");
+    frame.onload = () => {
+        try {
+            const doc = frame.contentDocument || frame.contentWindow.document;
+            const win = frame.contentWindow;
+
+            const results = {};
+
+            // 1. Tab labels
+            const tabs = Array.from(doc.querySelectorAll('.tab-btn')).map(b => b.textContent.trim());
+            results.tabs = tabs;
+            results.hasKibouTab = tabs.some(t => t.includes('希望入力'));
+            results.hasWorkAreaTab = tabs.some(t => t.includes('修正作業エリア'));
+            results.hasFinalCheckTab = tabs.some(t => t.includes('最終チェック&完成'));
+
+            // 2. Initial state (should have 0 fixed cells, 0 6consec enabled)
+            const fixedCells = doc.querySelectorAll('#inputTableBody .fixed-cell');
+            results.fixedCellsCount = fixedCells.length;
+            const consec6Toggles = Array.from(doc.querySelectorAll('input[data-flag="allow6Consec"]')).filter(i => i.checked);
+            results.consec6EnabledCount = consec6Toggles.length;
+
+            // 3. Modal Force Buttons
+            const forceSolveBtn = doc.getElementById('forceSolveBtn');
+            const forceSpecialBtn = doc.getElementById('forceAssignSpecialBtn');
+            results.hasForceSolveBtn = !!forceSolveBtn;
+            results.hasForceSpecialBtn = !!forceSpecialBtn;
+
+            // 4. Buttons in Stage 2 (outputTab)
+            results.stage2CopyBtn = !!doc.getElementById('copyForExcelBtn');
+            results.stage2ImportBtn = !!doc.getElementById('importModifiedWorkAreaFileInput');
+            results.stage2ValidateBtn = !!doc.getElementById('validateWorkAreaBtn');
+            results.stage2AssignSpecialBtn = !!doc.getElementById('outputAssignSpecialBtn');
+
+            // 5. Buttons in Stage 3 (checkTab)
+            results.stage3CopyBtn = !!doc.getElementById('checkCopyForExcelBtn');
+            results.stage3ImportBtn = !!doc.getElementById('importModifiedScheduleFileInput');
+            results.stage3ValidateBtn = !!doc.getElementById('validateOutputBtn');
+            results.stage3ExportBtn = !!doc.getElementById('checkExportExcelBtn');
+
+            // 6. Holiday Logic test
+            const isJapaneseHoliday = win.isJapaneseHoliday || (win.ShiftScheduler && win.ShiftScheduler.isJapaneseHoliday);
+            if (isJapaneseHoliday) {
+                const showa = isJapaneseHoliday(2026, 4, 29);
+                const furikae = isJapaneseHoliday(2026, 5, 6);
+                const normal = isJapaneseHoliday(2026, 5, 7);
+                results.holidayTest = (showa && furikae && !normal);
+            } else {
+                results.holidayTest = false;
+            }
+
+            // 7. Solver Sandwiched Duty test
+            const ShiftScheduler = win.ShiftScheduler;
+            const SYMBOLS = win.SYMBOLS;
+            if (ShiftScheduler && SYMBOLS) {
+                const numStaff = 50;
+                const staffList = [];
+                for (let i = 1; i <= numStaff; i++) {
+                    staffList.push({
+                        id: i,
+                        name: 'Staff ' + i,
+                        can8: (i <= 9),
+                        noEarly: false,
+                        noLate: false,
+                        noEve: false,
+                        canSched: (i <= 8),
+                        isRole: (i <= 6),
+                        isFullTime: (i <= 10),
+                        allow6Consec: false,
+                        prevDays: ['', '', '', '', ''],
+                        days: new Array(28).fill('')
+                    });
+                }
+                const scheduler = new ShiftScheduler(staffList, { standardHolidays: 8.0 });
+                const baseRes = scheduler.solveBaseSchedule();
+                const specRes = scheduler.assignSpecialDutiesToGrid();
+
+                let violations = 0;
+                const restricted = [SYMBOLS.EARLY, SYMBOLS.LATE, SYMBOLS.EVE, SYMBOLS.NO_ALLOW_EARLY, SYMBOLS.NO_ALLOW_LATE, SYMBOLS.NO_ALLOW_EVE];
+                for (let s = 0; s < numStaff; s++) {
+                    for (let d = 1; d < 27; d++) {
+                        const sym = scheduler.grid[s][d].symbol;
+                        if (restricted.includes(sym)) {
+                            const pOff = (scheduler.grid[s][d-1].symbol === '休' || scheduler.grid[s][d-1].symbol === '有');
+                            const nOff = (scheduler.grid[s][d+1].symbol === '休' || scheduler.grid[s][d+1].symbol === '有');
+                            if (pOff && nOff) violations++;
+                        }
+                    }
+                }
+                results.sandwichedViolations = violations;
+                results.solverSuccess = specRes.success;
+            }
+
+            fetch("http://localhost:8096/result", {
+                method: "POST",
+                headers: {"Content-Type": "application/json"},
+                body: JSON.stringify({ success: true, results })
+            });
+
+        } catch (e) {
+            fetch("http://localhost:8096/result", {
+                method: "POST",
+                headers: {"Content-Type": "application/json"},
+                body: JSON.stringify({ success: false, error: e.message, stack: e.stack })
+            });
+        }
+    };
+};
+</script>
+</body>
+</html>

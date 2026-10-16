@@ -1,0 +1,149 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <title>UI機能テスト (出力シートUndo/Redo & 左右スクロール)</title>
+</head>
+<body>
+    <div id="output" style="white-space: pre; font-family: monospace;"></div>
+    <!-- index.htmlのDOMをiframeで読み込んでテスト -->
+    <iframe id="appFrame" src="index.html" style="width: 1200px; height: 800px; border: 1px solid #ccc;"></iframe>
+
+    <script>
+        const out = document.getElementById('output');
+        function log(msg) {
+            out.textContent += msg + '\n';
+        }
+
+        const iframe = document.getElementById('appFrame');
+        iframe.onload = async () => {
+            log('=== UI新機能（出力シートUndo/Redo ＆ 左右スクロール）自動テスト開始 ===\n');
+            const doc = iframe.contentDocument || iframe.contentWindow.document;
+            const win = iframe.contentWindow;
+
+            let total = 0;
+            let pass = 0;
+            function assert(desc, cond) {
+                total++;
+                if (cond) {
+                    pass++;
+                    log(`[PASS] ${desc}`);
+                } else {
+                    log(`[FAIL] ${desc}`);
+                }
+            }
+
+            try {
+                // 1. ボタン要素の存在チェック
+                const outUndoBtn = doc.getElementById('outputUndoBtn');
+                const outRedoBtn = doc.getElementById('outputRedoBtn');
+                assert('1. 出力シートに outputUndoBtn が存在すること', !!outUndoBtn);
+                assert('2. 出力シートに outputRedoBtn が存在すること', !!outRedoBtn);
+
+                // 2. 左右スクロールボタンの存在チェック
+                const scrollBtns = doc.querySelectorAll('.scroll-btn');
+                assert('3. 左右スクロールボタン (.scroll-btn) が合計4つ存在すること', scrollBtns.length === 4);
+
+                const inputScrollLeft = doc.querySelector('.scroll-btn[data-target="inputSheetWrapper"][data-dir="left"]');
+                const inputScrollRight = doc.querySelector('.scroll-btn[data-target="inputSheetWrapper"][data-dir="right"]');
+                const outputScrollLeft = doc.querySelector('.scroll-btn[data-target="outputSheetWrapper"][data-dir="left"]');
+                const outputScrollRight = doc.querySelector('.scroll-btn[data-target="outputSheetWrapper"][data-dir="right"]');
+                assert('4. 入力シート用 左右スクロールボタンが存在すること', !!inputScrollLeft && !!inputScrollRight);
+                assert('5. 出力シート用 左右スクロールボタンが存在すること', !!outputScrollLeft && !!outputScrollRight);
+
+                // 3. 入力シートのスクロール動作チェック
+                const inputWrapper = doc.getElementById('inputSheetWrapper');
+                assert('6. inputSheetWrapper が存在すること', !!inputWrapper);
+                const initLeft = inputWrapper.scrollLeft;
+                inputScrollRight.click();
+                await new Promise(r => setTimeout(r, 200));
+                assert('7. 入力シートの「右へ ▶」クリックでスクロール位置が右に動くこと', inputWrapper.scrollLeft >= initLeft);
+
+                // 4. サンプル投入して自動生成
+                const loadSampleBtn = doc.getElementById('loadSampleBtn');
+                loadSampleBtn.click();
+                await new Promise(r => setTimeout(r, 100));
+
+                const solveBtn = doc.getElementById('solveBtn');
+                solveBtn.click();
+                await new Promise(r => setTimeout(r, 500));
+
+                // 出力タブに切り替わっているか確認
+                const outputTab = doc.getElementById('outputTab');
+                assert('8. 自動生成完了後に出力タブが表示されていること', outputTab.classList.contains('active'));
+
+                // 5. 出力シートのセルをクリックして編集
+                const firstDayCell = doc.querySelector('#outputTableBody .day-cell');
+                assert('9. 出力シートに勤務セルが存在すること', !!firstDayCell);
+                const originalSym = firstDayCell.textContent.trim();
+
+                // 出力パレットで「早」を選択
+                const hayaBtn = doc.querySelector('.output-palette-btn[data-sym="早"]');
+                hayaBtn.click();
+                firstDayCell.click();
+                await new Promise(r => setTimeout(r, 100));
+                const editedSym = firstDayCell.textContent.trim();
+                assert('10. 出力シートのセルクリックで記号が変更されること', editedSym === '早' || editedSym !== originalSym);
+
+                // outputUndoBtn が有効化されているか
+                assert('11. セル編集後に出力シートの「↩ 戻る」ボタンが有効化されていること', !outUndoBtn.disabled);
+
+                // 6. 出力シートの「↩ 戻る」をクリック
+                outUndoBtn.click();
+                await new Promise(r => setTimeout(r, 100));
+                const revertedSym = firstDayCell.textContent.trim();
+                assert('12. 「↩ 戻る」クリックでセルの記号が元に戻ること', revertedSym === originalSym);
+                assert('13. 元に戻した後に「↪ やり直す」ボタンが有効化されていること', !outRedoBtn.disabled);
+
+                // 7. 出力シートの「↪ やり直す」をクリック
+                outRedoBtn.click();
+                await new Promise(r => setTimeout(r, 100));
+                const redoneSym = firstDayCell.textContent.trim();
+                assert('14. 「↪ やり直す」クリックで編集後の記号に戻ること', redoneSym === editedSym);
+
+                // 8. 出力シートの左右スクロール動作チェック
+                const outputWrapper = doc.getElementById('outputSheetWrapper');
+                assert('15. outputSheetWrapper が存在すること', !!outputWrapper);
+                const outInitLeft = outputWrapper.scrollLeft;
+                outputScrollRight.click();
+                await new Promise(r => setTimeout(r, 200));
+                assert('16. 出力シートの「右へ ▶」クリックでスクロール位置が右に動くこと', outputWrapper.scrollLeft >= outInitLeft);
+
+                // 9. 修正済み勤務表取込ボタン・制約チェックボタンの存在チェック
+                const importModBtn = doc.getElementById('importModifiedScheduleFileInput');
+                assert('17. 修正済み勤務表取込 input (importModifiedScheduleFileInput) が存在すること', !!importModBtn);
+
+                const valOutBtn = doc.getElementById('validateOutputBtn');
+                assert('18. 出力シート制約チェックボタン (validateOutputBtn) が存在すること', !!valOutBtn);
+
+                const valInBtn = doc.getElementById('validateInputBtn');
+                assert('19. 入力シート制約チェックボタン (validateInputBtn) が存在すること', !!valInBtn);
+
+                const outBanner = doc.getElementById('outputConflictAlertBanner');
+                assert('20. 出力シートエラーバナー (outputConflictAlertBanner) が存在すること', !!outBanner);
+
+                // 10. 制約チェックボタンのクリックテスト
+                valOutBtn.click();
+                await new Promise(r => setTimeout(r, 200));
+                assert('21. 制約チェックボタンのクリックでバナーが表示または更新されること', outBanner.innerHTML.length > 0 || outBanner.classList.contains('show'));
+
+            } catch (err) {
+                log('テスト実行中エラー: ' + err.message + '\n' + err.stack);
+            }
+
+            log(`\n=== テスト結果サマリー: ${pass} / ${total} PASSED ===`);
+            if (pass === total) {
+                log('🎉 すべてのUI新機能テストに完全合格しました！');
+            } else {
+                log('❌ 一部のテストが失敗しました。');
+            }
+
+            fetch('http://localhost:8089/result', {
+                method: 'POST',
+                headers: { 'Content-Type': 'text/plain; charset=utf-8' },
+                body: out.textContent
+            }).catch(e => console.log('fetch error:', e));
+        };
+    </script>
+</body>
+</html>

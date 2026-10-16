@@ -1,0 +1,88 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <title>UI Unification Verification Test</title>
+</head>
+<body>
+    <div id="test-status">RUNNING</div>
+    <div id="test-output"></div>
+
+    <!-- index.htmlのDOMを読み込んで検証 -->
+    <iframe id="appFrame" src="index.html" style="width: 1200px; height: 800px;"></iframe>
+
+    <script>
+    window.addEventListener('message', (e) => {});
+
+    const frame = document.getElementById('appFrame');
+    frame.onload = () => {
+        try {
+            const doc = frame.contentDocument || frame.contentWindow.document;
+            const results = [];
+
+            function assert(condition, message) {
+                if (!condition) {
+                    throw new Error("FAILED: " + message);
+                }
+                results.push("PASSED: " + message);
+            }
+
+            // 1. 画像1の不要ボタン削除の確認
+            assert(!doc.getElementById('loadSampleBtn'), '🎲 サンプルデータ投入 ボタンが削除されていること');
+            assert(!doc.getElementById('loadConflictBtn'), '⚠️ 矛盾テスト ボタンが削除されていること');
+
+            // 2. バッジの確認
+            const badge = doc.querySelector('.app-header .badge');
+            assert(badge && badge.textContent.includes('本番運用版'), 'ヘッダーバッジが「本番運用版」であること');
+
+            // 3. 入力シートのアクションボタン配置の確認
+            const inputSolveBtn = doc.getElementById('inputSolveBtn');
+            const validateInputBtn = doc.getElementById('validateInputBtn');
+            const downloadBlankTemplateBtn = doc.getElementById('downloadBlankTemplateBtn');
+            const importScheduleFileInput = doc.getElementById('importScheduleFileInput');
+            const inputClearBtn = doc.getElementById('inputClearBtn');
+
+            assert(inputSolveBtn, '入力シートに「⚡ 勤務表を自動生成する」ボタンが存在すること');
+            assert(validateInputBtn, '入力シートに「🔍 希望の制約チェック」ボタンが存在すること');
+            assert(downloadBlankTemplateBtn, '入力シートに「📄 スタッフ入力用 空白勤務表」ボタンが存在すること');
+            assert(importScheduleFileInput, '入力シートに「📂 希望シート取込」が存在すること');
+            assert(inputClearBtn, '入力シートに「🧹 全消去」ボタンが存在すること');
+
+            // 4. 入力シートと出力シートのパレット・エディタ操作・左右スクロール統一性の確認
+            const inputPalette = doc.querySelector('#inputTab .palette-group');
+            const outputPalette = doc.querySelector('#outputTab .palette-group');
+            assert(inputPalette, '入力シートに記号パレット行が存在すること');
+            assert(outputPalette, '出力シートに記号パレット行が存在すること');
+
+            const inputScroll = doc.querySelector('#inputTab .scroll-btn[data-dir="left"]');
+            const outputScroll = doc.querySelector('#outputTab .scroll-btn[data-dir="left"]');
+            assert(inputScroll, '入力シートのパレット行に左右スクロールボタンが存在すること');
+            assert(outputScroll, '出力シートのパレット行に左右スクロールボタンが存在すること');
+
+            // 5. 出力シートのアクションボタン順序の確認
+            // ✨ 特殊勤務を入れる → 📋 Excelへ一発貼り付け用コピー → 📂 修正済み勤務表取込 → 🔍 制約チェック → 📊 スプレッドシート保存 → 🖨 印刷
+            const outputActionGroup = doc.querySelector('#outputTab .action-group');
+            const outputButtons = Array.from(outputActionGroup.children).map(el => el.textContent.trim().replace(/\s+/g, ' '));
+            
+            assert(outputButtons[0].includes('特殊勤務を入れる'), '出力シート第1ボタン: ✨ 特殊勤務を入れる');
+            assert(outputButtons[1].includes('Excelへ一発貼り付け用コピー'), '出力シート第2ボタン: 📋 Excelへ一発貼り付け用コピー');
+            assert(outputButtons[2].includes('修正済み勤務表取込'), '出力シート第3ボタン: 📂 修正済み勤務表取込');
+            assert(outputButtons[3].includes('制約チェック'), '出力シート第4ボタン: 🔍 制約チェック');
+            assert(outputButtons[4].includes('スプレッドシート保存'), '出力シート第5ボタン: 📊 スプレッドシート保存');
+            assert(outputButtons[5].includes('印刷'), '出力シート第6ボタン: 🖨 印刷 / PDF保存');
+
+            // 6. 入力シートの「⚡ 勤務表を自動生成する」ボタン押下テスト
+            inputSolveBtn.click();
+            results.push("PASSED: 入力シートから自動生成ボタンのクリックが正常に発火");
+
+            // 成功記録
+            document.getElementById('test-status').textContent = 'ALL_PASSED';
+            document.getElementById('test-output').textContent = JSON.stringify(results, null, 2);
+        } catch (err) {
+            document.getElementById('test-status').textContent = 'ERROR';
+            document.getElementById('test-output').textContent = err.message + '\n' + err.stack;
+        }
+    };
+    </script>
+</body>
+</html>

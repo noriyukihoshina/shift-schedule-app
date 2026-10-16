@@ -1,0 +1,184 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <title>全新機能インライン検証テスト</title>
+</head>
+<body>
+    <div id="test-results" style="font-family: monospace; padding: 20px;"></div>
+
+    <!-- index.htmlと同一の主要DOM構造 -->
+    <div style="display:none;">
+        <input type="date" id="termStartDate" value="2026-04-01">
+        <span id="termEndDateDisplay"></span>
+        <span id="termTitleBadge"></span>
+        <span id="outputTitleDisplay"></span>
+        <span id="checkTitleDisplay"></span>
+        <select id="standardHolidaySelect"><option value="8.0" selected>8.0</option></select>
+        <select id="savedTermsSelect"></select>
+        <span id="autoSaveStatusText"></span>
+        <div id="conflictAlertBanner"></div>
+        <div id="outputConflictAlertBanner"></div>
+        <div id="checkConflictAlertBanner"></div>
+
+        <!-- タブボタン -->
+        <button class="tab-btn active" data-tab="inputTab"></button>
+        <button class="tab-btn" data-tab="outputTab"></button>
+        <button class="tab-btn" data-tab="checkTab"></button>
+        <button class="tab-btn" data-tab="statsTab"></button>
+
+        <section id="inputTab" class="tab-panel active">
+            <div class="palette-group">
+                <button class="palette-btn selected" data-sym="休">休</button>
+                <button class="palette-btn" data-sym="有">有</button>
+                <button class="palette-btn" data-sym="○">○</button>
+                <button class="palette-btn palette-btn-protect" data-sym="P">🛡️ P</button>
+                <button class="palette-btn" data-sym="出">出</button>
+            </div>
+            <button id="inputSolveBtn">生成</button>
+            <table class="sheet-table">
+                <thead id="inputTableHead"></thead>
+                <tbody id="inputTableBody"></tbody>
+            </table>
+        </section>
+
+        <section id="outputTab" class="tab-panel">
+            <div class="palette-group">
+                <button class="palette-btn output-palette-btn selected" data-sym="休">休</button>
+                <button class="palette-btn output-palette-btn" data-sym="有">有</button>
+                <button class="palette-btn output-palette-btn" data-sym="○">○</button>
+                <button class="palette-btn output-palette-btn palette-btn-protect" data-sym="P">🛡️ P</button>
+                <button class="palette-btn output-palette-btn" data-sym="出">出</button>
+            </div>
+            <button id="outputAssignSpecialBtn">特殊</button>
+            <table class="sheet-table">
+                <thead id="outputTableHead"></thead>
+                <tbody id="outputTableBody"></tbody>
+                <tfoot id="outputTableFoot"></tfoot>
+            </table>
+        </section>
+
+        <section id="checkTab" class="tab-panel">
+            <div class="palette-group">
+                <button class="palette-btn check-palette-btn selected" data-sym="休">休</button>
+                <button class="palette-btn check-palette-btn" data-sym="有">有</button>
+                <button class="palette-btn check-palette-btn" data-sym="○">○</button>
+                <button class="palette-btn check-palette-btn palette-btn-protect" data-sym="P">🛡️ P</button>
+                <button class="palette-btn check-palette-btn" data-sym="出">出</button>
+            </div>
+            <table class="sheet-table">
+                <thead id="checkTableHead"></thead>
+                <tbody id="checkTableBody"></tbody>
+                <tfoot id="checkTableFoot"></tfoot>
+            </table>
+        </section>
+
+        <section id="statsTab" class="tab-panel">
+            <span id="statWeekdayBadge"></span>
+            <span id="statWeekdayWorkRange"></span>
+            <span id="statWeekdayAvgWork"></span>
+            <span id="statHolidayBadge"></span>
+            <span id="statHolidayWorkRange"></span>
+            <span id="statHolidayAvgWork"></span>
+            <span id="statSunHolSubInfo"></span>
+            <span id="statTotalPaidDays"></span>
+            <span id="statPaidStaffCount"></span>
+            <span id="statWorkRange"></span>
+            <span id="statAvgWork"></span>
+            <span id="statSpecialCounts"></span>
+            <div id="dailyWorkChart"></div>
+        </section>
+    </div>
+
+    <script src="solver.js"></script>
+    <script src="app.js"></script>
+    <script>
+        const results = [];
+        function assert(desc, condition) {
+            results.push({ desc, pass: !!condition });
+        }
+
+        window.addEventListener('load', async () => {
+            try {
+                // TEST 1: Pボタン確認
+                const inputP = document.querySelector('#inputTab .palette-btn-protect');
+                const outputP = document.querySelector('#outputTab .palette-btn-protect');
+                const checkP = document.querySelector('#checkTab .palette-btn-protect');
+                assert('入力パレットにPボタンが存在する', inputP && inputP.dataset.sym === 'P');
+                assert('修正パレットにPボタンが存在する', outputP && outputP.dataset.sym === 'P');
+                assert('チェックパレットにPボタンが存在する', checkP && checkP.dataset.sym === 'P');
+
+                // TEST 2: 日別オフセットUI確認
+                const offsetCtrls = document.querySelectorAll('#inputTableHead .day-offset-ctrl');
+                assert('全28日分の日別オフセットUIが存在する', offsetCtrls.length === 28);
+
+                // TEST 3: オフセットボタンクリック操作
+                const plusBtn = offsetCtrls[2].querySelector('.offset-plus');
+                plusBtn.click();
+                plusBtn.click(); // +2に設定
+                const valSpan = offsetCtrls[2].querySelector('.day-offset-val');
+                assert('オフセット+ボタンで+2に増員設定できる', valSpan.textContent.trim() === '+2');
+
+                // 2日目は-1に設定
+                const minusBtn = offsetCtrls[5].querySelector('.offset-minus');
+                minusBtn.click();
+                const valSpan2 = offsetCtrls[5].querySelector('.day-offset-val');
+                assert('オフセット-ボタンで-1に減員設定できる', valSpan2.textContent.trim() === '-1');
+
+                // TEST 4: 自動生成の実行
+                const solveBtn = document.getElementById('inputSolveBtn');
+                solveBtn.click();
+
+                // 非同期完了待ち
+                await new Promise(r => setTimeout(r, 600));
+
+                // TEST 5: フッター集計行確認
+                const footRows = Array.from(document.querySelectorAll('#outputTableFoot tr'));
+                const footTexts = footRows.map(r => r.textContent);
+
+                assert('出勤人数合計行が存在する', footTexts.some(t => t.includes('出勤人数合計')));
+                assert('PT A 出勤行が存在する', footTexts.some(t => t.includes('PT A 出勤')));
+                assert('PT B 出勤行が存在する', footTexts.some(t => t.includes('PT B 出勤')));
+                assert('OT A 出勤行が存在する', footTexts.some(t => t.includes('OT A 出勤')));
+                assert('OT B 出勤行が存在する', footTexts.some(t => t.includes('OT B 出勤')));
+
+                // TEST 6: 出勤人数合計に実質人数が表示されているか（+2を設定した3日目=index 2）
+                const totalWorkCellDay3 = footRows[0].querySelectorAll('td')[2];
+                assert('オフセット設定日に実質人数が併記されている', totalWorkCellDay3.textContent.includes('実質') && totalWorkCellDay3.textContent.includes('+2'));
+
+                // TEST 7: 「P」ボタン選択時のプロテクトトグル
+                outputP.click();
+                const cell = document.querySelector('#outputTableBody .day-cell[data-s="0"][data-d="0"]');
+                const initFixed = cell.classList.contains('fixed-cell');
+                cell.click();
+                const afterFixed = cell.classList.contains('fixed-cell');
+                assert('Pボタンでセルの固定保護（isFixed/赤字）がトグルできる', initFixed !== afterFixed);
+
+                // 結果出力
+                const container = document.getElementById('test-results');
+                const allPass = results.every(r => r.pass);
+                let html = `<h2>${allPass ? '✅ 全テスト合格 (ALL PASS)' : '❌ 一部テスト失敗'}</h2><ul>`;
+                results.forEach(r => {
+                    html += `<li style="color:${r.pass ? 'green' : 'red'};">${r.pass ? 'PASS' : 'FAIL'}: ${r.desc}</li>`;
+                });
+                html += '</ul>';
+                container.innerHTML = html;
+
+                await fetch('/done', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ allPass, results })
+                });
+
+            } catch (err) {
+                document.getElementById('test-results').innerHTML = `<h2 style="color:red;">❌ 例外エラー: ${err.message}</h2>`;
+                await fetch('/done', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ allPass: false, error: err.message, stack: err.stack })
+                });
+            }
+        });
+    </script>
+</body>
+</html>

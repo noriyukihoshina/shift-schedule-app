@@ -1,0 +1,147 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <title>3 Stages & Rules Verification Test</title>
+</head>
+<body>
+    <div id="test-status">RUNNING</div>
+    <div id="test-output"></div>
+
+    <iframe id="appFrame" src="index.html" style="width: 1200px; height: 800px;"></iframe>
+
+    <script>
+    const frame = document.getElementById('appFrame');
+    frame.onload = () => {
+        try {
+            const doc = frame.contentDocument || frame.contentWindow.document;
+            const win = frame.contentWindow;
+            const results = [];
+
+            function assert(condition, message) {
+                if (!condition) {
+                    throw new Error("FAILED: " + message);
+                }
+                results.push("PASSED: " + message);
+            }
+
+            // 1. タブ名称の確認（希望入力 / 修正作業エリア / 最終チェック&完成）
+            const tabs = Array.from(doc.querySelectorAll('.tab-btn')).map(b => b.textContent.trim());
+            assert(tabs[0].includes('希望入力'), 'タブ1が「希望入力」であること (実際: ' + tabs[0] + ')');
+            assert(tabs[1].includes('修正作業エリア'), 'タブ2が「修正作業エリア」であること (実際: ' + tabs[1] + ')');
+            assert(tabs[2].includes('最終チェック&完成'), 'タブ3が「最終チェック&完成」であること (実際: ' + tabs[2] + ')');
+
+            // 2. 初期状態の確認（6勤可は全OFF、事前希望はすべて空欄）
+            const fixedCells = doc.querySelectorAll('#inputTableBody .fixed-cell');
+            assert(fixedCells.length === 0, '初期画面の事前入力枠（赤字セル）が0件であること (実際: ' + fixedCells.length + '件)');
+
+            const consec6Checked = Array.from(doc.querySelectorAll('input[data-flag="allow6Consec"]')).filter(i => i.checked);
+            assert(consec6Checked.length === 0, '全スタッフの「6勤可」ボタンがデフォルトOFFであること (ONの数: ' + consec6Checked.length + ')');
+
+            // 3. 祝日判定ロジックの確認
+            const isJapaneseHoliday = win.isJapaneseHoliday;
+            assert(typeof isJapaneseHoliday === 'function', 'isJapaneseHoliday 関数が存在すること');
+            assert(isJapaneseHoliday(2026, 4, 29), '2026年4月29日（昭和の日）が祝日判定されること');
+            assert(isJapaneseHoliday(2026, 5, 3), '2026年5月3日（憲法記念日）が祝日判定されること');
+            assert(isJapaneseHoliday(2026, 5, 4), '2026年5月4日（みどりの日）が祝日判定されること');
+            assert(isJapaneseHoliday(2026, 5, 5), '2026年5月5日（こどもの日）が祝日判定されること');
+            assert(isJapaneseHoliday(2026, 5, 6), '2026年5月6日（振替休日）が祝日判定されること');
+            assert(!isJapaneseHoliday(2026, 5, 7), '2026年5月7日（平日）は祝日ではないこと');
+
+            // 祝日ヘッダーの赤字表示確認（初期ターム 4/1〜4/28。4/29を開始日に設定してテスト）
+            const termInput = doc.getElementById('termStartDate');
+            termInput.value = '2026-04-20';
+            termInput.dispatchEvent(new Event('change'));
+            // 4/29 (10日目) のヘッダーセル
+            const showaTh = doc.querySelector('#inputTableHead th[title*="4/29"]');
+            assert(showaTh && showaTh.classList.contains('header-sun'), '祝日（4/29）のヘッダーに header-sun（赤字）が付与されていること');
+
+            // 4. ステージ1（希望入力）ボタン & モーダル内「無視して自動生成」ボタン
+            assert(doc.getElementById('inputSolveBtn'), '希望入力に「⚡ 勤務表を自動生成する」ボタンが存在すること');
+            assert(doc.getElementById('validateInputBtn'), '希望入力に「🔍 希望の制約チェック」ボタンが存在すること');
+            assert(doc.getElementById('downloadBlankTemplateBtn'), '希望入力に「📄 スタッフ入力用 空白勤務表」ボタンが存在すること');
+            assert(doc.getElementById('importScheduleFileInput'), '希望入力に「📂 希望シート取込」が存在すること');
+            assert(doc.getElementById('forceSolveBtn'), 'エラーモーダルに「⚡ 無視して自動生成する」ボタンが存在すること');
+
+            // 5. ステージ2（修正作業エリア）ボタン & モーダル内「無視して特殊勤務を入れる」ボタン
+            assert(doc.getElementById('copyForExcelBtn'), '修正作業エリアに「📋 Excelへ一発貼り付け用コピー」が存在すること');
+            assert(doc.getElementById('importModifiedWorkAreaFileInput'), '修正作業エリアに「📂 修正済みシート取り込み」が存在すること');
+            assert(doc.getElementById('validateWorkAreaBtn'), '修正作業エリアに「🔍 チェック」が存在すること');
+            assert(doc.getElementById('outputAssignSpecialBtn'), '修正作業エリアに「✨ 特殊勤務を入れる」が存在すること');
+            assert(doc.getElementById('forceAssignSpecialBtn'), 'エラーモーダルに「✨ 無視して特殊勤務を入れる」ボタンが存在すること');
+
+            // 6. ステージ3（最終チェック&完成）ボタン
+            assert(doc.getElementById('checkCopyForExcelBtn'), '最終チェック&完成に「📋 Excelへ一発貼り付け用コピー」が存在すること');
+            assert(doc.getElementById('importModifiedScheduleFileInput'), '最終チェック&完成に「📂 修正済みシート取り込み」が存在すること');
+            assert(doc.getElementById('validateOutputBtn'), '最終チェック&完成に「🔍 チェック」が存在すること');
+            assert(doc.getElementById('checkExportExcelBtn'), '最終チェック&完成に「📊 スプレッドシート保存」が存在すること');
+
+            // 7. 制約チェックの切り替え検証（ステージ2では特殊勤務未配置はエラー外、ステージ3ではエラー）
+            const ShiftScheduler = win.ShiftScheduler;
+            const validateScheduleGrid = win.validateScheduleGrid;
+            const SYMBOLS = win.SYMBOLS;
+
+            const dummyStaffList = [];
+            for (let i = 1; i <= 50; i++) {
+                dummyStaffList.push({
+                    id: i,
+                    name: 'スタッフ ' + i,
+                    can8: (i <= 9),
+                    noEarly: false,
+                    noLate: false,
+                    noEve: false,
+                    canSched: (i <= 8),
+                    isRole: (i <= 6),
+                    isFullTime: (i <= 10),
+                    allow6Consec: false,
+                    prevDays: ['', '', '', '', ''],
+                    days: new Array(28).fill('')
+                });
+            }
+
+            const scheduler = new ShiftScheduler(dummyStaffList, { standardHolidays: 8.0 });
+            scheduler.solveBaseSchedule();
+
+            // ステージ2検証（isFinal: false）: 特殊勤務の不足はエラーにならない
+            const stage2Val = validateScheduleGrid(scheduler.grid, dummyStaffList, { standardHolidays: 8.0, isFinal: false });
+            const stage2HasSpecialErrors = stage2Val.errors.some(e => e.includes('早番') || e.includes('遅番') || e.includes('イブニング') || e.includes('8時開始'));
+            assert(!stage2HasSpecialErrors, 'ステージ2のエラーチェックでは特殊勤務の未配置がエラーにならないこと');
+
+            // ステージ3検証（isFinal: true）: 特殊勤務の不足がエラーになる
+            const stage3Val = validateScheduleGrid(scheduler.grid, dummyStaffList, { standardHolidays: 8.0, isFinal: true });
+            const stage3HasSpecialErrors = stage3Val.errors.some(e => e.includes('早番') || e.includes('遅番') || e.includes('イブニング') || e.includes('8時開始'));
+            assert(stage3HasSpecialErrors, 'ステージ3のエラーチェックでは特殊勤務の未配置・不足がエラーとして検出されること');
+
+            // 8. ソルバーによる単発挟まれ勤務の特殊勤務除外検証
+            const specRes = scheduler.assignSpecialDutiesToGrid();
+            assert(specRes.success, '特殊勤務の自動割当が成功すること');
+
+            let sandwichedViolations = 0;
+            const restricted = [SYMBOLS.EARLY, SYMBOLS.LATE, SYMBOLS.EVE, SYMBOLS.NO_ALLOW_EARLY, SYMBOLS.NO_ALLOW_LATE, SYMBOLS.NO_ALLOW_EVE];
+            for (let s = 0; s < 50; s++) {
+                for (let d = 1; d < 27; d++) {
+                    const sym = scheduler.grid[s][d].symbol;
+                    if (restricted.includes(sym)) {
+                        const pSym = scheduler.grid[s][d - 1].symbol;
+                        const nSym = scheduler.grid[s][d + 1].symbol;
+                        const pOff = (pSym === '休' || pSym === '有' || pSym.startsWith('上') || pSym.startsWith('下'));
+                        const nOff = (nSym === '休' || nSym === '有' || nSym.startsWith('上') || nSym.startsWith('下'));
+                        if (pOff && nOff) {
+                            sandwichedViolations++;
+                        }
+                    }
+                }
+            }
+            assert(sandwichedViolations === 0, '公休等に挟まれた1日のみ勤務（単発勤務）に特殊勤務（早・遅・E）が一切配置されないこと (違反: ' + sandwichedViolations + '件)');
+
+            document.getElementById('test-status').textContent = 'ALL_PASSED';
+            document.getElementById('test-output').innerHTML = results.map(r => '<div>✅ ' + r + '</div>').join('');
+
+        } catch (err) {
+            document.getElementById('test-status').textContent = 'FAILED';
+            document.getElementById('test-output').innerHTML = '<div style="color:red;">❌ ' + err.message + '</div>';
+        }
+    };
+    </script>
+</body>
+</html>

@@ -1,0 +1,119 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <title>Previous Term Sync Test</title>
+</head>
+<body>
+    <div id="testStatus">TEST_RUNNING</div>
+    <div id="testLogs"></div>
+
+    <iframe id="mainFrame" src="index.html" style="width: 1200px; height: 900px;"></iframe>
+
+    <script>
+        const logs = [];
+        function log(msg) {
+            logs.push(msg);
+            document.getElementById('testLogs').innerText = logs.join('\n');
+            console.log(msg);
+        }
+
+        window.addEventListener('load', async () => {
+            const frame = document.getElementById('mainFrame');
+            await new Promise(r => {
+                if (frame.contentDocument && frame.contentDocument.readyState === 'complete') r();
+                else frame.onload = r;
+            });
+            await new Promise(r => setTimeout(r, 800));
+
+            const win = frame.contentWindow;
+            const doc = frame.contentDocument;
+
+            try {
+                log('=== STEP 1: 4/1～4/28 タームで勤務表を作成・保存 ===');
+                const dateInput = doc.getElementById('termStartDate');
+                dateInput.value = '2026-04-01';
+                dateInput.dispatchEvent(new win.Event('change'));
+                await new Promise(r => setTimeout(r, 400));
+
+                // スタッフ1(idx 0)の当ターム希望を入力
+                // 24日目(idx 23)に「早」、25日目(idx 24)に「○」、26日目(idx 25)に「休」、27日目(idx 26)に「休」、28日目(idx 27)に「8時」
+                const symbols = ['早', '○', '休', '休', '8時'];
+                for (let i = 0; i < 5; i++) {
+                    const dayIdx = 23 + i;
+                    // パレットから選択
+                    const pBtn = doc.querySelector(`#inputTab .palette-btn[data-sym="${symbols[i]}"]`);
+                    if (pBtn) pBtn.click();
+                    const cell = doc.querySelector(`#inputTableBody td.day-cell[data-s="0"][data-d="${dayIdx}"]`);
+                    if (cell) cell.click();
+                }
+
+                // 自動生成を実行して出力勤務表（outputGrid）を確定
+                const solveBtn = doc.getElementById('inputSolveBtn');
+                solveBtn.click();
+                await new Promise(r => setTimeout(r, 800));
+
+                log('4/1～4/28 の勤務表自動生成完了。直前5日の記号: ' + symbols.join(', '));
+
+                // 再度希望入力タブに戻る
+                const inputTabBtn = doc.querySelector('.tab-btn[data-tab="inputTab"]');
+                inputTabBtn.click();
+                await new Promise(r => setTimeout(r, 300));
+
+                log('=== STEP 2: 次の期間（4/29～5/26）を新規開始 ===');
+                dateInput.value = '2026-04-29';
+                dateInput.dispatchEvent(new win.Event('change'));
+                await new Promise(r => setTimeout(r, 600));
+
+                log('4/29～5/26 の新規期間を開始');
+
+                // スタッフ1(idx 0)の「前ターム最終5日間実績（p=0〜4）」を確認！
+                const prevVals = [];
+                for (let p = 0; p < 5; p++) {
+                    const prevCell = doc.querySelector(`#inputTableBody td.prev-col-cell[data-s="0"][data-p="${p}"]`);
+                    prevVals.push(prevCell ? prevCell.textContent.trim() : '');
+                }
+
+                log('スタッフ1の前ターム最終5日実績（自動取得値）: ' + JSON.stringify(prevVals));
+
+                // 24日目〜28日目の記号 ['早', '○', '休', '休', '8時'] が自動で入っているか！
+                for (let i = 0; i < 5; i++) {
+                    if (prevVals[i] !== symbols[i]) {
+                        throw new Error(`前ターム実績の自動入力不一致: p=${i} 期待=${symbols[i]}, 実際=${prevVals[i]}`);
+                    }
+                }
+                log('✓ STEP 2 PASS: 4/29新規開始時に、4/1の最終5日間実績が自動入力されました！');
+
+                log('=== STEP 3: 「🔗 前ターム実績を自動取込」ボタンの動作検証 ===');
+                // 前実績セルを一旦手動で消去してみる
+                const clearBtn = doc.querySelector('#inputTab .palette-btn[data-sym="CLEAR"]');
+                if (clearBtn) clearBtn.click();
+                const cellP0 = doc.querySelector('#inputTableBody td.prev-col-cell[data-s="0"][data-p="0"]');
+                if (cellP0) cellP0.click();
+                log('手動クリア後の p=0: "' + (cellP0 ? cellP0.textContent.trim() : '') + '"');
+
+                // confirmダイアログを自動承認
+                win.confirm = function() { return true; };
+
+                // 「🔗 前ターム実績を自動取込」をクリック
+                const syncBtn = doc.getElementById('syncPrevTermHistoryBtn');
+                syncBtn.click();
+                await new Promise(r => setTimeout(r, 400));
+
+                const reSyncedCellP0 = doc.querySelector('#inputTableBody td.prev-col-cell[data-s="0"][data-p="0"]');
+                log('再同期後の p=0: "' + (reSyncedCellP0 ? reSyncedCellP0.textContent.trim() : '') + '"');
+                if (reSyncedCellP0.textContent.trim() !== symbols[0]) {
+                    throw new Error(`再同期ボタンでの反映失敗: 期待=${symbols[0]}, 実際=${reSyncedCellP0.textContent.trim()}`);
+                }
+                log('✓ STEP 3 PASS: 「🔗 前ターム実績を自動取込」ボタンで最新実績の再取得が成功！');
+
+                log('=== ALL_TESTS_PASSED ===');
+                document.getElementById('testStatus').innerText = 'ALL_TESTS_PASSED';
+            } catch(e) {
+                log('FAILED: ' + e.message);
+                document.getElementById('testStatus').innerText = 'FAILED: ' + e.message;
+            }
+        });
+    </script>
+</body>
+</html>

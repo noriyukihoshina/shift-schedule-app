@@ -1,0 +1,41 @@
+﻿<!DOCTYPE html>
+<html><body>
+<iframe id="prodFrame" src="https://shift-schedule-app-ruby.vercel.app" style="width:1200px; height:800px;"></iframe>
+<script>
+window.onload = () => {
+    const frame = document.getElementById("prodFrame");
+    frame.onload = () => {
+        try {
+            const doc = frame.contentDocument || frame.contentWindow.document;
+            const title = doc.title;
+            const solveBtn = !!doc.getElementById("solveBtn");
+            const importModBtn = !!doc.getElementById("importModifiedScheduleFileInput");
+            const validateOutBtn = !!doc.getElementById("validateOutputBtn");
+            const validateInBtn = !!doc.getElementById("validateInputBtn");
+            const banner = !!doc.getElementById("outputConflictAlertBanner");
+            
+            const res = {
+                title: title,
+                solveBtn: solveBtn,
+                importModBtn: importModBtn,
+                validateOutBtn: validateOutBtn,
+                validateInBtn: validateInBtn,
+                banner: banner,
+                success: true
+            };
+            fetch("http://localhost:8092/result", {
+                method: "POST",
+                headers: {"Content-Type": "application/json"},
+                body: JSON.stringify(res)
+            });
+        } catch(e) {
+            fetch("http://localhost:8092/result", {
+                method: "POST",
+                headers: {"Content-Type": "application/json"},
+                body: JSON.stringify({ error: e.message, success: false })
+            });
+        }
+    };
+};
+</script>
+</body></html>

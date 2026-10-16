@@ -1,0 +1,142 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <title>Workflow & Constraints Verification</title>
+</head>
+<body>
+    <div id="results"></div>
+
+    <script src="solver.js"></script>
+    <script>
+        const results = [];
+        function log(testName, passed, detail = '') {
+            results.push({ testName, passed, detail });
+            console.log((passed ? '✅ [PASS] ' : '❌ [FAIL] ') + testName + (detail ? ': ' + detail : ''));
+        }
+
+        // Test 1: Japanese Holiday logic
+        function testJapaneseHolidays() {
+            // isJapaneseHoliday function test
+            // 2026-04-29 (Showa Day)
+            const showa = isJapaneseHoliday(2026, 4, 29);
+            // 2026-05-03 (Constitution Day - Sunday)
+            const kenpo = isJapaneseHoliday(2026, 5, 3);
+            // 2026-05-04 (Greenery Day)
+            const midori = isJapaneseHoliday(2026, 5, 4);
+            // 2026-05-05 (Children's Day)
+            const kodomo = isJapaneseHoliday(2026, 5, 5);
+            // 2026-05-06 (Substitute Holiday for May 3)
+            const furikae = isJapaneseHoliday(2026, 5, 6);
+            // 2026-05-07 (Weekday - NOT holiday)
+            const normal = isJapaneseHoliday(2026, 5, 7);
+
+            const allOk = showa && kenpo && midori && kodomo && furikae && !normal;
+            log('Test 1: Japanese Holiday Logic', allOk, `4/29:${showa}, 5/3:${kenpo}, 5/6(振替):${furikae}, 5/7(平日):${!normal}`);
+        }
+
+        // Test 2: Sandwiched duty exclusion in special duty assignment
+        function testSandwichedDuty() {
+            const numStaff = 50;
+            const staffList = [];
+            for (let i = 1; i <= numStaff; i++) {
+                staffList.push({
+                    id: i,
+                    name: `Staff ${i}`,
+                    can8: (i <= 9),
+                    noEarly: false,
+                    noLate: false,
+                    noEve: false,
+                    canSched: (i <= 8),
+                    isRole: (i <= 6),
+                    isFullTime: (i <= 10),
+                    allow6Consec: false,
+                    prevDays: ['', '', '', '', ''],
+                    days: new Array(28).fill('')
+                });
+            }
+
+            const scheduler = new ShiftScheduler(staffList, { standardHolidays: 8.0 });
+            // Step 1: Base schedule
+            const baseRes = scheduler.solveBaseSchedule();
+            if (!baseRes.success) {
+                log('Test 2: Base schedule generation', false, baseRes.errors ? baseRes.errors[0] : 'failed');
+                return;
+            }
+
+            // Step 2: Assign special duties
+            const specRes = scheduler.assignSpecialDutiesToGrid();
+            if (!specRes.success) {
+                log('Test 2: Special duties assignment', false, specRes.errors ? specRes.errors[0] : 'failed');
+                return;
+            }
+
+            // Verify no early/late/eve in sandwiched single duty (休 - 特殊 - 休)
+            let sandwichedViolations = 0;
+            const restricted = [SYMBOLS.EARLY, SYMBOLS.LATE, SYMBOLS.EVE, SYMBOLS.NO_ALLOW_EARLY, SYMBOLS.NO_ALLOW_LATE, SYMBOLS.NO_ALLOW_EVE];
+            for (let s = 0; s < numStaff; s++) {
+                for (let d = 1; d < 27; d++) {
+                    const sym = scheduler.grid[s][d].symbol;
+                    if (restricted.includes(sym)) {
+                        const prevIsOff = isHolidaySymbol(scheduler.grid[s][d - 1].symbol);
+                        const nextIsOff = isHolidaySymbol(scheduler.grid[s][d + 1].symbol);
+                        if (prevIsOff && nextIsOff) {
+                            sandwichedViolations++;
+                        }
+                    }
+                }
+            }
+
+            log('Test 2: Sandwiched duty excludes Early/Late/Eve', sandwichedViolations === 0, `Violations: ${sandwichedViolations}`);
+        }
+
+        // Test 3: validateScheduleGrid behavior in Stage 2 (isFinal: false) vs Stage 3 (isFinal: true)
+        function testStageValidation() {
+            const numStaff = 50;
+            const staffList = [];
+            for (let i = 1; i <= numStaff; i++) {
+                staffList.push({
+                    id: i,
+                    name: `Staff ${i}`,
+                    can8: (i <= 9),
+                    noEarly: false,
+                    noLate: false,
+                    noEve: false,
+                    canSched: (i <= 8),
+                    isRole: (i <= 6),
+                    isFullTime: (i <= 10),
+                    allow6Consec: false,
+                    prevDays: ['', '', '', '', ''],
+                    days: new Array(28).fill('')
+                });
+            }
+
+            const scheduler = new ShiftScheduler(staffList, { standardHolidays: 8.0 });
+            scheduler.solveBaseSchedule();
+
+            // At Stage 2 (Base schedule with NO special duties):
+            const stage2Val = validateScheduleGrid(scheduler.grid, staffList, { standardHolidays: 8.0, isFinal: false });
+            // Special duties missing should NOT be reported as error in Stage 2
+            const stage2HasSpecialErrors = stage2Val.errors.some(e => e.includes('早番') || e.includes('遅番') || e.includes('イブニング') || e.includes('8時開始'));
+            
+            // At Stage 3 (Final check without special duties):
+            const stage3Val = validateScheduleGrid(scheduler.grid, staffList, { standardHolidays: 8.0, isFinal: true });
+            // Special duties missing MUST be reported as error in Stage 3
+            const stage3HasSpecialErrors = stage3Val.errors.some(e => e.includes('早番') || e.includes('遅番') || e.includes('イブニング') || e.includes('8時開始'));
+
+            const passed = !stage2HasSpecialErrors && stage3HasSpecialErrors;
+            log('Test 3: Stage 2 ignores missing specials, Stage 3 enforces specials', passed, `Stage 2 errors: ${stage2Val.errors.length}, Stage 3 errors: ${stage3Val.errors.length}`);
+        }
+
+        // Run tests
+        window.addEventListener('DOMContentLoaded', () => {
+            testJapaneseHolidays();
+            testSandwichedDuty();
+            testStageValidation();
+
+            const allPassed = results.every(r => r.passed);
+            document.getElementById('results').innerText = JSON.stringify({ allPassed, results }, null, 2);
+        });
+    </script>
+</body>
+</html>

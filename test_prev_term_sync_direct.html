@@ -1,0 +1,113 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <title>Direct Prev Term Sync Test</title>
+</head>
+<body>
+    <div id="testStatus">TEST_RUNNING</div>
+    <div id="testLogs"></div>
+
+    <input type="date" id="termStartDate" value="2026-04-01">
+    <span id="termEndDateDisplay">2026-04-28</span>
+    <span id="termTitleBadge">4/1～4/28勤務表</span>
+    <span id="outputTitleDisplay"></span>
+    <span id="checkTitleDisplay"></span>
+    <select id="savedTermsSelect"></select>
+    <button id="resetCurrentTermBtn"></button>
+    <select id="standardHolidaySelect"><option value="8.0" selected></option></select>
+    <button id="downloadBlankTemplateBtn"></button>
+    <button id="syncPrevTermHistoryBtn"></button>
+    <button id="inputSolveBtn"></button>
+    <div id="inputTableHead"></div>
+    <table id="inputTable"><tbody id="inputTableBody"></tbody></table>
+    <div id="outputTableHead"></div>
+    <table id="outputTable"><tbody id="outputTableBody"></tbody><tfoot id="outputTableFoot"></tfoot></table>
+    <div id="checkTableHead"></div>
+    <table id="checkTable"><tbody id="checkTableBody"></tbody><tfoot id="checkTableFoot"></tfoot></table>
+
+    <script src="solver.js"></script>
+    <script src="app.js"></script>
+
+    <script>
+        const logs = [];
+        function log(msg) {
+            logs.push(msg);
+            document.getElementById('testLogs').innerText = logs.join('\n');
+            console.log(msg);
+        }
+
+        window.addEventListener('DOMContentLoaded', async () => {
+            await new Promise(r => setTimeout(r, 400));
+
+            try {
+                log('=== STEP 1: 4/1～4/28 タームで事前希望を入力＆自動生成 ===');
+                const dateInput = document.getElementById('termStartDate');
+                dateInput.value = '2026-04-01';
+
+                // スタッフ1(idx 0)の24〜28日目に記号をセット
+                const testSymbols = ['早', '○', '休', '休', '8時'];
+                for (let i = 0; i < 5; i++) {
+                    const dayIdx = 23 + i;
+                    // セルをクリックして設定
+                    const pBtn = document.querySelector(`.palette-btn[data-sym="${testSymbols[i]}"]`);
+                    if (pBtn) pBtn.click();
+                    const cell = document.querySelector(`#inputTableBody td.day-cell[data-s="0"][data-d="${dayIdx}"]`);
+                    if (cell) cell.click();
+                }
+
+                // 基本勤務表自動生成を実行
+                const solveBtn = document.getElementById('inputSolveBtn');
+                solveBtn.click();
+                await new Promise(r => setTimeout(r, 400));
+                log('4/1～4/28 の自動生成完了＆保存');
+
+                log('=== STEP 2: 4/29～5/26 を新規開始 ===');
+                dateInput.value = '2026-04-29';
+                dateInput.dispatchEvent(new Event('change'));
+                await new Promise(r => setTimeout(r, 400));
+
+                const prevVals = [];
+                for (let p = 0; p < 5; p++) {
+                    const cell = document.querySelector(`#inputTableBody td.prev-col-cell[data-s="0"][data-p="${p}"]`);
+                    prevVals.push(cell ? cell.textContent.trim() : '');
+                }
+
+                log('4/29のスタッフ1の前実績（自動入力値）: ' + JSON.stringify(prevVals));
+
+                for (let i = 0; i < 5; i++) {
+                    if (prevVals[i] !== testSymbols[i]) {
+                        throw new Error(`自動連携不一致: p=${i} 期待=${testSymbols[i]}, 実際=${prevVals[i]}`);
+                    }
+                }
+                log('✓ STEP 2 PASS: 4/29開始時に直前4/1の最終5日勤務が自動入力されました！');
+
+                log('=== STEP 3: 「🔗 前ターム実績を自動取込」ボタンの動作確認 ===');
+                // 前実績セルを一旦手動クリア
+                const clearBtn = document.querySelector('.palette-btn[data-sym="CLEAR"]');
+                if (clearBtn) clearBtn.click();
+                const cellP0 = document.querySelector('#inputTableBody td.prev-col-cell[data-s="0"][data-p="0"]');
+                if (cellP0) cellP0.click();
+                log('クリア後の p=0: "' + (cellP0 ? cellP0.textContent.trim() : '') + '"');
+
+                window.confirm = function() { return true; };
+                const syncBtn = document.getElementById('syncPrevTermHistoryBtn');
+                syncBtn.click();
+                await new Promise(r => setTimeout(r, 300));
+
+                const reSynced = document.querySelector('#inputTableBody td.prev-col-cell[data-s="0"][data-p="0"]');
+                log('再同期後の p=0: "' + (reSynced ? reSynced.textContent.trim() : '') + '"');
+                if (reSynced.textContent.trim() !== testSymbols[0]) {
+                    throw new Error(`再同期ボタンでの反映失敗: 期待=${testSymbols[0]}, 実際=${reSynced.textContent.trim()}`);
+                }
+                log('✓ STEP 3 PASS: 「🔗 前ターム実績を自動取込」ボタンで再取得成功！');
+
+                document.getElementById('testStatus').innerText = 'ALL_TESTS_PASSED';
+            } catch(e) {
+                log('FAILED: ' + e.message);
+                document.getElementById('testStatus').innerText = 'FAILED: ' + e.message;
+            }
+        });
+    </script>
+</body>
+</html>

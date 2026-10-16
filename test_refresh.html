@@ -1,0 +1,143 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <title>Test Refresh Logic</title>
+</head>
+<body>
+    <pre id="output"></pre>
+    <script src="solver.js"></script>
+    <script>
+        const logs = [];
+        function log(msg) {
+            logs.push(msg);
+            document.getElementById('output').textContent = logs.join('\n');
+            console.log(msg);
+        }
+
+        try {
+            log('=== 1. テスト開始: getTermRefreshGroups ===');
+            // 6/24〜7/21 のターム
+            const dates = [];
+            for (let i = 0; i < 28; i++) {
+                const d = new Date(2026, 5, 24 + i); // 2026-06-24 から28日間
+                dates.push({
+                    y: d.getFullYear(),
+                    m: d.getMonth() + 1,
+                    year: d.getFullYear(),
+                    month: d.getMonth() + 1,
+                    day: d.getDate(),
+                    weekday: ['日','月','火','水','木','金','土'][d.getDay()],
+                    label: `${d.getMonth() + 1}/${d.getDate()}`,
+                    isSun: d.getDay() === 0,
+                    isSat: d.getDay() === 6,
+                    isHol: false
+                });
+            }
+
+            const groups = getTermRefreshGroups(dates);
+            log(`抽出グループ数: ${groups.length}`);
+            groups.forEach(g => {
+                log(`- グループ: ${g.symbol} (${g.month}月分), ターム内日数: ${g.dayIndices.length}日, 月全日数: ${g.totalMonthDays}日`);
+            });
+
+            if (groups.length !== 2) throw new Error('グループ数が2ではありません');
+            if (groups[0].symbol !== '上1' || groups[0].dayIndices.length !== 7) throw new Error('上1の抽出不正');
+            if (groups[1].symbol !== '上2' || groups[1].dayIndices.length !== 21) throw new Error('上2の抽出不正');
+            log('✅ グループ抽出テスト PASS');
+
+            log('\n=== 2. テスト開始: autoAssignRefreshHolidaysCore ===');
+            const staffList = [];
+            for (let i = 1; i <= 60; i++) {
+                staffList.push({
+                    id: i,
+                    name: `スタッフ ${String(i).padStart(2, '0')}`,
+                    isUnused: (i > 50),
+                    can8: (i <= 9),
+                    canSched: (i <= 8),
+                    isRole: (i <= 6),
+                    isFullTime: (i <= 10),
+                    allow6Consec: false,
+                    days: new Array(28).fill('')
+                });
+            }
+
+            // スタッフ1〜5は過去に「上1」取得済みと設定
+            const pastHistory = {
+                1: new Set(['上1']),
+                2: new Set(['上1']),
+                3: new Set(['上1']),
+                4: new Set(['上1']),
+                5: new Set(['上1'])
+            };
+
+            const result = autoAssignRefreshHolidaysCore(staffList, dates, { obtainedHistory: pastHistory });
+            log(`配分完了メッセージ: ${result.message}`);
+            log(`配分合計人数: ${result.assignedCount}名`);
+            result.groupResults.forEach(gr => {
+                log(`- ${gr.symbol}: 目標 ${gr.targetCount}名, 今回配分 ${gr.assignedNow}名`);
+            });
+
+            // スタッフ1〜5に上1が配分されていないことを検証
+            for (let sId = 1; sId <= 5; sId++) {
+                const st = staffList[sId - 1];
+                for (let d = 0; d < 7; d++) {
+                    if (st.days[d] === '上1') {
+                        throw new Error(`過去取得済みのスタッフ ${sId} に上1が二重配分されました`);
+                    }
+                }
+            }
+            log('✅ 二重取得防止テスト PASS');
+
+            // 1人のスタッフに上1と上2の両方が配分されていないことを検証
+            staffList.forEach(st => {
+                if (st.isUnused) return;
+                const hasSummer1 = st.days.includes('上1');
+                const hasSummer2 = st.days.includes('上2');
+                if (hasSummer1 && hasSummer2) {
+                    throw new Error(`スタッフ ${st.id} に上1と上2が重複配分されました`);
+                }
+            });
+            log('✅ 1人1リフ（ターム重複なし）テスト PASS');
+
+            log('\n=== 3. テスト開始: ShiftScheduler との連携 ===');
+            const scheduler = new ShiftScheduler(staffList, {
+                standardHolidays: 8.0,
+                dates: dates,
+                dayOffsets: new Array(28).fill(0)
+            });
+            const solveRes = scheduler.solveBaseSchedule();
+            log(`基本勤務表生成結果: ${solveRes.success ? '成功' : '失敗'}`);
+            if (!solveRes.success) {
+                log(`エラー: ${solveRes.errors.join(', ')}`);
+                throw new Error('ソルバー生成失敗');
+            }
+
+            // リフ取得者の公休日数とリフ日数の検証
+            let verifiedRefCount = 0;
+            staffList.forEach((st, sIdx) => {
+                if (st.isUnused) return;
+                const sStat = solveRes.stats.staff[sIdx];
+                if (sStat.ref > 0) {
+                    verifiedRefCount++;
+                    // 公休(8.0) + リフ(1.0) = 計9.0日
+                    if (sStat.off !== 8.0) {
+                        throw new Error(`リフ取得スタッフ ${st.name} の公休日数が ${sStat.off} 日です（期待値: 8.0日）`);
+                    }
+                    if (sStat.ref !== 1.0) {
+                        throw new Error(`リフ取得スタッフ ${st.name} のリフ日数が ${sStat.ref} 日です（期待値: 1.0日）`);
+                    }
+                }
+            });
+            log(`検証されたリフ取得スタッフ数: ${verifiedRefCount}名（全員 公休8.0日 + リフ1.0日 = 休日計9.0日 を完全達成）`);
+            log('✅ ソルバー公休枠連動テスト PASS');
+
+            log('\n🎉 すべてのテストに合格しました！');
+            document.title = 'TEST_SUCCESS: All tests passed!';
+        } catch (e) {
+            log(`❌ テストエラー: ${e.message}\n${e.stack}`);
+            document.title = 'TEST_FAIL: ' + e.message;
+        }
+    </script>
+</body>
+</html>

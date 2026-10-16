@@ -1,0 +1,85 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <title>User Reported Bug Test</title>
+</head>
+<body>
+    <div id="testStatus">RUNNING</div>
+    <div id="logs"></div>
+
+    <iframe id="appFrame" src="index.html" style="width: 1200px; height: 800px;"></iframe>
+
+    <script>
+        const logs = [];
+        function log(msg) {
+            logs.push(msg);
+            document.getElementById('logs').innerText = logs.join('\n');
+            console.log(msg);
+        }
+
+        window.addEventListener('load', async () => {
+            const frame = document.getElementById('appFrame');
+            await new Promise(r => {
+                if (frame.contentDocument && frame.contentDocument.readyState === 'complete') r();
+                else frame.onload = r;
+            });
+            await new Promise(r => setTimeout(r, 600));
+
+            const win = frame.contentWindow;
+            const doc = frame.contentDocument;
+
+            try {
+                log('1. 初期状態チェック');
+                const dateInput = doc.getElementById('termStartDate');
+                const endDisplay = doc.getElementById('termEndDateDisplay');
+                const badge = doc.getElementById('termTitleBadge');
+                log('Initial start: ' + dateInput.value + ', end: ' + endDisplay.textContent + ', badge: ' + badge.textContent);
+
+                log('2. 開始日を 2026-04-29 に変更 (changeイベント発火)');
+                dateInput.value = '2026-04-29';
+                dateInput.dispatchEvent(new win.Event('change'));
+                await new Promise(r => setTimeout(r, 500));
+
+                log('After change start: ' + dateInput.value + ', end: ' + endDisplay.textContent + ', badge: ' + badge.textContent);
+
+                // 2026-04-29から28日目は 2026-05-26
+                if (!endDisplay.textContent.includes('2026-05-26')) {
+                    throw new Error('終了日が更新されていません！ endDisplay=' + endDisplay.textContent);
+                }
+                if (!badge.textContent.includes('4/29～5/26')) {
+                    throw new Error('バッジが更新されていません！ badge=' + badge.textContent);
+                }
+                log('✓ 日付変更時の終了日・バッジ更新が正常に動作！');
+
+                log('3. スタッフ入力用空白勤務表ボタンの動作確認');
+                const blankBtn = doc.getElementById('downloadBlankTemplateBtn');
+                if (!blankBtn) throw new Error('downloadBlankTemplateBtn が見つかりません');
+
+                // ダウンロードが発火するか（URL.createObjectURLが呼ばれるか）モック検証
+                let downloadedUrl = null;
+                let downloadedName = null;
+                const origCreateObjectURL = win.URL.createObjectURL;
+                win.URL.createObjectURL = function(blob) {
+                    downloadedUrl = 'blob:ok';
+                    return 'blob:ok';
+                };
+
+                // clickイベントを呼ぶ
+                blankBtn.click();
+                await new Promise(r => setTimeout(r, 300));
+
+                if (!downloadedUrl) {
+                    throw new Error('空白勤務表ボタンをクリックしてもダウンロード処理が呼び出されませんでした！');
+                }
+                log('✓ スタッフ入力用空白勤務表の生成＆ダウンロード処理が正常に発火！');
+
+                document.getElementById('testStatus').innerText = 'ALL_TESTS_PASSED';
+            } catch(e) {
+                log('TEST_FAILED: ' + e.message);
+                document.getElementById('testStatus').innerText = 'TEST_FAILED: ' + e.message;
+            }
+        });
+    </script>
+</body>
+</html>

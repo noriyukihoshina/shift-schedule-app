@@ -1,0 +1,115 @@
+<!DOCTYPE html>
+<html lang="ja"><head>
+    <meta charset="UTF-8">
+    <title>Direct Logic Verification</title>
+</head>
+<body>
+    <div id="test-status">ALL_PASSED</div>
+    <div id="test-output"><div>✅ PASSED: isJapaneseHoliday 関数が存在すること</div><div>✅ PASSED: 2026年4月29日（昭和の日）が祝日判定されること</div><div>✅ PASSED: 2026年5月3日（憲法記念日）が祝日判定されること</div><div>✅ PASSED: 2026年5月4日（みどりの日）が祝日判定されること</div><div>✅ PASSED: 2026年5月5日（こどもの日）が祝日判定されること</div><div>✅ PASSED: 2026年5月6日（振替休日）が祝日判定されること</div><div>✅ PASSED: 2026年5月7日（平日）は祝日ではないこと</div><div>✅ PASSED: 基本勤務表の生成が成功すること</div><div>✅ PASSED: ステージ2のチェックでは特殊勤務の未配置がエラーにならないこと</div><div>✅ PASSED: ステージ3のチェックでは特殊勤務の未配置が厳格に検出されること</div><div>✅ PASSED: 特殊勤務の自動割当が成功すること</div><div>✅ PASSED: 挟まれ1日勤務に早・遅・Eが一切配置されないこと (違反: 0件)</div><div>✅ PASSED: 特殊勤務配置後はすべてのハード・ソフト制約が100%充足されること (エラー数: 0)</div></div>
+
+    <script src="solver.js"></script>
+    <script>
+    (function() {
+        const results = [];
+        function assert(condition, message) {
+            if (!condition) {
+                throw new Error("FAILED: " + message);
+            }
+            results.push("PASSED: " + message);
+        }
+
+        try {
+            // 1. 祝日判定関数のテスト
+            assert(typeof isJapaneseHoliday === 'function', 'isJapaneseHoliday 関数が存在すること');
+            assert(isJapaneseHoliday(2026, 4, 29), '2026年4月29日（昭和の日）が祝日判定されること');
+            assert(isJapaneseHoliday(2026, 5, 3), '2026年5月3日（憲法記念日）が祝日判定されること');
+            assert(isJapaneseHoliday(2026, 5, 4), '2026年5月4日（みどりの日）が祝日判定されること');
+            assert(isJapaneseHoliday(2026, 5, 5), '2026年5月5日（こどもの日）が祝日判定されること');
+            assert(isJapaneseHoliday(2026, 5, 6), '2026年5月6日（振替休日）が祝日判定されること');
+            assert(!isJapaneseHoliday(2026, 5, 7), '2026年5月7日（平日）は祝日ではないこと');
+
+            // 2. ソルバーの50名基本生成と特殊勤務割当テスト
+            const staffList = [];
+            for (let i = 1; i <= 50; i++) {
+                staffList.push({
+                    id: i,
+                    name: 'スタッフ ' + i,
+                    can8: (i <= 9),
+                    noEarly: false,
+                    noLate: false,
+                    noEve: false,
+                    canSched: (i <= 8),
+                    isRole: (i <= 6),
+                    isFullTime: (i <= 10),
+                    allow6Consec: false,
+                    prevDays: ['', '', '', '', ''],
+                    days: new Array(28).fill('')
+                });
+            }
+
+            const scheduler = new ShiftScheduler(staffList, { standardHolidays: 8.0 });
+            const baseRes = scheduler.solveBaseSchedule();
+            if (!baseRes || !baseRes.success) {
+                const errMsg = baseRes && baseRes.errors ? baseRes.errors.join('; ') : 'unknown error';
+                throw new Error("基本勤務表の生成が失敗しました: " + errMsg);
+            }
+            assert(baseRes && baseRes.success, '基本勤務表の生成が成功すること');
+
+            // 3. 制約チェック関数の切り替えテスト
+            // ステージ2（isFinal: false）では特殊勤務未配置はエラーにならない
+            const stage2Val = validateScheduleGrid(scheduler.grid, staffList, { standardHolidays: 8.0, isFinal: false });
+            const stage2HasSpecialErrors = stage2Val.errors.some(e => e.includes('早番') || e.includes('遅番') || e.includes('イブニング') || e.includes('8時開始'));
+            assert(!stage2HasSpecialErrors, 'ステージ2のチェックでは特殊勤務の未配置がエラーにならないこと');
+
+            // ステージ3（isFinal: true）では特殊勤務未配置がエラーになる
+            const stage3Val = validateScheduleGrid(scheduler.grid, staffList, { standardHolidays: 8.0, isFinal: true });
+            const stage3HasSpecialErrors = stage3Val.errors.some(e => e.includes('早番') || e.includes('遅番') || e.includes('イブニング') || e.includes('8時開始'));
+            assert(stage3HasSpecialErrors, 'ステージ3のチェックでは特殊勤務の未配置が厳格に検出されること');
+
+            // 4. 特殊勤務の自動配置テスト
+            const traceStep = (label) => {
+                const arr = [];
+                for (let s = 0; s < 9; s++) arr.push(`s${s}:${scheduler.grid[s][27].symbol}`);
+                return label + ': ' + arr.join(', ');
+            };
+            const stepLog = [];
+            stepLog.push(traceStep('BeforeSpec'));
+            const specRes = scheduler.assignSpecialDutiesToGrid();
+            if (!specRes || !specRes.success) {
+                const errMsg = specRes && specRes.errors ? specRes.errors.join('; ') : 'unknown error';
+                throw new Error("特殊勤務の自動割当が失敗しました: " + errMsg + " [" + stepLog.join(' | ') + "]");
+            }
+            assert(specRes && specRes.success, '特殊勤務の自動割当が成功すること');
+
+            // 5. 単発出勤（休 - 勤務 - 休）の特殊勤務除外検証
+            let sandwichedViolations = 0;
+            const restricted = [SYMBOLS.EARLY, SYMBOLS.LATE, SYMBOLS.EVE, SYMBOLS.NO_ALLOW_EARLY, SYMBOLS.NO_ALLOW_LATE, SYMBOLS.NO_ALLOW_EVE];
+            for (let s = 0; s < 50; s++) {
+                for (let d = 1; d < 27; d++) {
+                    const sym = scheduler.grid[s][d].symbol;
+                    if (restricted.includes(sym)) {
+                        const pOff = isHolidaySymbol(scheduler.grid[s][d - 1].symbol);
+                        const nOff = isHolidaySymbol(scheduler.grid[s][d + 1].symbol);
+                        if (pOff && nOff) {
+                            sandwichedViolations++;
+                        }
+                    }
+                }
+            }
+            assert(sandwichedViolations === 0, '挟まれ1日勤務に早・遅・Eが一切配置されないこと (違反: ' + sandwichedViolations + '件)');
+
+            // 6. 特殊勤務配置後のステージ3チェックが満たされること
+            const finalVal = validateScheduleGrid(scheduler.grid, staffList, { standardHolidays: 8.0, isFinal: true });
+            assert(finalVal.isValid, '特殊勤務配置後はすべてのハード・ソフト制約が100%充足されること (エラー数: ' + finalVal.errors.length + ')');
+
+            document.getElementById('test-status').textContent = 'ALL_PASSED';
+            document.getElementById('test-output').innerHTML = results.map(r => '<div>✅ ' + r + '</div>').join('');
+        } catch (err) {
+            document.getElementById('test-status').textContent = 'FAILED';
+            document.getElementById('test-output').innerHTML = '<div style="color:red;">❌ ' + err.message + '</div>';
+        }
+    })();
+    </script>
+
+
+</body></html>

@@ -1,0 +1,134 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <title>Test Footer Highlights and Undo Persistence</title>
+</head>
+<body>
+    <div id="test-output"></div>
+
+    <table>
+        <tbody id="outputTableBody"></tbody>
+        <tfoot id="outputTableFoot">
+            <tr>
+                <td data-d="0" data-footer-stat="early">3</td>
+                <td data-d="1" data-footer-stat="early">2</td>
+            </tr>
+        </tfoot>
+        <tbody id="checkTableBody"></tbody>
+        <tfoot id="checkTableFoot">
+            <tr>
+                <td data-d="0" data-footer-stat="early">3</td>
+                <td data-d="1" data-footer-stat="early">2</td>
+            </tr>
+        </tfoot>
+    </table>
+
+    <script src="solver.js"></script>
+    <script>
+    (function() {
+        const results = [];
+        function assert(condition, message) {
+            if (condition) results.push("PASS: " + message);
+            else results.push("FAIL: " + message);
+        }
+
+        const dates = [];
+        const WEEKDAYS = ['月', '火', '水', '木', '金', '土', '日'];
+        const startDate = new Date(2026, 11, 15);
+        for (let i = 0; i < 28; i++) {
+            const d = new Date(startDate.getFullYear(), startDate.getMonth(), startDate.getDate() + i);
+            const wIdx = (d.getDay() + 6) % 7;
+            dates.push({
+                y: d.getFullYear(),
+                m: d.getMonth() + 1,
+                day: d.getDate(),
+                weekday: WEEKDAYS[wIdx],
+                wIdx,
+                isHoliday: isJapaneseHoliday(d.getFullYear(), d.getMonth() + 1, d.getDate())
+            });
+        }
+
+        const patterns = [
+            ['休', '○', '○', '○', '○'],
+            ['○', '○', '休', '○', '○'],
+            ['休', '休', '○', '○', '○'],
+            ['○', '休', '○', '○', '休'],
+            ['○', '○', '○', '○', '休']
+        ];
+        const staffList = [];
+        for (let i = 1; i <= 50; i++) {
+            staffList.push({
+                id: i,
+                name: 'スタッフ ' + (i < 10 ? '0' + i : i),
+                can8: (i <= 9),
+                noEarly: false,
+                noLate: false,
+                noEve: false,
+                canSched: (i <= 8),
+                isRole: (i <= 6),
+                isFullTime: (i <= 10),
+                allow6Consec: false,
+                prevDays: [...patterns[(i - 1) % patterns.length]],
+                days: new Array(28).fill('')
+            });
+        }
+
+        const scheduler = new ShiftScheduler(staffList, { dates: dates, standardHolidays: 8.0 });
+        scheduler.solveBaseSchedule();
+        const specRes = scheduler.assignSpecialDutiesToGrid();
+        results.push("specRes.success: " + specRes.success);
+
+        // 1. 特殊勤務完成直後は footerStat のエラーは 0 件
+        const valFinalNormal = validateScheduleGrid(scheduler.grid, staffList, { dates: dates, standardHolidays: 8.0, isFinal: true });
+        const footErrorsNormal = valFinalNormal.conflictCells.filter(c => c.footerStat);
+        if (footErrorsNormal.length > 0) {
+            results.push("DEBUG footErrorsNormal: " + JSON.stringify(footErrorsNormal.map(e => e.reason)));
+        }
+        assert(footErrorsNormal.length === 0, "初期完成状態ではフッター特殊勤務エラーは 0件");
+
+        // 2. 1日目(d = 0)の早番スタッフを1名 '○' に変更し、早番を2名（要件3未満）にする
+        let earlyCountDay0 = 0;
+        for (let s = 0; s < 50; s++) {
+            if (scheduler.grid[s][0].symbol === '早') {
+                earlyCountDay0++;
+                if (earlyCountDay0 === 3) {
+                    scheduler.grid[s][0].symbol = '○'; // 3人目を○に変えて2人にする
+                    break;
+                }
+            }
+        }
+
+        const valFinalEarly2 = validateScheduleGrid(scheduler.grid, staffList, { dates: dates, standardHolidays: 8.0, isFinal: true });
+        const earlyConflicts = valFinalEarly2.conflictCells.filter(c => c.dayIndex === 0 && c.footerStat === 'early');
+        assert(earlyConflicts.length === 1, "早番が2名の日(d=0)に対して footerStat: 'early' の conflictCell が1件生成されること");
+        if (earlyConflicts.length > 0) {
+            results.push("DEBUG earlyConflicts[0].reason: " + earlyConflicts[0].reason);
+            assert(earlyConflicts[0].reason.indexOf("2名") >= 0, "指摘理由に早番2名が含まれていること");
+        }
+
+        // 3. applyOutputConflictHighlights によるフッターセルの網掛けテスト
+        function applyTestFooterHighlights(conflictCells) {
+            document.querySelectorAll('.conflict-highlight').forEach(el => el.classList.remove('conflict-highlight'));
+            conflictCells.forEach(item => {
+                if (item.footerStat) {
+                    const footCells = document.querySelectorAll(
+                        `#outputTableFoot td[data-d="${item.dayIndex}"][data-footer-stat="${item.footerStat}"], ` +
+                        `#checkTableFoot td[data-d="${item.dayIndex}"][data-footer-stat="${item.footerStat}"]`
+                    );
+                    footCells.forEach(cell => cell.classList.add('conflict-highlight'));
+                }
+            });
+        }
+
+        applyTestFooterHighlights(earlyConflicts);
+        const footCellOutput = document.querySelector('#outputTableFoot td[data-d="0"][data-footer-stat="early"]');
+        const footCellCheck = document.querySelector('#checkTableFoot td[data-d="0"][data-footer-stat="early"]');
+        assert(footCellOutput.classList.contains('conflict-highlight'), "修正作業エリアのフッター早番セルに網掛けが付与されること");
+        assert(footCellCheck.classList.contains('conflict-highlight'), "最終チェックのフッター早番セルに網掛けが付与されること");
+
+        document.getElementById('test-output').textContent = results.join('\n');
+    })();
+    </script>
+</body>
+</html>

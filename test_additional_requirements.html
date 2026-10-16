@@ -1,0 +1,98 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <title>Test Additional Requirements</title>
+</head>
+<body>
+    <div id="test-output"></div>
+
+    <script src="solver.js"></script>
+    <script>
+    (function() {
+        const results = [];
+        function assert(condition, message) {
+            if (condition) {
+                results.push("PASS: " + message);
+            } else {
+                results.push("FAIL: " + message);
+            }
+        }
+
+        const dates = [];
+        const WEEKDAYS = ['月', '火', '水', '木', '金', '土', '日'];
+        const startDate = new Date(2026, 11, 15);
+        for (let i = 0; i < 28; i++) {
+            const d = new Date(startDate.getFullYear(), startDate.getMonth(), startDate.getDate() + i);
+            const wIdx = (d.getDay() + 6) % 7;
+            dates.push({
+                y: d.getFullYear(),
+                m: d.getMonth() + 1,
+                day: d.getDate(),
+                weekday: WEEKDAYS[wIdx],
+                wIdx,
+                isHoliday: isJapaneseHoliday(d.getFullYear(), d.getMonth() + 1, d.getDate())
+            });
+        }
+
+        const staffList = [];
+        for (let i = 1; i <= 50; i++) {
+            staffList.push({
+                id: i,
+                name: 'スタッフ ' + (i < 10 ? '0' + i : i),
+                can8: (i <= 9),
+                noEarly: false,
+                noLate: false,
+                noEve: false,
+                canSched: (i <= 8),
+                isRole: (i <= 6),
+                isFullTime: (i <= 10),
+                allow6Consec: false,
+                prevDays: ['休', '○', '○', '○', '○'],
+                days: new Array(28).fill('')
+            });
+        }
+
+        const scheduler = new ShiftScheduler(staffList, { dates: dates, standardHolidays: 8.0 });
+        scheduler.solveBaseSchedule();
+
+        // 1. 公休日数が正常(8日)のとき、statType: 'off' の conflictCells は 0 件
+        const valResNormal = validateScheduleGrid(scheduler.grid, staffList, { dates: dates, standardHolidays: 8.0, isFinal: false });
+        const offConflictsNormal = valResNormal.conflictCells.filter(c => c.statType === 'off');
+        assert(offConflictsNormal.length === 0, "通常状態では公休カウントの conflict は 0件");
+
+        // 2. スタッフ 11 (インデックス 10) の公休をあえて 9日 にする（ユーザーの画像ケースを再現）
+        // 1つの ○ を 休 に変更
+        let changedDay = -1;
+        for (let d = 0; d < 28; d++) {
+            if (scheduler.grid[10][d].symbol === '○') {
+                scheduler.grid[10][d].symbol = '休';
+                changedDay = d;
+                break;
+            }
+        }
+
+        const valRes9 = validateScheduleGrid(scheduler.grid, staffList, { dates: dates, standardHolidays: 8.0, isFinal: false });
+        const offConflicts9 = valRes9.conflictCells.filter(c => c.staffIndex === 10 && c.statType === 'off');
+        assert(offConflicts9.length === 1, "公休9日のスタッフ11に対して statType: 'off' の conflictCell が1件生成されること");
+        assert(offConflicts9[0].reason.includes("公休日数が9日です"), "理由に公休日数9日が含まれていること");
+
+        // 3. スタッフ 11 の公休をあえて 7日 にする
+        // 休を2つ ○ に変更
+        scheduler.grid[10][changedDay].symbol = '○';
+        for (let d = 0; d < 28; d++) {
+            if (scheduler.grid[10][d].symbol === '休') {
+                scheduler.grid[10][d].symbol = '○';
+                break;
+            }
+        }
+        const valRes7 = validateScheduleGrid(scheduler.grid, staffList, { dates: dates, standardHolidays: 8.0, isFinal: false });
+        const offConflicts7 = valRes7.conflictCells.filter(c => c.staffIndex === 10 && c.statType === 'off');
+        assert(offConflicts7.length === 1, "公休7日のスタッフ11に対して statType: 'off' の conflictCell が1件生成されること");
+        assert(offConflicts7[0].reason.includes("公休日数が7日です"), "理由に公休日数7日が含まれていること");
+
+        document.getElementById('test-output').textContent = results.join('\n');
+    })();
+    </script>
+</body>
+</html>

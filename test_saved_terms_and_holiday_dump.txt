@@ -1,0 +1,142 @@
+<!DOCTYPE html>
+<html lang="ja"><head>
+    <meta charset="UTF-8">
+    <title>Saved Terms and Holiday Verification Test</title>
+</head>
+<body>
+    <div id="test-status">FAILED: 入力セルが見つかりません</div>
+    <div id="test-output">standardHolidaySelect.value = 8.0<br>PASS 1: 初期ロード時の公休枠制限は正常に 8.0 (4週8休) です<br>savedTermsSelect.value = <br>savedTermsSelect options: , 2026-04-01<br>PASS 2: savedTermsSelect の初期状態正常<br>ERROR: 入力セルが見つかりません</div>
+
+    <iframe id="appFrame" src="index.html" style="width: 1200px; height: 800px;"></iframe>
+
+    <script>
+    const frame = document.getElementById('appFrame');
+    frame.onload = async () => {
+        const results = [];
+        function log(msg) {
+            results.push(msg);
+            document.getElementById('test-output').innerText = results.join('\n');
+            console.log(msg);
+        }
+
+        try {
+            const win = frame.contentWindow;
+            const doc = frame.contentDocument || win.document;
+
+            // 1. 初期ロード時の公休枠制限デフォルト値の確認
+            const stdSel = doc.getElementById('standardHolidaySelect');
+            if (!stdSel) throw new Error('standardHolidaySelect が存在しません');
+            log('standardHolidaySelect.value = ' + stdSel.value);
+            if (stdSel.value !== '8.0') {
+                throw new Error(`公休枠制限のデフォルトが 8.0 ではありません！ (現在値: "${stdSel.value}")`);
+            }
+            log('PASS 1: 初期ロード時の公休枠制限は正常に 8.0 (4週8休) です');
+
+            // 2. 初期ロード時の保存済み期間ドロップダウン確認
+            const termsSel = doc.getElementById('savedTermsSelect');
+            if (!termsSel) throw new Error('savedTermsSelect が存在しません');
+            log('savedTermsSelect.value = ' + termsSel.value);
+            if (termsSel.value !== '') {
+                throw new Error(`savedTermsSelect の初期値が空文字ではありません (現在値: "${termsSel.value}")`);
+            }
+            const optValues = Array.from(termsSel.options).map(o => o.value);
+            log('savedTermsSelect options: ' + optValues.join(', '));
+            if (!optValues.includes('2026-04-01')) {
+                throw new Error('savedTermsSelect に 2026-04-01 が含まれていません');
+            }
+            log('PASS 2: savedTermsSelect の初期状態正常');
+
+            // 3. 4/1にデータを入力して保存
+            const cell0 = doc.querySelector('input.shift-input[data-sidx="0"][data-didx="0"]');
+            if (!cell0) throw new Error('入力セルが見つかりません');
+            cell0.value = '有';
+            cell0.dispatchEvent(new win.Event('input', { bubbles: true }));
+            cell0.dispatchEvent(new win.Event('change', { bubbles: true }));
+            log('PASS 3: 4/1 にテストデータ（スタッフ0の1日目=有）を入力');
+
+            // 4. 別の期間 (4/29～) に切り替え
+            const dateInput = doc.getElementById('termStartDate');
+            dateInput.value = '2026-04-29';
+            dateInput.dispatchEvent(new win.Event('change'));
+
+            const cell0After = doc.querySelector('input.shift-input[data-sidx="0"][data-didx="0"]');
+            log('4/29に切り替え後のスタッフ0の1日目の値: "' + (cell0After ? cell0After.value : '') + '"');
+            if (cell0After && cell0After.value === '有') {
+                throw new Error('4/29 に新規切替したにもかかわらず 4/1 のデータが残っています');
+            }
+            log('PASS 4: 4/29 への切替正常');
+
+            // 5. 保存済み期間ドロップダウンから 4/1 を選択して呼出
+            termsSel.value = '2026-04-01';
+            termsSel.dispatchEvent(new win.Event('change'));
+
+            const dateInputRestored = doc.getElementById('termStartDate');
+            log('4/1呼出後の開始日 input: ' + dateInputRestored.value);
+            if (dateInputRestored.value !== '2026-04-01') {
+                throw new Error('4/1が呼び出されていません！ 現在の開始日: ' + dateInputRestored.value);
+            }
+
+            const cell0Restored = doc.querySelector('input.shift-input[data-sidx="0"][data-didx="0"]');
+            log('4/1呼出後のスタッフ0の1日目の値: "' + (cell0Restored ? cell0Restored.value : '') + '"');
+            if (!cell0Restored || cell0Restored.value !== '有') {
+                throw new Error('4/1の入力データ（有）が復元されていません！');
+            }
+
+            log('4/1呼出後の savedTermsSelect.value: "' + termsSel.value + '"');
+            if (termsSel.value !== '') {
+                throw new Error('呼出後に savedTermsSelect がリセットされていません');
+            }
+
+            log('4/1呼出後の standardHolidaySelect.value: "' + stdSel.value + '"');
+            if (stdSel.value !== '8.0') {
+                throw new Error('4/1呼出後の公休枠制限が 8.0 ではありません');
+            }
+            log('PASS 5: ドロップダウンからの 4/1 呼出＆復元テスト合格！');
+
+            // 6. 同じ4/1を作業中に、ドロップダウンから再度4/1を選択
+            termsSel.value = '2026-04-01';
+            termsSel.dispatchEvent(new win.Event('change'));
+
+            log('同期間再呼出後の開始日 input: ' + dateInputRestored.value);
+            if (dateInputRestored.value !== '2026-04-01') {
+                throw new Error('同期間再呼出で日付が不正になりました');
+            }
+            log('PASS 6: 同期間表示中の再呼出テスト合格！');
+
+            // 7. 過去の不整合データ（standardHolidays: 8）の復元テスト
+            const testDataLegacy = {
+                startDate: '2026-06-01',
+                standardHolidays: 8, // 数値の8
+                staffList: [
+                    { name: 'スタッフA', can8: true, noEarly: false, noLate: false, noEve: false, canSched: true, isRole: false, isFullTime: true, allow6Consec: true, prevDays: ['','','','',''], days: new Array(28).fill('') }
+                ],
+                outputGrid: null,
+                updatedAt: new Date().toISOString()
+            };
+            win.localStorage.setItem('shift_schedule_term_2026-06-01', JSON.stringify(testDataLegacy));
+
+            // ドロップダウン更新
+            termsSel.dispatchEvent(new win.Event('focus'));
+            win.renderSavedTermsSelect();
+
+            // 2026-06-01 を呼び出し
+            termsSel.value = '2026-06-01';
+            termsSel.dispatchEvent(new win.Event('change'));
+
+            log('数値8のデータ呼出後の standardHolidaySelect.value: "' + stdSel.value + '"');
+            if (stdSel.value !== '8.0') {
+                throw new Error(`数値8のデータ復元時に 8.0 が選択されず空欄または不正値になっています！ (現在値: "${stdSel.value}")`);
+            }
+            log('PASS 7: 不整合データ（数値8）からの 8.0 自動正規化テスト合格！');
+
+            document.getElementById('test-status').innerText = 'ALL_PASSED';
+            log('ALL_TESTS_VERIFIED_SUCCESSFULLY');
+        } catch(e) {
+            document.getElementById('test-status').innerText = 'FAILED: ' + e.message;
+            log('ERROR: ' + e.message);
+        }
+    };
+    </script>
+
+
+</body></html>

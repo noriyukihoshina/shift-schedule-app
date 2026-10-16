@@ -1,0 +1,66 @@
+<!DOCTYPE html>
+<html>
+<body>
+<div id="debug"></div>
+<script src="solver.js"></script>
+<script>
+    const NUM_STAFF = 60;
+    const NUM_DAYS = 28;
+    const staffList = [];
+    for (let i = 1; i <= NUM_STAFF; i++) {
+        let sec = '';
+        if (i <= 12) sec = 'PT A';
+        else if (i <= 24) sec = 'PT B';
+        else if (i <= 36) sec = 'OT A';
+        else if (i <= 48) sec = 'OT B';
+
+        staffList.push({
+            id: i,
+            name: `スタッフ ${String(i).padStart(2, '0')}`,
+            isUnused: (i > 50),
+            section: sec,
+            can8: (i <= 9),
+            noEarly: (i === 13),
+            noLate: (i === 13),
+            noEve: (i === 13 || i === 15 || i === 16),
+            canSched: (i <= 8),
+            isRole: (i <= 6),
+            isFullTime: (i <= 10),
+            allow6Consec: (i === 20 || i === 21),
+            prevDays: ['○', '○', '休', '○', '○'],
+            days: new Array(NUM_DAYS).fill('')
+        });
+    }
+
+    const scheduler = new ShiftScheduler(staffList, { standardHolidays: 9.0 });
+    scheduler.solveBaseSchedule();
+    const specialResult = scheduler.assignSpecialDutiesToGrid();
+
+    const sections = ['PT A', 'PT B', 'OT A', 'OT B'];
+    const summary = {};
+
+    sections.forEach(sec => {
+        const indices = staffList.map((st, idx) => (!st.isUnused && st.section === sec) ? idx : -1).filter(idx => idx >= 0);
+        const daily = [];
+        for (let d = 0; d < 28; d++) {
+            let w = 0;
+            indices.forEach(s => {
+                const sym = specialResult.grid[s][d].symbol;
+                if (['○', '出', '早', '遅', 'E', '8時', 'ハヤ', 'オソ', 'イブ'].includes(sym)) w += 1.0;
+                else if (['○/休', '休/○', '○/有', '有/○'].includes(sym)) w += 0.5;
+            });
+            daily.push(w);
+        }
+        summary[sec] = {
+            staffCount: indices.length,
+            daily: daily,
+            min: Math.min(...daily),
+            max: Math.max(...daily),
+            diff: Math.max(...daily) - Math.min(...daily)
+        };
+    });
+
+    document.getElementById('debug').textContent = JSON.stringify(summary, null, 2);
+</script>
+</body>
+</html>
