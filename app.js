@@ -3302,14 +3302,15 @@ document.addEventListener('DOMContentLoaded', () => {
         const term = getTermInfo();
         const dates = term.dates;
 
-        // 1. 「平日」と「土日祝（その他）」に完全に2区分
+        // 1. 「平日」と「土日祝（その他）」に完全に2区分（★実数合計 realWork を基準に表示）
         const weekdayDaily = [];
         const holidayDaily = []; // 土日祝
 
         for (let d = 0; d < NUM_DAYS; d++) {
             const di = dates[d];
             const totalWork = stats.daily[d].totalWork;
-            const item = { d, totalWork, label: di.label, weekday: di.weekday, isHoliday: di.isHoliday };
+            const realWork = stats.daily[d].realWork !== undefined ? stats.daily[d].realWork : totalWork;
+            const item = { d, totalWork, realWork, label: di.label, weekday: di.weekday, isHoliday: di.isHoliday };
 
             // 土曜(wIdx=5), 日曜(wIdx=6), 国民の祝日(isHoliday)
             const isWeekendOrHoliday = (di.wIdx === 5 || di.wIdx === 6 || di.isHoliday);
@@ -3320,29 +3321,26 @@ document.addEventListener('DOMContentLoaded', () => {
             }
         }
 
-        // --- 平日の集計（最小・最大・平均） ---
+        // --- 平日の集計（最小・最大・平均：実数合計ベース） ---
         const weekdayBadgeEl = document.getElementById('statWeekdayBadge');
         const weekdayRangeEl = document.getElementById('statWeekdayWorkRange');
         const weekdayAvgEl = document.getElementById('statWeekdayAvgWork');
 
         if (weekdayDaily.length > 0) {
-            const works = weekdayDaily.map(item => item.totalWork);
-            const wMin = Math.min(...works);
-            const wMax = Math.max(...works);
-            const wSum = works.reduce((a, b) => a + b, 0);
+            const realWorks = weekdayDaily.map(item => item.realWork);
+            const rMin = Math.min(...realWorks);
+            const rMax = Math.max(...realWorks);
+            const rSum = realWorks.reduce((a, b) => a + b, 0);
+            const rAvg = (rSum / weekdayDaily.length).toFixed(1);
+
+            const totalWorks = weekdayDaily.map(item => item.totalWork);
+            const wSum = totalWorks.reduce((a, b) => a + b, 0);
             const wAvg = (wSum / weekdayDaily.length).toFixed(1);
 
             if (weekdayBadgeEl) weekdayBadgeEl.textContent = `${weekdayDaily.length} 日間`;
-            if (weekdayRangeEl) weekdayRangeEl.textContent = `${wMin} 〜 ${wMax} 名 (ブレ幅: ${wMax - wMin})`;
-            
-            const hasOffset = weekdayDaily.some(item => (dayOffsets && dayOffsets[item.d]) !== 0);
-            if (hasOffset) {
-                const realWorks = weekdayDaily.map(item => item.totalWork - ((dayOffsets && dayOffsets[item.d]) || 0));
-                const realSum = realWorks.reduce((a, b) => a + b, 0);
-                const realAvg = (realSum / weekdayDaily.length).toFixed(1);
-                if (weekdayAvgEl) weekdayAvgEl.innerHTML = `${wAvg} 名 <span style="font-size:0.78rem; color:#64748b; font-weight:normal;">(実質リハ: ${realAvg}名)</span>`;
-            } else {
-                if (weekdayAvgEl) weekdayAvgEl.textContent = `${wAvg} 名`;
+            if (weekdayRangeEl) weekdayRangeEl.textContent = `実数 ${rMin} 〜 ${rMax} 名 (ブレ幅: ${Number((rMax - rMin).toFixed(2))})`;
+            if (weekdayAvgEl) {
+                weekdayAvgEl.innerHTML = `実数 ${rAvg} 名 <span style="font-size:0.78rem; color:#64748b; font-weight:normal;">(出勤計: ${wAvg}名)</span>`;
             }
         } else {
             if (weekdayBadgeEl) weekdayBadgeEl.textContent = '0 日間';
@@ -3350,30 +3348,27 @@ document.addEventListener('DOMContentLoaded', () => {
             if (weekdayAvgEl) weekdayAvgEl.textContent = '- 名';
         }
 
-        // --- 土日祝（その他）の集計（最小・最大・平均） ---
+        // --- 土日祝（その他）の集計（最小・最大・平均：実数合計ベース） ---
         const holidayBadgeEl = document.getElementById('statHolidayBadge');
         const holidayRangeEl = document.getElementById('statHolidayWorkRange');
         const holidayAvgEl = document.getElementById('statHolidayAvgWork');
         const sunHolSubInfoEl = document.getElementById('statSunHolSubInfo');
 
         if (holidayDaily.length > 0) {
-            const works = holidayDaily.map(item => item.totalWork);
-            const hMin = Math.min(...works);
-            const hMax = Math.max(...works);
-            const hSum = works.reduce((a, b) => a + b, 0);
+            const realWorks = holidayDaily.map(item => item.realWork);
+            const rMin = Math.min(...realWorks);
+            const rMax = Math.max(...realWorks);
+            const rSum = realWorks.reduce((a, b) => a + b, 0);
+            const rAvg = (rSum / holidayDaily.length).toFixed(1);
+
+            const totalWorks = holidayDaily.map(item => item.totalWork);
+            const hSum = totalWorks.reduce((a, b) => a + b, 0);
             const hAvg = (hSum / holidayDaily.length).toFixed(1);
 
             if (holidayBadgeEl) holidayBadgeEl.textContent = `${holidayDaily.length} 日間`;
-            if (holidayRangeEl) holidayRangeEl.textContent = `${hMin} 〜 ${hMax} 名 (ブレ幅: ${hMax - hMin})`;
-            
-            const hasHolidayOffset = holidayDaily.some(item => (dayOffsets && dayOffsets[item.d]) !== 0);
-            if (hasHolidayOffset) {
-                const realWorks = holidayDaily.map(item => item.totalWork - ((dayOffsets && dayOffsets[item.d]) || 0));
-                const realSum = realWorks.reduce((a, b) => a + b, 0);
-                const realAvg = (realSum / holidayDaily.length).toFixed(1);
-                if (holidayAvgEl) holidayAvgEl.innerHTML = `${hAvg} 名 <span style="font-size:0.78rem; color:#64748b; font-weight:normal;">(実質リハ: ${realAvg}名)</span>`;
-            } else {
-                if (holidayAvgEl) holidayAvgEl.textContent = `${hAvg} 名`;
+            if (holidayRangeEl) holidayRangeEl.textContent = `実数 ${rMin} 〜 ${rMax} 名 (ブレ幅: ${Number((rMax - rMin).toFixed(2))})`;
+            if (holidayAvgEl) {
+                holidayAvgEl.innerHTML = `実数 ${rAvg} 名 <span style="font-size:0.78rem; color:#64748b; font-weight:normal;">(出勤計: ${hAvg}名)</span>`;
             }
             if (sunHolSubInfoEl) sunHolSubInfoEl.textContent = `土曜日・日曜日・国民の祝日（計${holidayDaily.length}日間）`;
         } else {
@@ -3397,16 +3392,16 @@ document.addEventListener('DOMContentLoaded', () => {
             paidStaffEl.textContent = `${paidStaffCount} 名`;
         }
 
-        // --- 全日（28日間）の出勤人数 ---
-        const allDailyWorks = stats.daily.map(d => d.totalWork);
-        const allMin = Math.min(...allDailyWorks);
-        const allMax = Math.max(...allDailyWorks);
-        const allAvg = (allDailyWorks.reduce((a, b) => a + b, 0) / NUM_DAYS).toFixed(1);
+        // --- 全日（期間内）の実数合計 ---
+        const allDailyReal = stats.daily.map(d => d.realWork !== undefined ? d.realWork : d.totalWork);
+        const allMin = Math.min(...allDailyReal);
+        const allMax = Math.max(...allDailyReal);
+        const allAvg = (allDailyReal.reduce((a, b) => a + b, 0) / NUM_DAYS).toFixed(1);
 
         const workRangeEl = document.getElementById('statWorkRange');
         const avgWorkEl = document.getElementById('statAvgWork');
-        if (workRangeEl) workRangeEl.textContent = `${allMin} 〜 ${allMax} 名 (ブレ幅: ${allMax - allMin})`;
-        if (avgWorkEl) avgWorkEl.textContent = `${allAvg} 名`;
+        if (workRangeEl) workRangeEl.textContent = `実数 ${allMin} 〜 ${allMax} 名 (ブレ幅: ${Number((allMax - allMin).toFixed(2))})`;
+        if (avgWorkEl) avgWorkEl.textContent = `実数 ${allAvg} 名`;
 
         // --- 特殊勤務（早・遅・E・8時）の配置累計 ---
         const totalEarly = validStaffStats.reduce((sum, s) => sum + s.early, 0);
@@ -3418,13 +3413,14 @@ document.addEventListener('DOMContentLoaded', () => {
             specEl.textContent = `早: ${totalEarly}回 / 遅: ${totalLate}回 / E: ${totalEve}回 / 8時: ${totalH8}回`;
         }
 
-        // --- 日別出勤人数グラフ（28日間、平日・土曜・祝日で色分け） ---
+        // --- 日別実数合計グラフ（平日・土曜・祝日で色分け） ---
         const chartEl = document.getElementById('dailyWorkChart');
         if (chartEl) {
             let chartHtml = '';
             stats.daily.forEach((d, idx) => {
                 const di = dates[idx];
-                const pct = Math.min(100, Math.max(10, (d.totalWork / 60) * 100));
+                const dispReal = d.realWork !== undefined ? d.realWork : d.totalWork;
+                const pct = Math.min(100, Math.max(10, (dispReal / 60) * 100));
 
                 let barColor = '#3b82f6'; // 平日: 青
                 let dayLabelColor = '#64748b';
@@ -3438,8 +3434,8 @@ document.addEventListener('DOMContentLoaded', () => {
 
                 const dayBadge = di.isHoliday ? '祝' : di.weekday;
                 chartHtml += `
-                    <div style="flex:1; display:flex; flex-direction:column; align-items:center; gap:3px;" title="${di.label} (${di.weekday})${di.isHoliday ? ' 祝日' : ''}: 出勤 ${d.totalWork}名">
-                        <span style="font-size:0.68rem; font-weight:700; color:#1e293b;">${d.totalWork}</span>
+                    <div style="flex:1; display:flex; flex-direction:column; align-items:center; gap:3px;" title="${di.label} (${di.weekday})${di.isHoliday ? ' 祝日' : ''}: 実数合計 ${dispReal}名 (出勤人数合計 ${d.totalWork}名)">
+                        <span style="font-size:0.68rem; font-weight:700; color:#1e293b;">${dispReal}</span>
                         <div style="width:100%; background:#f1f5f9; height:110px; border-radius:4px; display:flex; align-items:flex-end;">
                             <div style="width:100%; background:${barColor}; height:${pct}%; border-radius:4px; transition:height 0.3s;"></div>
                         </div>
