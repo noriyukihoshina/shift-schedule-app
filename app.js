@@ -69,122 +69,195 @@ document.addEventListener('DOMContentLoaded', () => {
         const match = GLOBAL_TERMS.find(t => t.startDate === startDate);
         if (match) return match;
 
-        // もし一致しない日付の場合、最も近いターム、または自前計算
-        const d = new Date(startDate);
-        const y = (d.getMonth() + 1 >= 4) ? d.getFullYear() : d.getFullYear() - 1;
-        return GLOBAL_TERMS.find(t => t.year === y && t.startDate === startDate) || GLOBAL_TERMS.find(t => t.startDate === '2026-04-01') || GLOBAL_TERMS[0];
+        // もし一致しない日付の場合、その日付が含まれるタームまたは最も近いタームを返す
+        const targetTime = new Date(startDate + 'T00:00:00').getTime();
+        if (!isNaN(targetTime)) {
+            for (const t of GLOBAL_TERMS) {
+                const sTime = new Date(t.startDate + 'T00:00:00').getTime();
+                const eTime = new Date(t.endDate + 'T23:59:59').getTime();
+                if (targetTime >= sTime && targetTime <= eTime) {
+                    return t;
+                }
+            }
+        }
+        return GLOBAL_TERMS.find(t => t.startDate === '2026-04-01') || GLOBAL_TERMS[0];
     }
 
+    // ★ コメント（備考欄）や氏名の文字化け・制御文字・Excel改行エスケープを除去するサニタイザ
+    function cleanTextValue(val) {
+        if (val === undefined || val === null) return '';
+        return String(val)
+            .replace(/_x000[dDaA]_/g, ' ')
+            .replace(/\uFFFD/g, '')
+            .replace(/[\x00-\x08\x0B\x0C\x0E-\x1F]/g, '')
+            .replace(/[\r\n]+/g, ' ')
+            .trim();
+    }
+
+    function escapeHtmlText(val) {
+        return cleanTextValue(val)
+            .replace(/&/g, '&amp;')
+            .replace(/</g, '&lt;')
+            .replace(/>/g, '&gt;')
+            .replace(/"/g, '&quot;')
+            .replace(/'/g, '&#39;');
+    }
+
+    function escapeXmlText(val) {
+        return cleanTextValue(val)
+            .replace(/&/g, '&amp;')
+            .replace(/</g, '&lt;')
+            .replace(/>/g, '&gt;')
+            .replace(/"/g, '&quot;')
+            .replace(/'/g, '&apos;');
+    }
+
+    // ★ 「係長」「主任」「副主任」の択一（排他）制御ヘルパー
+    function enforceRoleExclusivity(staff, preferredFlag = null) {
+        if (!staff) return;
+        const roleFlags = ['isSectionChief', 'isChief', 'isSubChief'];
+        if (preferredFlag && roleFlags.includes(preferredFlag) && staff[preferredFlag]) {
+            roleFlags.forEach(rf => {
+                if (rf !== preferredFlag) staff[rf] = false;
+            });
+            return;
+        }
+        // 優先指定がない場合は 係長 > 主任 > 副主任 の優先順で1つのみに絞る
+        if (staff.isSectionChief) {
+            staff.isChief = false;
+            staff.isSubChief = false;
+        } else if (staff.isChief) {
+            staff.isSubChief = false;
+        }
+    }
+
+    let termSelectorInitialized = false;
     function initTermSelector() {
         const select = document.getElementById('termSelect');
         if (!select) return;
 
+        const curStart = document.getElementById('termStartDate')?.value || currentWorkingStartDate || '2026-04-01';
         select.innerHTML = '';
         GLOBAL_TERMS.forEach(t => {
             const opt = document.createElement('option');
             opt.value = t.startDate;
             opt.textContent = t.label;
-            if (t.startDate === currentWorkingStartDate) opt.selected = true;
+            if (t.startDate === curStart) opt.selected = true;
             select.appendChild(opt);
         });
+
+        if (termSelectorInitialized) return;
+        termSelectorInitialized = true;
 
         select.addEventListener('change', () => {
             const newDate = select.value;
             if (!newDate || newDate === currentWorkingStartDate) return;
 
-            // 直前の期間データを保存
+            // 直前の期間データとスタッフマスターを確実に保存
+            saveStaffMaster();
             saveCurrentTermToStorage(currentWorkingStartDate);
 
-            // 切り替え
+            // 新しい期間に切り替え
             currentWorkingStartDate = newDate;
             const startDateInput = document.getElementById('termStartDate');
             if (startDateInput) startDateInput.value = newDate;
 
             const term = findTermByStartDate(newDate);
             const stdHolidaySelect = document.getElementById('standardHolidaySelect');
-            if (term && term.isTerm13) {
-                if (stdHolidaySelect) stdHolidaySelect.value = '8.5';
-                showToast(`📅 ${term.year}年度 第13ターム（年度末 ${term.numDays}日間）を選択しました。公休枠を 8.5日に設定しました。`);
-            } else {
-                if (stdHolidaySelect) stdHolidaySelect.value = '8.0';
-            }
 
             if (localStorage.getItem(`${STORAGE_KEY_PREFIX}${newDate}`)) {
                 loadTermFromStorage(newDate);
-                showToast(`📁 期間「${term.label}」の保存データを読み込みました`);
+                if (term && term.isTerm13 && stdHolidaySelect && stdHolidaySelect.value === '8.0') {
+                    stdHolidaySelect.value = '8.5';
+                    saveCurrentTermToStorage(newDate);
+                }
+                showToast(`📁 期間「${term ? term.label : newDate}」の保存データを読み込みました`);
             } else {
-                resetTermDataKeepStaffSettings();
-                showToast(`🆕 新規期間「${term.label}」の編集を開始しました`);
+                initNewTerm(newDate);
+                if (term && term.isTerm13) {
+                    showToast(`📅 ${term.year}年度 第13ターム（年度末 ${term.numDays}日間）を選択しました（公休枠: 8.5日）`);
+                } else {
+                    showToast(`🆕 新規期間「${term ? term.label : newDate}」の編集を開始しました`);
+                }
             }
             localStorage.setItem(STORAGE_KEY_LAST_ACTIVE, newDate);
             renderSavedTermsSelect();
         });
     }
 
-
-    // ★ スタッフ属性マスターの保存（タームを切り替えてもトグルや設定を完全維持）
+    // ★ スタッフ属性マスターの保存（タームを切り替えても・リロードしてもトグルや設定を完全維持）
     function saveStaffMaster() {
         try {
-            const masterList = staffList.map(s => ({
-                id: s.id,
-                name: s.name,
-                isUnused: !!s.isUnused,
-                section: s.section || '',
-                can8: !!s.can8,
-                noEarly: !!s.noEarly,
-                noLate: !!s.noLate,
-                noEve: !!s.noEve,
-                canSched: !!s.canSched,
-                isSectionChief: !!s.isSectionChief,
-                isChief: !!s.isChief,
-                isSubChief: !!s.isSubChief,
-                isHalf: !!s.isHalf,
-                isFullTime: !!s.isFullTime,
-                allow6Consec: !!s.allow6Consec,
-                prevName: s.prevName || '',
-                remarks: s.remarks || ''
-            }));
+            const masterList = staffList.map(s => {
+                enforceRoleExclusivity(s);
+                return {
+                    id: s.id,
+                    name: cleanTextValue(s.name),
+                    isUnused: !!s.isUnused,
+                    section: s.section || '',
+                    can8: !!s.can8,
+                    noEarly: !!s.noEarly,
+                    noLate: !!s.noLate,
+                    noEve: !!s.noEve,
+                    canSched: !!s.canSched,
+                    isSectionChief: !!s.isSectionChief,
+                    isChief: !!s.isChief,
+                    isSubChief: !!s.isSubChief,
+                    isHalf: !!s.isHalf,
+                    isFullTime: !!s.isFullTime,
+                    allow6Consec: !!s.allow6Consec,
+                    prevName: cleanTextValue(s.prevName || ''),
+                    remarks: cleanTextValue(s.remarks || '')
+                };
+            });
             localStorage.setItem(STORAGE_KEY_STAFF_MASTER, JSON.stringify(masterList));
         } catch (e) {
             console.error('スタッフマスターの保存に失敗:', e);
         }
     }
 
+    function applyMasterArrayToStaffList(masterList) {
+        if (!Array.isArray(masterList)) return false;
+        masterList.forEach((ms, idx) => {
+            if (staffList[idx] && ms) {
+                staffList[idx].name = cleanTextValue(ms.name) || staffList[idx].name;
+                staffList[idx].isUnused = ms.isUnused !== undefined ? !!ms.isUnused : staffList[idx].isUnused;
+                staffList[idx].section = ms.section || '';
+                staffList[idx].can8 = ms.can8 !== undefined ? !!ms.can8 : staffList[idx].can8;
+                staffList[idx].noEarly = !!ms.noEarly;
+                staffList[idx].noLate = !!ms.noLate;
+                staffList[idx].noEve = !!ms.noEve;
+                staffList[idx].canSched = ms.canSched !== undefined ? !!ms.canSched : staffList[idx].canSched;
+                staffList[idx].isSectionChief = !!ms.isSectionChief;
+                staffList[idx].isChief = !!(ms.isChief || ms.chief);
+                staffList[idx].isSubChief = !!ms.isSubChief;
+                staffList[idx].isHalf = !!ms.isHalf;
+                staffList[idx].isFullTime = ms.isFullTime !== undefined ? !!ms.isFullTime : staffList[idx].isFullTime;
+                staffList[idx].allow6Consec = !!ms.allow6Consec;
+                staffList[idx].prevName = cleanTextValue(ms.prevName || '');
+                staffList[idx].remarks = cleanTextValue(ms.remarks || '');
+                enforceRoleExclusivity(staffList[idx]);
+            }
+        });
+        return true;
+    }
+
     function loadStaffMaster() {
         try {
-            const raw = localStorage.getItem(STORAGE_KEY_STAFF_MASTER);
+            let raw = localStorage.getItem(STORAGE_KEY_STAFF_MASTER);
+            if (!raw) {
+                // 旧キーからのフォールバック救済
+                raw = localStorage.getItem('shift_schedule_staff_master');
+            }
             if (!raw) return false;
             const masterList = JSON.parse(raw);
-            if (!Array.isArray(masterList)) return false;
-            masterList.forEach((ms, idx) => {
-                if (staffList[idx]) {
-                    staffList[idx].name = ms.name || staffList[idx].name;
-                    staffList[idx].isUnused = ms.isUnused !== undefined ? ms.isUnused : staffList[idx].isUnused;
-                    staffList[idx].section = ms.section || '';
-                    staffList[idx].can8 = !!ms.can8;
-                    staffList[idx].noEarly = !!ms.noEarly;
-                    staffList[idx].noLate = !!ms.noLate;
-                    staffList[idx].noEve = !!ms.noEve;
-                    staffList[idx].canSched = !!ms.canSched;
-                    staffList[idx].isSectionChief = !!ms.isSectionChief;
-                    staffList[idx].isChief = !!ms.isChief;
-                    staffList[idx].isSubChief = !!ms.isSubChief;
-                    staffList[idx].isHalf = !!ms.isHalf;
-                    staffList[idx].isFullTime = !!ms.isFullTime;
-                    staffList[idx].allow6Consec = !!ms.allow6Consec;
-                    staffList[idx].prevName = ms.prevName || '';
-                    staffList[idx].remarks = ms.remarks || '';
-                }
-            });
-            return true;
+            return applyMasterArrayToStaffList(masterList);
         } catch (e) {
             console.error('スタッフマスターの読込に失敗:', e);
             return false;
         }
     }
 
-
-    // ==========================================
     // ★ 部署別パスワード認証モーダル制御
     // ==========================================
     function checkDeptAuthentication() {
@@ -254,7 +327,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
     checkDeptAuthentication();
     const NUM_STAFF = 60;
-    const NUM_DAYS = 28;
+    let NUM_DAYS = 28;
     const WEEKDAYS = ['月', '火', '水', '木', '金', '土', '日'];
 
     let staffList = [];
@@ -512,59 +585,86 @@ document.addEventListener('DOMContentLoaded', () => {
 
     function loadTermFromStorage(startDate) {
         try {
-            const raw = localStorage.getItem(`${STORAGE_KEY_PREFIX}${startDate}`);
+            let raw = localStorage.getItem(`${STORAGE_KEY_PREFIX}${startDate}`);
+            if (!raw) {
+                // 旧ストレージキー（病棟プレフィックス導入前）からの自動引き継ぎ救済
+                raw = localStorage.getItem(`shift_schedule_term_${startDate}`);
+            }
             if (!raw) return false;
             const data = JSON.parse(raw);
             if (!data || !data.staffList) return false;
 
-            // 1. 公休日数（基本は8.0、明示的に8.5または9.0が指定されている場合は復元）
+            // 日付セット & 期間タイトル・NUM_DAYS更新を先に行う
+            const targetStart = data.startDate || startDate;
+            const dateInput = document.getElementById('termStartDate');
+            if (dateInput) dateInput.value = targetStart;
+            currentWorkingStartDate = targetStart;
+            const term = getTermInfo();
+
+            // 1. 公休日数（第13タームはデフォルト8.5、明示保存があればそれを優先）
             const stdSel = document.getElementById('standardHolidaySelect');
             if (stdSel) {
                 const valNum = parseFloat(data.standardHolidays);
                 if (valNum === 8.5) stdSel.value = '8.5';
                 else if (valNum === 9.0) stdSel.value = '9.0';
+                else if (term.isTerm13 && !data.standardHolidays) stdSel.value = '8.5';
                 else stdSel.value = '8.0';
             }
 
-            // 2. スタッフ復元
+            // 2. スタッフのターム固有データ（prevDays, days）および基本属性の復元
             data.staffList.forEach((s, idx) => {
                 if (staffList[idx]) {
-                    staffList[idx].name = s.name;
+                    staffList[idx].name = cleanTextValue(s.name) || staffList[idx].name;
                     staffList[idx].isUnused = s.isUnused !== undefined ? !!s.isUnused : (idx >= 48);
                     staffList[idx].section = s.section || '';
-                    staffList[idx].can8 = s.can8;
-                    staffList[idx].noEarly = s.noEarly;
-                    staffList[idx].noLate = s.noLate;
-                    staffList[idx].noEve = s.noEve;
-                    staffList[idx].canSched = s.canSched;
+                    staffList[idx].can8 = s.can8 !== undefined ? !!s.can8 : staffList[idx].can8;
+                    staffList[idx].noEarly = !!s.noEarly;
+                    staffList[idx].noLate = !!s.noLate;
+                    staffList[idx].noEve = !!s.noEve;
+                    staffList[idx].canSched = s.canSched !== undefined ? !!s.canSched : staffList[idx].canSched;
                     staffList[idx].isSectionChief = !!s.isSectionChief;
-                    staffList[idx].isChief = !!s.isChief;
+                    staffList[idx].isChief = !!(s.isChief || s.chief);
                     staffList[idx].isSubChief = !!s.isSubChief;
                     staffList[idx].isHalf = !!s.isHalf;
-                    staffList[idx].isFullTime = s.isFullTime;
-                    staffList[idx].prevName = s.prevName || '';
-                    staffList[idx].remarks = s.remarks || '';
-                    staffList[idx].allow6Consec = s.allow6Consec;
+                    staffList[idx].isFullTime = s.isFullTime !== undefined ? !!s.isFullTime : staffList[idx].isFullTime;
+                    staffList[idx].prevName = cleanTextValue(s.prevName || '');
+                    staffList[idx].remarks = cleanTextValue(s.remarks || '');
+                    staffList[idx].allow6Consec = !!s.allow6Consec;
+                    enforceRoleExclusivity(staffList[idx]);
+
                     staffList[idx].prevDays = Array.isArray(s.prevDays) ? [...s.prevDays] : ['', '', '', '', ''];
-                    staffList[idx].days = Array.isArray(s.days) ? [...s.days] : new Array(NUM_DAYS).fill('');
+                    const loadedDays = Array.isArray(s.days) ? [...s.days] : [];
+                    while (loadedDays.length < NUM_DAYS) loadedDays.push('');
+                    staffList[idx].days = loadedDays.slice(0, NUM_DAYS);
                 }
             });
 
-            // 3. 日付セット & 期間タイトル更新
-            const dateInput = document.getElementById('termStartDate');
-            if (dateInput) dateInput.value = data.startDate;
-            currentWorkingStartDate = data.startDate;
-            const term = getTermInfo();
+            // ★ スタッフマスターが存在する場合は、トグル・役職・所属・氏名等のマスター設定を最優先で同期！
+            // （ただしターム固有の備考 remarks が入っている場合は残し、空ならマスターの remarks を使用）
+            const remarksBackup = staffList.map(st => st.remarks);
+            if (loadStaffMaster()) {
+                staffList.forEach((st, idx) => {
+                    if (remarksBackup[idx] && !st.remarks) {
+                        st.remarks = remarksBackup[idx];
+                    }
+                });
+            } else {
+                // マスター未作成なら現在の状態でマスターを初期保存
+                saveStaffMaster();
+            }
 
-            // 2.5 日別出勤増減枠（dayOffsets）の復元（未保存または旧仕様の全日0データの場合は土日祝日-2を適用）
+            // 2.5 日別出勤増減枠（dayOffsets）の復元
             const defaultOffsets = createDefaultDayOffsets(term.dates);
-            if (Array.isArray(data.dayOffsets) && data.dayOffsets.length === NUM_DAYS) {
+            if (Array.isArray(data.dayOffsets) && data.dayOffsets.length >= 28) {
                 const hasAnyNonZero = data.dayOffsets.some(v => v !== 0);
                 if (!hasAnyNonZero) {
-                    // 旧バージョンで全日0として保存されていたデータには、土日祝日-2を自動適用
                     dayOffsets = [...defaultOffsets];
                 } else {
                     dayOffsets = [...data.dayOffsets];
+                    while (dayOffsets.length < NUM_DAYS) {
+                        dayOffsets.push(defaultOffsets[dayOffsets.length] || 0);
+                    }
+                    dayOffsets = dayOffsets.slice(0, NUM_DAYS);
                 }
             } else {
                 dayOffsets = [...defaultOffsets];
@@ -581,8 +681,12 @@ document.addEventListener('DOMContentLoaded', () => {
                     dates: term.dates,
                     dayOffsets: [...dayOffsets]
                 });
-                scheduler.grid = data.outputGrid.map(row => row.map(c => ({ ...c })));
-                const newStats = data.lastSolveStats || scheduler.calculateStats();
+                scheduler.grid = data.outputGrid.map(row => {
+                    const rCopy = Array.isArray(row) ? row.map(c => ({ ...c })) : [];
+                    while (rCopy.length < NUM_DAYS) rCopy.push({ symbol: '', isFixed: false });
+                    return rCopy.slice(0, NUM_DAYS);
+                });
+                const newStats = scheduler.calculateStats();
                 lastScheduler = scheduler;
                 lastSolveResult = {
                     success: true,
@@ -724,9 +828,17 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     function initNewTerm(newStartDate) {
+        const dateInput = document.getElementById('termStartDate');
+        if (dateInput) dateInput.value = newStartDate;
+        currentWorkingStartDate = newStartDate;
+
+        // 先に getTermInfo() を呼んで NUM_DAYS (28 or 29) を確定させる
+        const term = getTermInfo();
+
         // スタッフ基本設定マスターを引き継ぎ復元！
         loadStaffMaster();
         staffList.forEach(s => {
+            enforceRoleExclusivity(s);
             s.prevDays = ['', '', '', '', ''];
             s.days = new Array(NUM_DAYS).fill('');
         });
@@ -735,17 +847,12 @@ document.addEventListener('DOMContentLoaded', () => {
         lastSolveResult = null;
         lastScheduler = null;
 
-        const dateInput = document.getElementById('termStartDate');
-        if (dateInput) dateInput.value = newStartDate;
-        currentWorkingStartDate = newStartDate;
-
-        // ★ 公休枠制限を基本の「8.0 (4週8休)」に初期化
+        // ★ 公休枠制限: 第13ターム（29日間）なら 8.5日、通常ターム（28日間）なら 8.0日
         const stdHolidaySelect = document.getElementById('standardHolidaySelect');
         if (stdHolidaySelect) {
-            stdHolidaySelect.value = '8.0';
+            stdHolidaySelect.value = term.isTerm13 ? '8.5' : '8.0';
         }
 
-        const term = getTermInfo();
         dayOffsets = createDefaultDayOffsets(term.dates);
 
         // ★ 直前タームが存在すれば、その最終5日間の勤務実績を自動連携！
@@ -763,14 +870,17 @@ document.addEventListener('DOMContentLoaded', () => {
         updateUndoRedoUI();
         clearConflictHighlights();
 
+        saveStaffMaster();
         saveCurrentTermToStorage();
 
         if (prevTerm) {
             const pD = new Date(prevTerm + 'T00:00:00');
+            const pTermDef = findTermByStartDate(prevTerm);
+            const pDays = pTermDef ? pTermDef.numDays : 28;
             const pEndD = new Date(pD);
-            pEndD.setDate(pEndD.getDate() + 27);
+            pEndD.setDate(pEndD.getDate() + (pDays - 1));
             const pTitle = `${pD.getMonth() + 1}/${pD.getDate()}～${pEndD.getMonth() + 1}/${pEndD.getDate()}`;
-            showToast(`🆕 新規期間（${getTermInfo().title}）を開始しました（直前 ${pTitle} の最終5日実績を自動入力済）`);
+            showToast(`🆕 新規期間（${term.title}）を開始しました（直前 ${pTitle} の最終5日実績を自動入力済）`);
         }
         renderSavedTermsSelect();
     }
@@ -789,14 +899,19 @@ document.addEventListener('DOMContentLoaded', () => {
                 name: s.name,
                 isUnused: !!s.isUnused,
                 section: s.section || '',
-                can8: s.can8,
-                noEarly: s.noEarly,
-                noLate: s.noLate,
-                noEve: s.noEve,
-                canSched: s.canSched,
-                isRole: s.isRole,
-                isFullTime: s.isFullTime,
-                allow6Consec: s.allow6Consec,
+                can8: !!s.can8,
+                noEarly: !!s.noEarly,
+                noLate: !!s.noLate,
+                noEve: !!s.noEve,
+                canSched: !!s.canSched,
+                isSectionChief: !!s.isSectionChief,
+                isChief: !!s.isChief,
+                isSubChief: !!s.isSubChief,
+                isHalf: !!s.isHalf,
+                isFullTime: !!s.isFullTime,
+                allow6Consec: !!s.allow6Consec,
+                prevName: s.prevName || '',
+                remarks: s.remarks || '',
                 prevDays: [...s.prevDays],
                 days: [...s.days]
             })),
@@ -812,7 +927,7 @@ document.addEventListener('DOMContentLoaded', () => {
         }
         redoStack.length = 0; // 新規操作時はredoをクリア
         updateUndoRedoUI();
-        saveCurrentTermToStorage(); // ★ 操作直後にブラウザに自動保存！
+        saveCurrentTermToStorage();
     }
 
     function undo() {
@@ -821,7 +936,8 @@ document.addEventListener('DOMContentLoaded', () => {
         const prevState = undoStack.pop();
         restoreHistoryState(prevState);
         updateUndoRedoUI();
-        saveCurrentTermToStorage(); // ★ 戻した状態を保存
+        saveStaffMaster();
+        saveCurrentTermToStorage();
         showToast('↩ 直前の状態に戻しました');
     }
 
@@ -831,37 +947,45 @@ document.addEventListener('DOMContentLoaded', () => {
         const nextState = redoStack.pop();
         restoreHistoryState(nextState);
         updateUndoRedoUI();
-        saveCurrentTermToStorage(); // ★ やり直した状態を保存
+        saveStaffMaster();
+        saveCurrentTermToStorage();
         showToast('↪ やり直しました');
     }
 
     function restoreHistoryState(state) {
         if (!state) return;
-        if (state.staffList) {
-            state.staffList.forEach((s, idx) => {
-                if (staffList[idx]) {
-                    staffList[idx].name = s.name;
-                    staffList[idx].isUnused = s.isUnused !== undefined ? !!s.isUnused : (idx >= 48);
-                    staffList[idx].section = s.section || '';
-                    staffList[idx].can8 = s.can8;
-                    staffList[idx].noEarly = s.noEarly;
-                    staffList[idx].noLate = s.noLate;
-                    staffList[idx].noEve = s.noEve;
-                    staffList[idx].canSched = s.canSched;
-                    staffList[idx].isRole = s.isRole;
-                    staffList[idx].isFullTime = s.isFullTime;
-                    staffList[idx].allow6Consec = s.allow6Consec;
-                    staffList[idx].prevDays = [...s.prevDays];
-                    staffList[idx].days = [...s.days];
-                }
-            });
-        }
         if (state.startDate) {
             const startDateInput = document.getElementById('termStartDate');
             if (startDateInput && startDateInput.value !== state.startDate) {
                 startDateInput.value = state.startDate;
+                currentWorkingStartDate = state.startDate;
                 getTermInfo();
             }
+        }
+        if (state.staffList) {
+            state.staffList.forEach((s, idx) => {
+                if (staffList[idx]) {
+                    staffList[idx].name = cleanTextValue(s.name) || staffList[idx].name;
+                    staffList[idx].isUnused = s.isUnused !== undefined ? !!s.isUnused : (idx >= 48);
+                    staffList[idx].section = s.section || '';
+                    staffList[idx].can8 = !!s.can8;
+                    staffList[idx].noEarly = !!s.noEarly;
+                    staffList[idx].noLate = !!s.noLate;
+                    staffList[idx].noEve = !!s.noEve;
+                    staffList[idx].canSched = !!s.canSched;
+                    staffList[idx].isSectionChief = !!s.isSectionChief;
+                    staffList[idx].isChief = !!s.isChief;
+                    staffList[idx].isSubChief = !!s.isSubChief;
+                    staffList[idx].isHalf = !!s.isHalf;
+                    staffList[idx].isFullTime = !!s.isFullTime;
+                    staffList[idx].allow6Consec = !!s.allow6Consec;
+                    staffList[idx].prevName = cleanTextValue(s.prevName || '');
+                    staffList[idx].remarks = cleanTextValue(s.remarks || '');
+                    enforceRoleExclusivity(staffList[idx]);
+                    staffList[idx].prevDays = [...s.prevDays];
+                    staffList[idx].days = [...s.days];
+                }
+            });
         }
         // 出力シートの復元
         if (state.outputGrid && lastSolveResult) {
@@ -878,7 +1002,6 @@ document.addEventListener('DOMContentLoaded', () => {
         }
         renderInputTable();
 
-        // ★ 戻る / やり直す後に、現在開いているタブの制約チェックを自動実行して網掛けを完全に維持！
         const activeTab = document.querySelector('.tab-panel.active')?.id;
         if (activeTab === 'outputTab') {
             checkWorkAreaConstraints(false);
@@ -1142,7 +1265,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 </label>
             </td>`;
             bodyHtml += `<td class="sticky-col-2">
-                <input type="text" class="staff-name-input" value="${staff.name}" data-s="${sIdx}" style="width:100%; border:none; background:transparent; font-weight:600; outline:none;">
+                <input type="text" class="staff-name-input" value="${escapeHtmlText(staff.name)}" data-s="${sIdx}" style="width:100%; border:none; background:transparent; font-weight:600; outline:none;">
             </td>`;
 
             // 前5日間
@@ -1253,10 +1376,10 @@ document.addEventListener('DOMContentLoaded', () => {
                     </label>
                 </td>
                 <td class="flag-col" style="background:#f8fafc; padding:2px;">
-                    <input type="text" class="staff-prevname-input" data-s="${sIdx}" value="${staff.prevName || ''}" placeholder="旧姓" title="改姓前の前ターム氏名を入力すると過去履歴が引き継がれます" style="width:100%; border:1px solid #cbd5e1; border-radius:3px; padding:2px 4px; font-size:0.75rem; text-align:center;">
+                    <input type="text" class="staff-prevname-input" data-s="${sIdx}" value="${escapeHtmlText(staff.prevName || '')}" placeholder="旧姓" title="改姓前の前ターム氏名を入力すると過去履歴が引き継がれます" style="width:100%; border:1px solid #cbd5e1; border-radius:3px; padding:2px 4px; font-size:0.75rem; text-align:center;">
                 </td>
                 <td class="remarks-col" style="padding:2px 4px;">
-                    <input type="text" class="staff-remarks-input" data-s="${sIdx}" value="${staff.remarks || ''}" placeholder="委員会・用事等のメモ" style="width:100%; border:1px solid #cbd5e1; border-radius:3px; padding:2px 6px; font-size:0.78rem; background:white;">
+                    <input type="text" class="staff-remarks-input" data-s="${sIdx}" value="${escapeHtmlText(staff.remarks || '')}" placeholder="委員会・用事等のメモ" style="width:100%; border:1px solid #cbd5e1; border-radius:3px; padding:2px 6px; font-size:0.78rem; background:white;">
                 </td>
             `;
 
@@ -1271,9 +1394,12 @@ document.addEventListener('DOMContentLoaded', () => {
         document.querySelectorAll('.staff-name-input').forEach(input => {
             input.addEventListener('change', (e) => {
                 const s = parseInt(e.target.dataset.s, 10);
-                if (staffList[s] && staffList[s].name !== e.target.value) {
+                const newName = cleanTextValue(e.target.value) || `スタッフ ${String(s + 1).padStart(2, '0')}`;
+                if (staffList[s] && staffList[s].name !== newName) {
                     pushHistory();
-                    staffList[s].name = e.target.value.trim() || `スタッフ ${String(s + 1).padStart(2, '0')}`;
+                    staffList[s].name = newName;
+                    e.target.value = newName;
+                    saveStaffMaster();
                     saveCurrentTermToStorage();
                 }
             });
@@ -1284,7 +1410,9 @@ document.addEventListener('DOMContentLoaded', () => {
                 const s = parseInt(e.target.dataset.s, 10);
                 if (staffList[s]) {
                     pushHistory();
-                    staffList[s].prevName = e.target.value.trim();
+                    staffList[s].prevName = cleanTextValue(e.target.value);
+                    e.target.value = staffList[s].prevName;
+                    saveStaffMaster();
                     saveCurrentTermToStorage();
                 }
             });
@@ -1295,7 +1423,9 @@ document.addEventListener('DOMContentLoaded', () => {
                 const s = parseInt(e.target.dataset.s, 10);
                 if (staffList[s]) {
                     pushHistory();
-                    staffList[s].remarks = e.target.value.trim();
+                    staffList[s].remarks = cleanTextValue(e.target.value);
+                    e.target.value = staffList[s].remarks;
+                    saveStaffMaster();
                     saveCurrentTermToStorage();
                     if (lastSolveResult && lastSolveResult.grid) {
                         renderOutputTable(lastSolveResult.grid, lastSolveResult.stats);
@@ -1304,7 +1434,7 @@ document.addEventListener('DOMContentLoaded', () => {
             });
         });
 
-        // 不使用トグルのイベント
+        // 不使用トグルのイベント（変更後に必ずマスター＆ターム保存！）
         document.querySelectorAll('input[type="checkbox"][data-unused]').forEach(chk => {
             chk.addEventListener('change', (e) => {
                 const s = parseInt(e.target.dataset.s, 10);
@@ -1315,10 +1445,12 @@ document.addEventListener('DOMContentLoaded', () => {
                     if (e.target.checked) tr.classList.add('row-unused');
                     else tr.classList.remove('row-unused');
                 }
+                saveStaffMaster();
+                saveCurrentTermToStorage();
             });
         });
 
-        // セクション排他トグルのイベント
+        // セクション排他トグルのイベント（変更後に必ずマスター＆ターム保存！）
         document.querySelectorAll('input[type="checkbox"][data-section]').forEach(chk => {
             chk.addEventListener('change', (e) => {
                 const s = parseInt(e.target.dataset.s, 10);
@@ -1334,15 +1466,33 @@ document.addEventListener('DOMContentLoaded', () => {
                         staffList[s].section = '';
                     }
                 }
+                saveStaffMaster();
+                saveCurrentTermToStorage();
             });
         });
 
+        // 各属性フラグトグルのイベント（「係長」「主任」「副主任」は択一排他制御＋変更後に必ず保存！）
+        const exclusiveRoleFlags = ['isSectionChief', 'isChief', 'isSubChief'];
         document.querySelectorAll('input[type="checkbox"][data-flag]').forEach(chk => {
             chk.addEventListener('change', (e) => {
                 const s = parseInt(e.target.dataset.s, 10);
                 const flag = e.target.dataset.flag;
                 pushHistory();
                 staffList[s][flag] = e.target.checked;
+
+                // ★「係長」「主任」「副主任」は択一（1人が複数役職を同時に持たない）
+                if (e.target.checked && exclusiveRoleFlags.includes(flag)) {
+                    exclusiveRoleFlags.forEach(otherFlag => {
+                        if (otherFlag !== flag) {
+                            staffList[s][otherFlag] = false;
+                            const otherChk = document.querySelector(`input[type="checkbox"][data-flag="${otherFlag}"][data-s="${s}"]`);
+                            if (otherChk) otherChk.checked = false;
+                        }
+                    });
+                }
+
+                saveStaffMaster();
+                saveCurrentTermToStorage();
             });
         });
 
@@ -1909,9 +2059,22 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     // ★ ターム期間・タイトル情報の取得（※/※※～※/※※勤務表）
-    function getTermInfo() {
+    function getTermInfo(explicitStartDate) {
         const input = document.getElementById('termStartDate');
-        const startStr = input && input.value ? input.value : '2026-04-01';
+        const startStr = explicitStartDate || (input && input.value ? input.value : (currentWorkingStartDate || '2026-04-01'));
+        const termDef = findTermByStartDate(startStr);
+        const activeNumDays = (termDef && termDef.numDays) ? termDef.numDays : 28;
+        NUM_DAYS = activeNumDays;
+
+        // staffList の days 配列長を NUM_DAYS に安全同期
+        if (Array.isArray(staffList)) {
+            staffList.forEach(s => {
+                if (Array.isArray(s.days)) {
+                    while (s.days.length < NUM_DAYS) s.days.push('');
+                }
+            });
+        }
+
         const parts = startStr.split('-').map(Number);
         const startDate = new Date(parts[0], parts[1] - 1, parts[2]);
 
@@ -1940,10 +2103,17 @@ document.addEventListener('DOMContentLoaded', () => {
             });
         }
         const first = dates[0];
-        const last = dates[NUM_DAYS - 1];
+        const last = dates[dates.length - 1];
         const title = `${first.m}/${first.day}～${last.m}/${last.day}勤務表`;
+        const badgeText = termDef
+            ? `第${termDef.termNo}ターム (${first.m}/${first.day}～${last.m}/${last.day})`
+            : title;
 
         // UI表示の更新
+        const termSelect = document.getElementById('termSelect');
+        if (termSelect && termDef && termSelect.value !== termDef.startDate) {
+            termSelect.value = termDef.startDate;
+        }
         const endDisplay = document.getElementById('termEndDateDisplay');
         if (endDisplay) {
             const lastY = last.dateObj.getFullYear();
@@ -1952,7 +2122,10 @@ document.addEventListener('DOMContentLoaded', () => {
             endDisplay.textContent = `${lastY}-${lastM}-${lastD}`;
         }
         const badge = document.getElementById('termTitleBadge');
-        if (badge) badge.textContent = title;
+        if (badge) badge.textContent = badgeText;
+        const daysBadge = document.getElementById('termDaysBadge');
+        if (daysBadge) daysBadge.textContent = `${NUM_DAYS}日間`;
+
         const outTitle = document.getElementById('outputTitleDisplay');
         if (outTitle) outTitle.textContent = `✏️ ${title}（修正作業エリア）`;
         const checkTitle = document.getElementById('checkTitleDisplay');
@@ -1962,7 +2135,15 @@ document.addEventListener('DOMContentLoaded', () => {
             updateRefreshBadge(dates);
         }
 
-        return { title, dates, first, last };
+        return {
+            title,
+            badgeText,
+            dates,
+            first,
+            last,
+            numDays: NUM_DAYS,
+            isTerm13: !!(termDef && termDef.isTerm13)
+        };
     }
 
     const termStartDateInput = document.getElementById('termStartDate');
@@ -2588,7 +2769,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 <th class="sticky-col-1 border-thick-bottom" rowspan="2">No</th>
                 <th class="sticky-col-2 border-thick-right border-thick-bottom" rowspan="2">氏名</th>
                 <th colspan="${NUM_DAYS}" class="border-thick-right border-thick-bottom" style="font-size:0.95rem; font-weight:800; background:#f8fafc; color:#1e293b;">${term.title}</th>
-                <th colspan="8" class="border-thick-bottom" style="background:#e0f2fe; color:#0369a1; font-weight:800;">勤務・休暇 集計</th>
+                <th colspan="9" class="border-thick-bottom" style="background:#e0f2fe; color:#0369a1; font-weight:800;">勤務・休暇 集計 ＆ 備考</th>
             </tr>
             <tr>
         `;
@@ -2652,7 +2833,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 <td class="stat-cell ${rowBottomCls}" data-s="${s}" data-stat="late" style="font-weight:600; color:#334155; background:transparent;">${staffStat.late}</td>
                 <td class="stat-cell ${rowBottomCls}" data-s="${s}" data-stat="eve" style="font-weight:600; color:#334155; background:transparent;">${staffStat.eve}</td>
                 <td class="stat-cell ${rowBottomCls}" data-s="${s}" data-stat="h8" style="font-weight:600; color:#334155; background:transparent;">${staffStat.h8}</td>
-                <td class="remarks-cell ${rowBottomCls}" style="min-width:220px; max-width:320px; text-align:left; font-size:0.8rem; color:#475569; padding:2px 8px; white-space:normal; word-break:break-all; background:transparent;">${staff.remarks || ''}</td>
+                <td class="remarks-cell ${rowBottomCls}" style="min-width:220px; max-width:320px; text-align:left; font-size:0.8rem; color:#475569; padding:2px 8px; white-space:normal; word-break:break-all; background:transparent;">${escapeHtmlText(staff.remarks || '')}</td>
             `;
             bodyHtml += `</tr>`;
         });
@@ -3966,7 +4147,7 @@ document.addEventListener('DOMContentLoaded', () => {
             const r = idx + 4;
             sheet1 += `\n    <row r="${r}" ht="20" customHeight="1">
       <c r="A${r}" s="5"><v>${idx + 1}</v></c>
-      <c r="B${r}" s="6" t="inlineStr"><is><t>${staff.name}</t></is></c>`;
+      <c r="B${r}" s="6" t="inlineStr"><is><t>${escapeXmlText(staff.name)}</t></is></c>`;
 
             for (let d = 0; d < numDays; d++) {
                 const colLetter = toColLetter(3 + d);
@@ -3978,7 +4159,7 @@ document.addEventListener('DOMContentLoaded', () => {
             const fPaid = `COUNTIF(${rng},&quot;有&quot;)+0.5*(COUNTIF(${rng},&quot;○/有&quot;)+COUNTIF(${rng},&quot;〇/有&quot;)+COUNTIF(${rng},&quot;有/○&quot;)+COUNTIF(${rng},&quot;有/〇&quot;))`;
             sheet1 += `\n      <c r="${colOff}${r}" s="7"><f>${fOff}</f><v>0</v></c>
       <c r="${colPaid}${r}" s="7"><f>${fPaid}</f><v>0</v></c>
-      <c r="${colRemarks}${r}" s="5"/>
+      <c r="${colRemarks}${r}" s="6" t="inlineStr"><is><t>${escapeXmlText(staff.remarks || '')}</t></is></c>
     </row>`;
         });
 
@@ -4048,7 +4229,8 @@ document.addEventListener('DOMContentLoaded', () => {
     // ==========================================
     // 希望勤務データのグリッド反映処理（赤字・太字・変更不可ロック）
     // ==========================================
-    function applyScheduleImport(extractedItems, mode = 'merge') {
+    function applyScheduleImport(extractedItems, mode = 'merge', remarksMap = null) {
+        const term = getTermInfo();
         // mode: 'replace' の場合は既存の入力希望を一度クリア
         if (mode === 'replace') {
             for (let s = 0; s < NUM_STAFF; s++) {
@@ -4056,6 +4238,15 @@ document.addEventListener('DOMContentLoaded', () => {
                     staffList[s].days[d] = '';
                 }
             }
+        }
+
+        if (remarksMap && typeof remarksMap === 'object') {
+            Object.keys(remarksMap).forEach(sIdxStr => {
+                const sIdx = parseInt(sIdxStr, 10);
+                if (staffList[sIdx]) {
+                    staffList[sIdx].remarks = cleanTextValue(remarksMap[sIdxStr]);
+                }
+            });
         }
 
         let updatedCount = 0;
@@ -4075,11 +4266,11 @@ document.addEventListener('DOMContentLoaded', () => {
             }
         });
 
-        // テーブル再描画
+        // テーブル再描画 ＆ 自動保存
         renderInputTable();
-        const term = getTermInfo();
         const modeText = mode === 'replace' ? '（既存枠クリア済み）' : '';
-        saveCurrentTermToStorage(); // ★ 希望取り込みデータをブラウザに自動保存
+        saveStaffMaster();
+        saveCurrentTermToStorage();
         if (updatedCount === 0) {
             showToast(`📄 【${term.title}】事前希望枠を全クリア（白紙）にしました`);
         } else {
@@ -4087,84 +4278,159 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     }
 
+    // ★ XMLノードから <rPh>（日本語Excelが自動付与する「ふりがな」タグ）を完全除外してテキストのみを抽出するヘルパー
+    function extractXmlTextWithoutPhonetic(node) {
+        if (!node) return '';
+        const clone = node.cloneNode(true);
+        // <rPh>（ふりがな要素）を削除してから <t> を連結する（これで「委員会イインカイ」等の文字化けを100%防止）
+        const rPhNodes = clone.getElementsByTagName('rPh');
+        while (rPhNodes.length > 0) {
+            if (rPhNodes[0].parentNode) {
+                rPhNodes[0].parentNode.removeChild(rPhNodes[0]);
+            } else {
+                break;
+            }
+        }
+        const tNodes = clone.getElementsByTagName('t');
+        let str = '';
+        if (tNodes.length > 0) {
+            for (let j = 0; j < tNodes.length; j++) {
+                str += tNodes[j].textContent;
+            }
+        } else {
+            str = clone.textContent || '';
+        }
+        return cleanTextValue(str);
+    }
+
+    // ★ CSV / TSV ファイルの自動文字コード判定読み込み（UTF-8 / Shift-JIS 自動判別）
+    async function readTextFileAutoEncoding(file) {
+        const buf = await file.arrayBuffer();
+        const uint8 = new Uint8Array(buf);
+        try {
+            // まず UTF-8 (fatal: true) でデコードを試みる
+            const utf8Decoder = new TextDecoder('utf-8', { fatal: true });
+            return utf8Decoder.decode(uint8);
+        } catch (e) {
+            // 日本語版Excelが出力した Shift-JIS (CP932) CSV の場合は Shift-JIS でデコード
+            try {
+                const sjisDecoder = new TextDecoder('shift-jis');
+                return sjisDecoder.decode(uint8);
+            } catch (e2) {
+                return new TextDecoder().decode(uint8);
+            }
+        }
+    }
+
     // ==========================================
-    // 純粋JSによる .xlsx 解凍＆パース処理
+    // 純粋JSによる .xlsx 解凍＆パース処理（ふりがな除去・28/29日動的列対応）
     // ==========================================
     async function parseXlsxBuffer(arrayBuffer) {
         const bytes = new Uint8Array(arrayBuffer);
         const view = new DataView(bytes.buffer);
-        const textDecoder = new TextDecoder();
+        const textDecoder = new TextDecoder('utf-8');
         const entries = {};
 
-        let pos = 0;
-        while (pos < bytes.length - 4) {
-            const sig = view.getUint32(pos, true);
-            if (sig === 0x04034b50) {
-                const method = view.getUint16(pos + 8, true);
-                const compSize = view.getUint32(pos + 18, true);
-                const nameLen = view.getUint16(pos + 26, true);
-                const extraLen = view.getUint16(pos + 28, true);
-                const name = textDecoder.decode(bytes.subarray(pos + 30, pos + 30 + nameLen));
-                const dataStart = pos + 30 + nameLen + extraLen;
-                const compData = bytes.subarray(dataStart, dataStart + compSize);
-
-                let decompData = null;
-                if (method === 0) {
-                    decompData = compData;
-                } else if (method === 8) {
-                    if (typeof DecompressionStream !== 'undefined') {
-                        try {
-                            const ds = new DecompressionStream('deflate-raw');
-                            const writer = ds.writable.getWriter();
-                            writer.write(compData);
-                            writer.close();
-                            const reader = ds.readable.getReader();
-                            const chunks = [];
-                            while (true) {
-                                const { done, value } = await reader.read();
-                                if (done) break;
-                                chunks.push(value);
-                            }
-                            const totalLen = chunks.reduce((acc, c) => acc + c.length, 0);
-                            decompData = new Uint8Array(totalLen);
-                            let off = 0;
-                            for (const c of chunks) {
-                                decompData.set(c, off);
-                                off += c.length;
-                            }
-                        } catch (e) {
-                            console.warn('Decompress error for ' + name, e);
-                        }
-                    }
+        // Central Directory から正確な圧縮サイズ・オフセットを取得（Excel上書き保存時の Data Descriptor にも対応）
+        const cdEntries = [];
+        for (let i = bytes.length - 22; i >= Math.max(0, bytes.length - 65557); i--) {
+            if (view.getUint32(i, true) === 0x06054b50) {
+                const totalEntries = view.getUint16(i + 10, true);
+                let cdPos = view.getUint32(i + 16, true);
+                for (let e = 0; e < totalEntries && cdPos < bytes.length - 46; e++) {
+                    if (view.getUint32(cdPos, true) !== 0x02014b50) break;
+                    const method = view.getUint16(cdPos + 10, true);
+                    const compSize = view.getUint32(cdPos + 20, true);
+                    const nameLen = view.getUint16(cdPos + 28, true);
+                    const extraLen = view.getUint16(cdPos + 30, true);
+                    const commentLen = view.getUint16(cdPos + 32, true);
+                    const localOffset = view.getUint32(cdPos + 42, true);
+                    const name = textDecoder.decode(bytes.subarray(cdPos + 46, cdPos + 46 + nameLen));
+                    cdEntries.push({ name, method, compSize, localOffset });
+                    cdPos += 46 + nameLen + extraLen + commentLen;
                 }
-
-                if (decompData) {
-                    entries[name] = textDecoder.decode(decompData);
-                }
-                pos = dataStart + compSize;
-            } else {
-                pos++;
+                break;
             }
         }
 
-        // sharedStrings.xml の抽出
+        async function inflateEntry(method, compData) {
+            if (method === 0) return compData;
+            if (method === 8 && typeof DecompressionStream !== 'undefined') {
+                try {
+                    const ds = new DecompressionStream('deflate-raw');
+                    const writer = ds.writable.getWriter();
+                    writer.write(compData);
+                    writer.close();
+                    const reader = ds.readable.getReader();
+                    const chunks = [];
+                    while (true) {
+                        const { done, value } = await reader.read();
+                        if (done) break;
+                        chunks.push(value);
+                    }
+                    const totalLen = chunks.reduce((acc, c) => acc + c.length, 0);
+                    const decompData = new Uint8Array(totalLen);
+                    let off = 0;
+                    for (const c of chunks) {
+                        decompData.set(c, off);
+                        off += c.length;
+                    }
+                    return decompData;
+                } catch (e) {
+                    console.warn('Decompress error', e);
+                }
+            }
+            return null;
+        }
+
+        if (cdEntries.length > 0) {
+            for (const ce of cdEntries) {
+                const pos = ce.localOffset;
+                if (pos + 30 <= bytes.length && view.getUint32(pos, true) === 0x04034b50) {
+                    const nameLen = view.getUint16(pos + 26, true);
+                    const extraLen = view.getUint16(pos + 28, true);
+                    const dataStart = pos + 30 + nameLen + extraLen;
+                    const compData = bytes.subarray(dataStart, dataStart + ce.compSize);
+                    const decompData = await inflateEntry(ce.method, compData);
+                    if (decompData) {
+                        entries[ce.name] = textDecoder.decode(decompData);
+                    }
+                }
+            }
+        } else {
+            let pos = 0;
+            while (pos < bytes.length - 4) {
+                const sig = view.getUint32(pos, true);
+                if (sig === 0x04034b50) {
+                    const method = view.getUint16(pos + 8, true);
+                    const compSize = view.getUint32(pos + 18, true);
+                    const nameLen = view.getUint16(pos + 26, true);
+                    const extraLen = view.getUint16(pos + 28, true);
+                    const name = textDecoder.decode(bytes.subarray(pos + 30, pos + 30 + nameLen));
+                    const dataStart = pos + 30 + nameLen + extraLen;
+                    const compData = bytes.subarray(dataStart, dataStart + compSize);
+                    const decompData = await inflateEntry(method, compData);
+                    if (decompData) {
+                        entries[name] = textDecoder.decode(decompData);
+                    }
+                    pos = dataStart + (compSize || 1);
+                } else {
+                    pos++;
+                }
+            }
+        }
+
+        // sharedStrings.xml の抽出（★ <rPh> ふりがなタグを完全除外！）
         const sharedStrings = [];
         if (entries['xl/sharedStrings.xml']) {
             const parser = new DOMParser();
             const xmlDoc = parser.parseFromString(entries['xl/sharedStrings.xml'], 'text/xml');
             const siNodes = xmlDoc.getElementsByTagName('si');
             for (let i = 0; i < siNodes.length; i++) {
-                const si = siNodes[i];
-                const tNodes = si.getElementsByTagName('t');
-                let str = '';
-                for (let j = 0; j < tNodes.length; j++) str += tNodes[j].textContent;
-                sharedStrings.push(str);
+                sharedStrings.push(extractXmlTextWithoutPhonetic(siNodes[i]));
             }
         }
 
-        // sheet1.xml の抽出とセルマッピング
-        const items = [];
-        let detectedStartDate = null;
         const sheetXml = entries['xl/worksheets/sheet1.xml'];
         if (!sheetXml) {
             throw new Error('Excelシート（sheet1.xml）が見つかりませんでした。');
@@ -4174,152 +4440,183 @@ document.addEventListener('DOMContentLoaded', () => {
         const xmlDoc = parser.parseFromString(sheetXml, 'text/xml');
         const cNodes = xmlDoc.getElementsByTagName('c');
 
-        // A. sharedStrings からタイトル（例: "4月29日～5月26日" や "2026/04/29"）を探索
+        function getCellText(c) {
+            const t = c.getAttribute('t');
+            if (t === 's') {
+                const vNode = c.getElementsByTagName('v')[0];
+                if (vNode) return sharedStrings[parseInt(vNode.textContent, 10)] || '';
+                return '';
+            } else if (t === 'inlineStr') {
+                const isNode = c.getElementsByTagName('is')[0];
+                return extractXmlTextWithoutPhonetic(isNode || c);
+            } else if (t === 'str') {
+                const vNode = c.getElementsByTagName('v')[0];
+                return cleanTextValue(vNode ? vNode.textContent : '');
+            } else {
+                const fNode = c.getElementsByTagName('f')[0];
+                if (fNode) return ''; // 数式セル（集計列など）のキャッシュ数値 <v>0</v> は文字列として扱わない
+                const vNode = c.getElementsByTagName('v')[0];
+                return cleanTextValue(vNode ? vNode.textContent : '');
+            }
+        }
+
+        // タイトルから期間開始日を検出
+        let detectedStartDate = null;
         const titleRegex = /(?:(\d{4})[年\/-])?(\d{1,2})月(\d{1,2})日[～〜~-](\d{1,2})月(\d{1,2})日/;
-        const currentYear = document.getElementById('termStartDate')?.value ? parseInt(document.getElementById('termStartDate').value.split('-')[0], 10) : 2026;
+        const currentYear = document.getElementById('termStartDate')?.value
+            ? parseInt(document.getElementById('termStartDate').value.split('-')[0], 10)
+            : 2026;
 
-        for (const str of sharedStrings) {
-            const m = str.match(titleRegex);
-            if (m) {
-                const y = m[1] ? parseInt(m[1], 10) : currentYear;
-                const mon = String(parseInt(m[2], 10)).padStart(2, '0');
-                const day = String(parseInt(m[3], 10)).padStart(2, '0');
-                detectedStartDate = `${y}-${mon}-${day}`;
-                break;
-            }
-        }
-
-        // レイアウト判定: C列（C2〜C4）にセルが存在するかで新レイアウト（行4〜53, 列3〜30）かどうかを判定
-        let isNewLayout = false;
-        for (let i = 0; i < Math.min(200, cNodes.length); i++) {
-            const ref = cNodes[i].getAttribute('r');
-            if (ref && /^C[2-4]$/.test(ref)) {
-                isNewLayout = true;
-                break;
-            }
-        }
+        // 全セルをマップ化
+        const cellMap = new Map(); // "row,col" -> { c, text }
+        let maxRow = 0;
+        let maxCol = 0;
 
         for (let i = 0; i < cNodes.length; i++) {
             const c = cNodes[i];
             const ref = c.getAttribute('r');
             if (!ref) continue;
-
             const m = ref.match(/^([A-Z]+)([0-9]+)$/);
             if (!m) continue;
-
             const colStr = m[1];
             const row = parseInt(m[2], 10);
-
-            // 列文字から1-based列番号へ変換
             let col = 0;
             for (let k = 0; k < colStr.length; k++) {
                 col = col * 26 + (colStr.charCodeAt(k) - 64);
             }
+            const text = getCellText(c);
+            cellMap.set(`${row},${col}`, { c, text, ref });
+            if (row > maxRow) maxRow = row;
+            if (col > maxCol) maxCol = col;
 
-            // B. もしタイトルから日付が取れていない場合、C2 セル（または L2 セル）から初日日付を取得
-            if (!detectedStartDate && (ref === 'C2' || ref === 'L2')) {
-                let cellVal = '';
-                const t = c.getAttribute('t');
-                if (t === 's') {
-                    const v = c.getElementsByTagName('v')[0]?.textContent;
-                    if (v !== undefined) cellVal = sharedStrings[parseInt(v, 10)] || '';
-                } else if (t === 'inlineStr') {
-                    cellVal = c.getElementsByTagName('t')[0]?.textContent || '';
-                } else {
-                    cellVal = c.getElementsByTagName('v')[0]?.textContent || '';
-                }
-                const mDate = cellVal.match(/(?:(\d{4})[年\/-])?(\d{1,2})[月\/-](\d{1,2})/);
-                if (mDate) {
-                    const y = mDate[1] ? parseInt(mDate[1], 10) : currentYear;
-                    const mon = String(parseInt(mDate[2], 10)).padStart(2, '0');
-                    const day = String(parseInt(mDate[3], 10)).padStart(2, '0');
-                    detectedStartDate = `${y}-${mon}-${day}`;
-                }
-            }
-
-            let staffIdx = -1;
-            let dayIdx = -1;
-
-            if (isNewLayout) {
-                // 新レイアウト: スタッフ行 4〜 (最大 4 + NUM_STAFF - 1), 日付列 C〜AD (列 3〜30)
-                if (row >= 4 && row <= (3 + NUM_STAFF) && col >= 3 && col <= 30) {
-                    staffIdx = row - 4;
-                    dayIdx = col - 3;
-                }
-                // ★ 列33 (AG列) は備考欄！
-                if (row >= 4 && row <= (3 + NUM_STAFF) && col === 33) {
-                    const stIdx = row - 4;
-                    let memoText = '';
-                    const t = c.getAttribute('t');
-                    if (t === 's') {
-                        const vNode = c.getElementsByTagName('v')[0];
-                        if (vNode) memoText = sharedStrings[parseInt(vNode.textContent, 10)] || '';
-                    } else if (t === 'inlineStr') {
-                        const isNode = c.getElementsByTagName('is')[0];
-                        if (isNode) memoText = isNode.textContent || '';
-                    } else {
-                        const vNode = c.getElementsByTagName('v')[0];
-                        if (vNode) memoText = vNode.textContent || '';
-                    }
-                    if (memoText && staffList[stIdx]) {
-                        staffList[stIdx].remarks = memoText.trim();
-                    }
-                }
-            } else {
-                // 旧レイアウト互換: スタッフ行 3〜 (最大 3 + NUM_STAFF - 1), 日付列 L〜AM (列 12〜39)
-                if (row >= 3 && row <= (2 + NUM_STAFF) && col >= 12 && col <= 39) {
-                    staffIdx = row - 3;
-                    dayIdx = col - 12;
-                }
-            }
-
-            if (staffIdx >= 0 && staffIdx < NUM_STAFF && dayIdx >= 0 && dayIdx < NUM_DAYS) {
-                const t = c.getAttribute('t');
-                let val = '';
-                if (t === 's') {
-                    const vNode = c.getElementsByTagName('v')[0];
-                    if (vNode) {
-                        const idx = parseInt(vNode.textContent, 10);
-                        val = sharedStrings[idx] || '';
-                    }
-                } else if (t === 'inlineStr') {
-                    const isNode = c.getElementsByTagName('is')[0];
-                    if (isNode) {
-                        const tNodes = isNode.getElementsByTagName('t');
-                        for (let j = 0; j < tNodes.length; j++) val += tNodes[j].textContent;
-                    }
-                } else {
-                    const vNode = c.getElementsByTagName('v')[0];
-                    if (vNode) val = vNode.textContent;
-                }
-
-                if (val && val.trim() !== '') {
-                    items.push({
-                        staffIdx,
-                        dayIdx,
-                        symbol: val.trim()
-                    });
+            if (row === 1 && col === 1 && text) {
+                const tm = text.match(titleRegex);
+                if (tm) {
+                    const y = tm[1] ? parseInt(tm[1], 10) : currentYear;
+                    const mon = String(parseInt(tm[2], 10)).padStart(2, '0');
+                    const day = String(parseInt(tm[3], 10)).padStart(2, '0');
+                    const candidate = `${y}-${mon}-${day}`;
+                    const matchedTerm = findTermByStartDate(candidate);
+                    detectedStartDate = matchedTerm ? matchedTerm.startDate : candidate;
                 }
             }
         }
 
-        return { items, startDate: detectedStartDate };
+        // 2行目のヘッダーを走査して、シート種別（希望シート vs 完成勤務表 vs 旧シート）・日付開始列・日数・備考列を正確に特定！
+        let dayStartCol = 3; // デフォルト: C列 (希望入力シート)
+        let remarksCol = -1;
+        let nameCol = 2;     // デフォルト: B列 (希望入力シート)
+        let dataStartRow = 4;
+
+        const a2Text = cellMap.get('2,1')?.text || '';
+        const b2Text = cellMap.get('2,2')?.text || '';
+        const c2Text = cellMap.get('2,3')?.text || '';
+
+        if (a2Text === '氏名') {
+            // 完成・修正勤務表 (exportExcelSpreadsheet): A列=氏名, B列〜=日付
+            nameCol = 1;
+            dayStartCol = 2;
+            dataStartRow = 4;
+        } else if (a2Text === 'No' && b2Text === '氏名' && c2Text === '8時可') {
+            // 旧レイアウト: A=No, B=氏名, L(12)〜=日付
+            nameCol = 2;
+            dayStartCol = 12;
+            dataStartRow = 3;
+        } else {
+            // 希望入力シート (downloadBlankXlsx): A=No, B=氏名, C(3)〜=日付
+            nameCol = 2;
+            dayStartCol = 3;
+            dataStartRow = 4;
+        }
+
+        // 2行目から「備考」または「備考（メモ）」列を探す
+        for (let col = 1; col <= maxCol; col++) {
+            const hText = cellMap.get(`2,${col}`)?.text || '';
+            if (hText.includes('備考') || hText.includes('メモ') || hText.includes('コメント')) {
+                remarksCol = col;
+                break;
+            }
+        }
+
+        // 対象タームの日数（28日 or 29日）を判定
+        const targetTerm = findTermByStartDate(detectedStartDate || currentWorkingStartDate);
+        const sheetNumDays = targetTerm ? targetTerm.numDays : NUM_DAYS;
+
+        if (remarksCol === -1 && dataStartRow === 4) {
+            remarksCol = (dayStartCol === 3) ? (5 + sheetNumDays) : (10 + sheetNumDays);
+        }
+
+        // 有効スタッフのインデックス一覧
+        const validStaffIndices = [];
+        staffList.forEach((st, idx) => {
+            if (!st.isUnused) validStaffIndices.push(idx);
+        });
+
+        const items = [];
+        const remarksMap = {};
+
+        for (let row = dataStartRow; row <= maxRow; row++) {
+            const rowName = cellMap.get(`${row},${nameCol}`)?.text || '';
+            // フッター集計行（出勤人数合計・実数合計・早番等）に達したら終了
+            if (['出勤人数合計', '実数合計', 'PT A 出勤', 'OT A 出勤', 'PT B 出勤', 'OT B 出勤', 'ST 出勤', '早番', '遅番', 'E', '8時', '専従'].some(k => rowName.startsWith(k))) {
+                break;
+            }
+
+            // スタッフの特定（1. 氏名一致 → 2. 有効スタッフ順 → 3. 行番号順）
+            let staffIdx = -1;
+            if (rowName) {
+                const byName = staffList.findIndex(st => cleanTextValue(st.name) === rowName);
+                if (byName >= 0) staffIdx = byName;
+            }
+            if (staffIdx === -1) {
+                const offsetIdx = row - dataStartRow;
+                if (offsetIdx >= 0 && offsetIdx < validStaffIndices.length) {
+                    staffIdx = validStaffIndices[offsetIdx];
+                } else if (offsetIdx >= 0 && offsetIdx < NUM_STAFF) {
+                    staffIdx = offsetIdx;
+                }
+            }
+
+            if (staffIdx < 0 || staffIdx >= NUM_STAFF) continue;
+
+            // 日付セルの読み取り
+            for (let d = 0; d < sheetNumDays; d++) {
+                const col = dayStartCol + d;
+                const cellEntry = cellMap.get(`${row},${col}`);
+                if (cellEntry && cellEntry.text) {
+                    items.push({
+                        staffIdx,
+                        dayIdx: d,
+                        symbol: cellEntry.text
+                    });
+                }
+            }
+
+            // 右側の備考（コメント）列の読み取り
+            if (remarksCol > 0) {
+                const remEntry = cellMap.get(`${row},${remarksCol}`);
+                if (remEntry && remEntry.text && remEntry.text !== '-') {
+                    remarksMap[staffIdx] = remEntry.text;
+                } else {
+                    remarksMap[staffIdx] = '';
+                }
+            }
+        }
+
+        return { items, startDate: detectedStartDate, remarksMap };
     }
 
     // ==========================================
     // CSV / TSV テキストのパース処理
     // ==========================================
     function parseCsvOrTsvText(text) {
-        const lines = text.split(/\r?\n/).filter(l => l.trim().length > 0);
-        if (lines.length === 0) return [];
+        const cleanFullText = text.replace(/^\uFEFF/, '');
+        const lines = cleanFullText.split(/\r?\n/).filter(l => l.trim().length > 0);
+        if (lines.length === 0) return { items: [], startDate: null, remarksMap: {} };
 
-        // タブかカンマかを自動判定
         const isTsv = lines[0].includes('\t');
-        const sep = isTsv ? '\t' : ',';
-
-        // 簡易CSVパース（引用符考慮）
         function parseLine(line) {
-            if (isTsv) return line.split('\t').map(c => c.trim().replace(/^"(.*)"$/, '$1'));
+            if (isTsv) return line.split('\t').map(c => cleanTextValue(c.replace(/^"(.*)"$/, '$1')));
             const res = [];
             let cur = '';
             let inQ = false;
@@ -4329,23 +4626,23 @@ document.addEventListener('DOMContentLoaded', () => {
                     if (inQ && line[i + 1] === '"') { cur += '"'; i++; }
                     else { inQ = !inQ; }
                 } else if (ch === ',' && !inQ) {
-                    res.push(cur.trim());
+                    res.push(cleanTextValue(cur));
                     cur = '';
                 } else {
                     cur += ch;
                 }
             }
-            res.push(cur.trim());
+            res.push(cleanTextValue(cur));
             return res;
         }
 
         const rows = lines.map(parseLine);
         const items = [];
+        const remarksMap = {};
 
         let detectedStartDate = null;
         const currentYear = document.getElementById('termStartDate')?.value ? parseInt(document.getElementById('termStartDate').value.split('-')[0], 10) : 2026;
 
-        // ヘッダー行などから日付の探索
         for (let i = 0; i < Math.min(3, rows.length); i++) {
             const lineStr = rows[i].join(' ');
             const m = lineStr.match(/(?:(\d{4})[年\/-])?(\d{1,2})[月\/-](\d{1,2})/);
@@ -4353,36 +4650,39 @@ document.addEventListener('DOMContentLoaded', () => {
                 const y = m[1] ? parseInt(m[1], 10) : currentYear;
                 const mon = String(parseInt(m[2], 10)).padStart(2, '0');
                 const day = String(parseInt(m[3], 10)).padStart(2, '0');
-                detectedStartDate = `${y}-${mon}-${day}`;
+                const candidate = `${y}-${mon}-${day}`;
+                const matchedTerm = findTermByStartDate(candidate);
+                detectedStartDate = matchedTerm ? matchedTerm.startDate : candidate;
                 break;
             }
         }
 
-        // パターン1: 28列のみ（セル範囲のコピペ貼り付け）
-        if (rows[0].length === NUM_DAYS && rows.length <= NUM_STAFF) {
+        if ((rows[0].length === 28 || rows[0].length === 29) && rows.length <= NUM_STAFF) {
             rows.forEach((rowVals, sIdx) => {
                 rowVals.forEach((val, dIdx) => {
-                    if (val && val.trim() !== '') {
-                        items.push({ staffIdx: sIdx, dayIdx: dIdx, symbol: val.trim() });
-                    }
+                    if (val) items.push({ staffIdx: sIdx, dayIdx: dIdx, symbol: val });
                 });
             });
-            return { items, startDate: detectedStartDate };
+            return { items, startDate: detectedStartDate, remarksMap };
         }
 
-        // パターン2: 表全体（No, 氏名, ..., 各日）
-        // ヘッダー行を探す（Noまたは氏名、または日付を含む行）
         let headerRowIdx = -1;
-        let dayColStart = 11; // デフォルトはL列(0-based 11)
+        let dayColStart = 2;
+        let remarksColIdx = -1;
 
         for (let i = 0; i < Math.min(5, rows.length); i++) {
             const r = rows[i];
             if (r.some(cell => cell.includes('No') || cell.includes('氏名') || cell.includes('/'))) {
                 headerRowIdx = i;
-                // 日付らしき列を探す
                 for (let c = 0; c < r.length; c++) {
                     if (/\d+[\/月]\d+/.test(r[c])) {
                         dayColStart = c;
+                        break;
+                    }
+                }
+                for (let c = 0; c < r.length; c++) {
+                    if (r[c].includes('備考') || r[c].includes('メモ')) {
+                        remarksColIdx = c;
                         break;
                     }
                 }
@@ -4395,15 +4695,14 @@ document.addEventListener('DOMContentLoaded', () => {
             const rowVals = rows[r];
             if (rowVals.length < 2) continue;
 
-            // スタッフ判定（1列目のNo、または2列目の氏名）
             let staffIdx = -1;
             const noVal = parseInt(rowVals[0], 10);
             if (!isNaN(noVal) && noVal >= 1 && noVal <= NUM_STAFF) {
                 staffIdx = noVal - 1;
             } else {
                 const nameVal = rowVals[1] || rowVals[0];
-                if (nameVal && nameVal.trim() !== '') {
-                    const found = staffList.findIndex(st => st.name === nameVal.trim());
+                if (nameVal) {
+                    const found = staffList.findIndex(st => cleanTextValue(st.name) === nameVal);
                     if (found >= 0) staffIdx = found;
                 }
             }
@@ -4411,17 +4710,17 @@ document.addEventListener('DOMContentLoaded', () => {
             if (staffIdx >= 0 && staffIdx < NUM_STAFF) {
                 for (let d = 0; d < NUM_DAYS; d++) {
                     const col = dayColStart + d;
-                    if (col < rowVals.length) {
-                        const val = rowVals[col];
-                        if (val && val.trim() !== '') {
-                            items.push({ staffIdx, dayIdx: d, symbol: val.trim() });
-                        }
+                    if (col < rowVals.length && rowVals[col]) {
+                        items.push({ staffIdx, dayIdx: d, symbol: rowVals[col] });
                     }
+                }
+                if (remarksColIdx >= 0 && remarksColIdx < rowVals.length) {
+                    remarksMap[staffIdx] = rowVals[remarksColIdx] || '';
                 }
             }
         }
 
-        return { items, startDate: detectedStartDate };
+        return { items, startDate: detectedStartDate, remarksMap };
     }
 
     // ==========================================
@@ -4435,45 +4734,32 @@ document.addEventListener('DOMContentLoaded', () => {
 
             try {
                 let parseResult;
-                if (file.name.endsWith('.xlsx')) {
+                if (file.name.toLowerCase().endsWith('.xlsx')) {
                     const buf = await file.arrayBuffer();
                     parseResult = await parseXlsxBuffer(buf);
                 } else {
-                    const text = await file.text();
+                    const text = await readTextFileAutoEncoding(file);
                     parseResult = parseCsvOrTsvText(text);
                 }
 
-                // ★ 白紙シート（希望入力なし）を取り込んだ場合でも、既存データを全クリア（白紙化）して正常に反映！
-                if (!parseResult || !parseResult.items || parseResult.items.length === 0) {
-                    pushHistory();
-                    if (parseResult && parseResult.startDate) {
-                        const startDateInput = document.getElementById('termStartDate');
-                        if (startDateInput) {
-                            startDateInput.value = parseResult.startDate;
-                            getTermInfo();
-                        }
+                pushHistory();
+
+                if (parseResult && parseResult.startDate) {
+                    const startDateInput = document.getElementById('termStartDate');
+                    if (startDateInput) {
+                        startDateInput.value = parseResult.startDate;
+                        currentWorkingStartDate = parseResult.startDate;
+                        getTermInfo();
                     }
-                    applyScheduleImport([], 'replace');
+                }
+
+                if (!parseResult || !parseResult.items || parseResult.items.length === 0) {
+                    applyScheduleImport([], 'replace', parseResult ? parseResult.remarksMap : null);
                     showToast('📄 白紙の希望シートを取り込みました。事前希望枠を全クリア（白紙）にしました。');
                     return;
                 }
 
-                // ★ 取り込み前状態を履歴に保存（「↩ 戻る」で取り消し可能）
-                pushHistory();
-
-                // ★ 要望対応1: 取り込んだシートの期間に合わせて、indexの対象期間（開始日・終了日・ヘッダー日付）を自動同期！
-                if (parseResult.startDate) {
-                    const startDateInput = document.getElementById('termStartDate');
-                    if (startDateInput) {
-                        startDateInput.value = parseResult.startDate;
-                        getTermInfo(); // 期間終了日やバッジ、タイトルを自動再計算
-                    }
-                }
-
-                // ★ 要望対応2: 既存のサンプルデータを完全消去（replace）し、取り込んだ希望データのみをクリーンに反映！
-                applyScheduleImport(parseResult.items, 'replace');
-
-                // ★ 事前希望枠の制約矛盾を自動チェック（エラーがあればブルー網掛けで明示）
+                applyScheduleImport(parseResult.items, 'replace', parseResult.remarksMap);
                 checkInputConstraints(false);
 
             } catch (err) {
@@ -4493,11 +4779,11 @@ document.addEventListener('DOMContentLoaded', () => {
 
         try {
             let parseResult;
-            if (file.name.endsWith('.xlsx')) {
+            if (file.name.toLowerCase().endsWith('.xlsx')) {
                 const buf = await file.arrayBuffer();
                 parseResult = await parseXlsxBuffer(buf);
             } else {
-                const text = await file.text();
+                const text = await readTextFileAutoEncoding(file);
                 parseResult = parseCsvOrTsvText(text);
             }
 
@@ -4506,19 +4792,26 @@ document.addEventListener('DOMContentLoaded', () => {
                 return;
             }
 
-            // 取り込み前状態を履歴に保存（「↩ 戻る」で取り消し可能）
             pushHistory();
 
-            // 日付同期
             if (parseResult.startDate) {
                 const startDateInput = document.getElementById('termStartDate');
                 if (startDateInput) {
                     startDateInput.value = parseResult.startDate;
+                    currentWorkingStartDate = parseResult.startDate;
                     getTermInfo();
                 }
             }
 
-            // 確定グリッドを初期化・更新
+            if (parseResult.remarksMap && typeof parseResult.remarksMap === 'object') {
+                Object.keys(parseResult.remarksMap).forEach(sIdxStr => {
+                    const sIdx = parseInt(sIdxStr, 10);
+                    if (staffList[sIdx] && parseResult.remarksMap[sIdxStr] !== undefined) {
+                        staffList[sIdx].remarks = cleanTextValue(parseResult.remarksMap[sIdxStr]);
+                    }
+                });
+            }
+
             const term = getTermInfo();
             const stdHolidayVal = parseFloat(document.getElementById('standardHolidaySelect')?.value || '8.0');
 
@@ -4530,7 +4823,6 @@ document.addEventListener('DOMContentLoaded', () => {
                 });
             }
 
-            // 50×28 のグリッドを構築（事前希望枠があるセルは isFixed: true）
             const newGrid = [];
             for (let s = 0; s < NUM_STAFF; s++) {
                 const row = [];
@@ -4544,7 +4836,6 @@ document.addEventListener('DOMContentLoaded', () => {
                 newGrid.push(row);
             }
 
-            // ファイルから読み取った記号を反映
             parseResult.items.forEach(item => {
                 const { staffIdx, dayIdx, symbol } = item;
                 if (staffIdx >= 0 && staffIdx < NUM_STAFF && dayIdx >= 0 && dayIdx < NUM_DAYS) {
@@ -4564,13 +4855,12 @@ document.addEventListener('DOMContentLoaded', () => {
                 errors: []
             };
 
-            // テーブル描画＆ダッシュボード更新
+            renderInputTable();
             renderOutputTable(newGrid, newStats);
             renderStatsDashboard(newStats);
 
             if (isFinalStage) {
                 switchTab('checkTab');
-                // 最終チェック（特殊勤務の配置過不足もチェック）
                 const checkRes = checkFinalConstraints(true);
                 if (checkRes && !checkRes.isValid) {
                     showToast(`📂 修正済み勤務表を取り込みました（${checkRes.errors.length}件の制約指摘をブルー網掛けで表示中）`);
@@ -4579,7 +4869,6 @@ document.addEventListener('DOMContentLoaded', () => {
                 }
             } else {
                 switchTab('outputTab');
-                // 修正作業エリアチェック（特殊勤務未割当はエラー外）
                 const checkRes = checkWorkAreaConstraints(true);
                 if (checkRes && !checkRes.isValid) {
                     showToast(`📂 修正済み勤務表を取り込みました（${checkRes.errors.length}件の制約指摘をブルー網掛けで表示中）`);
@@ -4588,7 +4877,8 @@ document.addEventListener('DOMContentLoaded', () => {
                 }
             }
 
-            saveCurrentTermToStorage(); // ★ 取り込んだ確定勤務表をブラウザに自動保存
+            saveStaffMaster();
+            saveCurrentTermToStorage();
 
         } catch (err) {
             console.error(err);
@@ -4883,7 +5173,7 @@ document.addEventListener('DOMContentLoaded', () => {
             const rng = `${firstDayCol}${r}:${lastDayCol}${r}`;
 
             sheet1 += `\n    <row r="${r}" ht="24.75" customHeight="1">`;
-            sheet1 += `\n      <c r="A${r}" s="5" t="inlineStr"><is><t>${staff.name}</t></is></c>`;
+            sheet1 += `\n      <c r="A${r}" s="5" t="inlineStr"><is><t>${escapeXmlText(staff.name)}</t></is></c>`;
 
             for (let d = 0; d < numDays; d++) {
                 const col = toColLetter(2 + d);
@@ -4911,7 +5201,7 @@ document.addEventListener('DOMContentLoaded', () => {
       <c r="${colLate}${r}" s="8"><f>${fLate}</f><v>0</v></c>
       <c r="${colEve}${r}" s="8"><f>${fEve}</f><v>0</v></c>
       <c r="${colH8}${r}" s="8"><f>${fH8}</f><v>0</v></c>
-      <c r="${colRemarks}${r}" s="14" t="inlineStr"><is><t>${staff.remarks || ''}</t></is></c>
+      <c r="${colRemarks}${r}" s="14" t="inlineStr"><is><t>${escapeXmlText(staff.remarks || '')}</t></is></c>
     </row>`;
         });
 
@@ -5027,24 +5317,30 @@ document.addEventListener('DOMContentLoaded', () => {
     }
     // 初期起動（直前に作業していた期間、または保存データを自動復元）
     initStaffData();
+    loadStaffMaster(); // ★ スタッフの基本属性・トグル設定（係長/主任/副主任/0.5/専従/所属/備考等）を確実に復元
 
-    const lastActiveDate = localStorage.getItem(STORAGE_KEY_LAST_ACTIVE);
+    const lastActiveDate = localStorage.getItem(STORAGE_KEY_LAST_ACTIVE) || localStorage.getItem('shift_schedule_last_active_start_date');
     const defaultDate = document.getElementById('termStartDate')?.value || '2026-04-01';
-    const targetDate = lastActiveDate || defaultDate;
+    const matchedTerm = findTermByStartDate(lastActiveDate || defaultDate);
+    const targetDate = matchedTerm ? matchedTerm.startDate : (lastActiveDate || defaultDate);
 
-    if (targetDate && localStorage.getItem(`${STORAGE_KEY_PREFIX}${targetDate}`)) {
-        currentWorkingStartDate = targetDate;
+    currentWorkingStartDate = targetDate;
+    const dateInput = document.getElementById('termStartDate');
+    if (dateInput) dateInput.value = targetDate;
+
+    // ★ 13ターム選択プルダウンの初期化とイベント登録
+    initTermSelector();
+
+    if (localStorage.getItem(`${STORAGE_KEY_PREFIX}${targetDate}`) || localStorage.getItem(`shift_schedule_term_${targetDate}`)) {
         loadTermFromStorage(targetDate);
     } else {
-        currentWorkingStartDate = targetDate;
-        const dateInput = document.getElementById('termStartDate');
-        if (dateInput) dateInput.value = targetDate;
-        const stdHolidaySelect = document.getElementById('standardHolidaySelect');
-        if (stdHolidaySelect) stdHolidaySelect.value = '8.0';
         const term = getTermInfo();
+        const stdHolidaySelect = document.getElementById('standardHolidaySelect');
+        if (stdHolidaySelect) stdHolidaySelect.value = term.isTerm13 ? '8.5' : '8.0';
         dayOffsets = createDefaultDayOffsets(term.dates);
         renderInputTable();
         clearOutputTables();
+        saveStaffMaster();
         saveCurrentTermToStorage(); // 初期状態を自動保存
     }
     renderSavedTermsSelect();
