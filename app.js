@@ -2904,6 +2904,9 @@ document.addEventListener('DOMContentLoaded', () => {
                     }
                 }
 
+                // 最新のスタッフ属性（係長・主任・副主任・8時可・0.5等）と日別加減枠を確実に同期してから特殊勤務を割り当てる
+                lastScheduler.staffList = JSON.parse(JSON.stringify(staffList));
+                lastScheduler.dayOffsets = [...dayOffsets];
                 const specialResult = lastScheduler.assignSpecialDutiesToGrid();
                 btns.forEach(b => {
                     if (b) {

@@ -189,8 +189,9 @@ function validateInitialState(staffList, options = {}) {
     staffList.forEach((staff, sIdx) => {
         if (staff.isUnused) return;
 
-        // A. 個別フラグ違反チェック
+        // A. 個別フラグ違反チェック（係長に希望入力された特殊勤務はトグルに関わらず許可・保持）
         for (let d = 0; d < numDays; d++) {
+            if (staff.isSectionChief) break;
             const sym = staff.days[d];
             if (!sym) continue;
             const dayNum = d + 1;
@@ -245,8 +246,8 @@ function validateInitialState(staffList, options = {}) {
             }
         }
 
-        // D. 5連勤後の2連休ルールチェック（6連勤可フラグOFFのスタッフのみ）
-        if (!staff.allow6Consec) {
+        // D. 5連勤後の2連休ルールチェック（6連勤可フラグOFFのスタッフのみ。係長は土日希望出勤時の単休＋平日代休を柔軟許容）
+        if (!staff.allow6Consec && !staff.isSectionChief) {
             const seq = [];
             for (let p = 0; p < 5; p++) seq.push(staff.prevDays[p] || '');
             for (let d = 0; d < numDays; d++) seq.push(staff.days[d] || '');
@@ -507,20 +508,24 @@ class ShiftScheduler {
     getMaxAllowedUnfixedWeekdayOffForSectionChief(s) {
         const staff = this.staffList[s];
         if (!staff || !staff.isSectionChief) return this.numDays;
+        let weekendFixedWorkCount = 0;
+        let preSpecialNextWeekdayOffCount = 0;
         let fixedOff = 0;
         let availableWeekendSlots = 0;
         for (let d = 0; d < this.numDays; d++) {
             const isWkday = this.isWeekdayIndex(d);
-            if (this.grid[s][d].isFixed) {
+            if (this.grid[s][d].isFixed || this.grid[s][d].isAfterPreSpecial) {
                 const sym = this.grid[s][d].symbol;
                 if (sym === SYMBOLS.OFF) fixedOff += 1.0;
                 else if (sym === SYMBOLS.HALF_WORK_OFF || sym === SYMBOLS.HALF_OFF_WORK) fixedOff += 0.5;
+                if (!isWkday && isWorkSymbol(sym)) weekendFixedWorkCount++;
+                if (isWkday && this.grid[s][d].isAfterPreSpecial) preSpecialNextWeekdayOffCount++;
             } else if (!isWkday) {
                 availableWeekendSlots += 1;
             }
         }
         const neededUnfixedOff = Math.max(0, Math.round(this.options.standardHolidays - fixedOff));
-        return Math.max(0, neededUnfixedOff - availableWeekendSlots);
+        return Math.max(neededUnfixedOff - availableWeekendSlots, weekendFixedWorkCount + preSpecialNextWeekdayOffCount);
     }
 
     initGrid() {
@@ -843,16 +848,16 @@ class ShiftScheduler {
             const minKeep = Math.min(reqSched, totalSched);
             if (available < minKeep) return false;
         }
-        // 1-2. 8時可保護：当日dに出勤できる「8時可」スタッフを維持
-        if (staff.can8) {
+        // 1-2. 8時可保護：当日dに出勤できる「8時可」スタッフ（係長除く）を維持
+        if (staff.can8 && !staff.isSectionChief) {
             let available = 0;
             for (let otherS = 0; otherS < this.numStaff; otherS++) {
-                if (otherS === s || this.staffList[otherS].isUnused) continue;
+                if (otherS === s || this.staffList[otherS].isUnused || this.staffList[otherS].isSectionChief) continue;
                 if (this.staffList[otherS].can8 && !isHolidaySymbol(this.grid[otherS][d].symbol)) {
                     available++;
                 }
             }
-            const totalCan8 = this.staffList.filter(st => !st.isUnused && st.can8).length;
+            const totalCan8 = this.staffList.filter(st => !st.isUnused && !st.isSectionChief && st.can8).length;
             const minKeep = Math.min(reqCan8, totalCan8);
             if (available < minKeep) return false;
         }
@@ -919,6 +924,28 @@ class ShiftScheduler {
     assignSpecialDutiesToGrid(options = {}) {
         const force = options && options.force === true;
 
+        // ステップ0: 事前希望の特殊勤務の翌日休フラグを確実に同期し、係長に非固定の特殊勤務が混入していればクリーンアップ
+        this.ensureHolidaysAfterPreAssignedSpecials();
+        for (let s = 0; s < this.numStaff; s++) {
+            if (this.staffList[s].isUnused || !this.staffList[s].isSectionChief) continue;
+            let hadUnfixedSpecial = false;
+            for (let d = 0; d < this.numDays; d++) {
+                if (!this.grid[s][d].isFixed && (isRestrictedSpecial(this.grid[s][d].symbol) || this.grid[s][d].symbol === SYMBOLS.H8)) {
+                    this.grid[s][d].symbol = this.isWeekdayIndex(d) ? SYMBOLS.WORK : SYMBOLS.OFF;
+                    hadUnfixedSpecial = true;
+                }
+            }
+            if (hadUnfixedSpecial) {
+                const maxConsec = this.staffList[s].allow6Consec ? 6 : 5;
+                const scGrid = this.solveSectionChiefSchedule(s, this.options.standardHolidays, maxConsec);
+                if (scGrid) {
+                    for (let d = 0; d < this.numDays; d++) {
+                        if (!this.grid[s][d].isFixed) this.setSymbol(s, d, scGrid[d], false);
+                    }
+                }
+            }
+        }
+
         // ステップ1: 8時勤務（1名/日）を優先配置！（8時可フラグのある貴重なスタッフから均等に選出）
         const h8Result = this.assign8ClockDuties(options);
         if (!h8Result.success && !force) {
@@ -959,11 +986,13 @@ class ShiftScheduler {
      */
     ensureHolidaysAfterPreAssignedSpecials() {
         for (let s = 0; s < this.numStaff; s++) {
+            if (this.staffList[s].isUnused) continue;
             for (let d = 0; d < this.numDays - 1; d++) {
                 const sym = this.grid[s][d].symbol;
                 if (isRestrictedSpecial(sym)) {
                     if (this.grid[s][d + 1].symbol === '' && !this.grid[s][d + 1].isFixed) {
                         this.setSymbol(s, d + 1, SYMBOLS.OFF, false);
+                        this.grid[s][d + 1].isAfterPreSpecial = true;
                     }
                 }
             }
@@ -1021,6 +1050,8 @@ class ShiftScheduler {
                 let candidates = [];
                 for (let s = 0; s < this.numStaff; s++) {
                     if (this.staffList[s].isUnused) continue;
+                    // ★ 係長は特殊勤務なし（事前希望で入力された特殊勤務のみ残し、自動割当は一切行わない）
+                    if (this.staffList[s].isSectionChief) continue;
                     // 当日dが非固定の○であること
                     if (this.grid[s][d].isFixed || this.grid[s][d].symbol !== SYMBOLS.WORK) continue;
 
@@ -1084,7 +1115,7 @@ class ShiftScheduler {
 
                                 for (const dObj of dayCandidates) {
                                     const otherD = dObj.day;
-                                    if (!this.grid[s][otherD].isFixed && this.grid[s][otherD].symbol === SYMBOLS.OFF) {
+                                    if (!this.grid[s][otherD].isFixed && !this.grid[s][otherD].isAfterPreSpecial && this.grid[s][otherD].symbol === SYMBOLS.OFF) {
                                         // otherD を ○ にスワップできるか一時的に試す
                                         this.setSymbol(s, otherD, SYMBOLS.WORK, false);
                                         this.setSymbol(s, d + 1, SYMBOLS.OFF, false);
@@ -1227,7 +1258,26 @@ class ShiftScheduler {
     assignHolidaysAndGeneralDuties() {
         const stdHolidays = this.options.standardHolidays;
 
+        // ★ 役職優先順（1.係長 -> 2.主任 -> 3.副主任 -> 4.一般スタッフ）でスケジュールを確定！
+        // これにより係長が土日希望出勤等で平日に代休を取る場合、その平日を主任・副主任が確実に認識してカバーできる
+        const solveOrder = [];
         for (let s = 0; s < this.numStaff; s++) {
+            if (!this.staffList[s].isUnused) solveOrder.push(s);
+        }
+        solveOrder.sort((a, b) => {
+            const rank = (idx) => {
+                const st = this.staffList[idx];
+                if (st.isSectionChief) return 0;
+                if (st.isChief) return 1;
+                if (st.isSubChief) return 2;
+                return 3;
+            };
+            const rA = rank(a), rB = rank(b);
+            if (rA !== rB) return rA - rB;
+            return a - b;
+        });
+
+        for (const s of solveOrder) {
             const staff = this.staffList[s];
             if (staff.isUnused) continue;
             const maxConsec = staff.allow6Consec ? 6 : 5;
@@ -1279,12 +1329,237 @@ class ShiftScheduler {
      * スタッフ s のスケジュールを「週単位の休日配置バックトラッキング」で完全充足生成
      */
     solveStaffScheduleWeekly(s, targetOff, maxConsec) {
+        if (this.staffList[s] && this.staffList[s].isSectionChief) {
+            const scRes = this.solveSectionChiefSchedule(s, targetOff, maxConsec);
+            if (scRes) return scRes;
+        }
         // strictLevel: 0 (属性厳格), 1 (属性緩和), 2 (個人ハード制約最優先) で多段階試行
         for (let strictLevel = 0; strictLevel <= 2; strictLevel++) {
             const res = this.solveStaffScheduleWeeklyInternal(s, targetOff, maxConsec, strictLevel);
             if (res) return res;
         }
         return null;
+    }
+
+    /**
+     * ★ 係長（isSectionChief）専用の柔軟スケジュール生成エンジン
+     * - 原則: 月曜日〜金曜日（祝日含む）は出勤「○」、土曜日・日曜日は公休「休」、自動特殊勤務なし
+     * - 希望の特殊勤務（早・遅・E・8時等）はそのまま残し、早・遅・Eの翌日は「休」を確保
+     * - 土日に希望の「○」（等）がある場合は、5連勤制限・週出勤5日制限・主任出勤状況を踏まえて柔軟に平日に「休」を配置
+     */
+    solveSectionChiefSchedule(s, targetOff, maxConsec) {
+        const staff = this.staffList[s];
+        const numDays = this.numDays;
+        const baseSymbols = new Array(numDays);
+        const unfixedWeekdays = [];
+
+        let currentOff = 0;
+        let weekendFixedWorkDays = [];
+
+        for (let d = 0; d < numDays; d++) {
+            const cell = this.grid[s][d];
+            const isWkday = this.isWeekdayIndex(d);
+            if (cell.isFixed || cell.isAfterPreSpecial) {
+                baseSymbols[d] = cell.symbol;
+                if (cell.symbol === SYMBOLS.OFF) currentOff += 1.0;
+                else if (cell.symbol === SYMBOLS.HALF_WORK_OFF || cell.symbol === SYMBOLS.HALF_OFF_WORK) currentOff += 0.5;
+                if (!isWkday && isWorkSymbol(cell.symbol)) {
+                    weekendFixedWorkDays.push(d);
+                }
+            } else if (!isWkday) {
+                // 未固定の土日は原則「休」
+                baseSymbols[d] = SYMBOLS.OFF;
+                currentOff += 1.0;
+            } else {
+                // 未固定の平日は原則「○」
+                baseSymbols[d] = SYMBOLS.WORK;
+                unfixedWeekdays.push(d);
+            }
+        }
+
+        // 前ターム末5日間(prevDays)の構築:
+        // 第1週の土曜(d=3)等に希望の「○」が入っている場合、前ターム月・火(prevDays[3],[4])が空欄なら平日出勤していたものとみなして連勤チェックを行う
+        const getPrevSeq = () => {
+            const seq = [];
+            const firstSatFixedWork = weekendFixedWorkDays.some(wd => wd < 5);
+            for (let p = 0; p < 5; p++) {
+                let pSym = (staff.prevDays && staff.prevDays[p]) ? staff.prevDays[p] : '';
+                if (p === 1 || p === 2) {
+                    // 前タームの土日にダミーの○が入っていても、係長の通常サイクルを阻害しないよう休扱い
+                    if (isWorkSymbol(pSym)) pSym = SYMBOLS.OFF;
+                } else if ((p === 3 || p === 4) && pSym === '' && firstSatFixedWork) {
+                    // 第1週土曜が出勤希望の場合、前タームの月・火(p=3,4)を○とみなして第1週水〜金の間に確実に代休を入れる
+                    pSym = SYMBOLS.WORK;
+                }
+                seq.push(pSym);
+            }
+            return seq;
+        };
+
+        const prevSeq = getPrevSeq();
+
+        // スケジュール候補が連勤制限(maxConsec)と週5日勤務制限を満たすか検証する関数
+        const isCandidateValid = (candSymbols, checkChief = true) => {
+            // 最終週の日曜(d >= numDays - 4)に希望出勤がある場合、次ターム水・木・金の平日3連勤を見越して末尾連勤もチェック
+            const lastSunWork = weekendFixedWorkDays.some(wd => wd >= numDays - 4);
+            const nextSeq = lastSunWork ? [SYMBOLS.WORK, SYMBOLS.WORK, SYMBOLS.WORK] : [];
+            const seq = prevSeq.concat(candSymbols).concat(nextSeq);
+            // 1. 特殊勤務翌日休
+            for (let i = 0; i < seq.length - 1; i++) {
+                if (isRestrictedSpecial(seq[i]) && !isHolidaySymbol(seq[i + 1])) return false;
+            }
+            // 2. 連勤制限 (maxConsec = 5 or 6)
+            let consec = 0;
+            for (let i = 0; i < seq.length; i++) {
+                if (seq[i] === '') consec = 0;
+                else if (!isFullOffSymbol(seq[i])) {
+                    consec++;
+                    if (consec > maxConsec) return false;
+                } else {
+                    consec = 0;
+                }
+            }
+            // 3. 週（日〜土）出勤制限（最大5日）
+            if (!staff.allow6Consec) {
+                for (const wSpan of this.weekSpans) {
+                    let weekWork = 0;
+                    for (const d of wSpan) {
+                        const sym = candSymbols[d];
+                        if (sym && isWorkSymbol(sym) && sym !== SYMBOLS.TRIP && !isHalfDuty(sym)) {
+                            weekWork++;
+                        }
+                    }
+                    if (weekWork > 5) return false;
+                }
+            }
+            // 4. 平日に係長が休む日は、主任が最低1名出勤可能であること
+            if (checkChief) {
+                const chList = this.staffList.filter(st => !st.isUnused && st.isChief);
+                if (chList.length > 0) {
+                    for (let d = 0; d < numDays; d++) {
+                        if (!this.isWeekdayIndex(d)) continue;
+                        if (isHolidaySymbol(candSymbols[d]) || candSymbols[d] === SYMBOLS.TRIP) {
+                            const anyChiefAvailable = chList.some(ch => {
+                                const chIdx = this.staffList.indexOf(ch);
+                                const chSym = this.grid[chIdx][d].symbol;
+                                return !isHolidaySymbol(chSym) && chSym !== SYMBOLS.TRIP && !isExcludeSymbol(chSym);
+                            });
+                            if (!anyChiefAvailable) return false;
+                        }
+                    }
+                }
+            }
+            return true;
+        };
+
+        // 候補のスコア評価（土日出勤の近くで代休を取り、連勤を短くし、全体の実数合計も平準化する）
+        const scoreCandidate = (chosenWeekdays, candSymbols) => {
+            let score = 0;
+            for (const d of chosenWeekdays) {
+                // 土日出勤日との距離が近い平日（同じ週または直前・直後の平日）を高く評価
+                let minDist = 99;
+                for (const wd of weekendFixedWorkDays) {
+                    minDist = Math.min(minDist, Math.abs(d - wd));
+                }
+                if (minDist <= 5) score += (6 - minDist) * 80;
+
+                // 主任が多く出勤できる日を優先
+                let chAvail = 0;
+                for (let otherS = 0; otherS < this.numStaff; otherS++) {
+                    if (this.staffList[otherS].isUnused || !this.staffList[otherS].isChief) continue;
+                    const sym = this.grid[otherS][d].symbol;
+                    if (!isHolidaySymbol(sym) && sym !== SYMBOLS.TRIP) chAvail++;
+                }
+                score += chAvail * 50;
+
+                // 日別の他スタッフ休日実数が少ない日（出勤に余裕がある日）を優先
+                const offset = (this.dayOffsets && this.dayOffsets[d]) ? this.dayOffsets[d] : 0;
+                let offReal = 0;
+                for (let otherS = 0; otherS < this.numStaff; otherS++) {
+                    if (otherS === s || this.staffList[otherS].isUnused) continue;
+                    if (isHolidaySymbol(this.grid[otherS][d].symbol)) {
+                        offReal += (this.staffList[otherS].isHalf ? 0.5 : 1.0);
+                    }
+                }
+                score -= (offReal + offset) * 20;
+            }
+
+            // 最大連勤数が短いほど高評価（例: 3連勤・4連勤に分割できる位置を優遇）
+            const seq = prevSeq.concat(candSymbols);
+            let cur = 0, maxStr = 0, sumSq = 0;
+            for (const sym of seq) {
+                if (sym !== '' && !isFullOffSymbol(sym)) {
+                    cur++;
+                    if (cur > maxStr) maxStr = cur;
+                } else {
+                    sumSq += cur * cur;
+                    cur = 0;
+                }
+            }
+            sumSq += cur * cur;
+            score -= sumSq * 5;
+            return score;
+        };
+
+        // 未固定の土日休だけでは足りない公休数、および土日希望出勤分の代休数を算出
+        let weekendOffCount = 0;
+        let weekdayFixedOffCount = 0;
+        for (let d = 0; d < numDays; d++) {
+            const isWkday = this.isWeekdayIndex(d);
+            const cell = this.grid[s][d];
+            if (!isWkday) {
+                if (baseSymbols[d] === SYMBOLS.OFF) weekendOffCount += 1.0;
+                else if (baseSymbols[d] === SYMBOLS.HALF_WORK_OFF || baseSymbols[d] === SYMBOLS.HALF_OFF_WORK) weekendOffCount += 0.5;
+            } else if (cell.isFixed && cell.symbol === SYMBOLS.OFF) {
+                weekdayFixedOffCount += 1.0;
+            }
+        }
+        // 土日に希望出勤(○等)がある場合は、事前固定の平日公休を除き、その分だけ平日に代休を入れる（特殊勤務翌日休とは別枠でも柔軟に確保）
+        const neededForWeekendWork = Math.max(0, weekendFixedWorkDays.length - weekdayFixedOffCount);
+        const neededOffCount = Math.max(0, Math.round(targetOff - currentOff), neededForWeekendWork);
+
+        // もし追加の平日休が0日でそのまま制約クリアなら即確定
+        if (neededOffCount === 0 && isCandidateValid(baseSymbols, false)) {
+            return baseSymbols;
+        }
+
+        // 必要公休数 neededOffCount（それで連勤が解消しない場合は +1〜+2 日まで柔軟に許容）の平日休組み合わせを探索
+        for (const checkChief of [true, false]) {
+            for (let k = neededOffCount; k <= Math.min(unfixedWeekdays.length, Math.max(neededOffCount + 2, weekendFixedWorkDays.length + 1)); k++) {
+                if (k === 0) {
+                    if (isCandidateValid(baseSymbols, checkChief)) return baseSymbols;
+                    continue;
+                }
+
+                let bestCand = null;
+                let bestScore = -1e9;
+
+                const searchComb = (startIdx, chosen) => {
+                    if (chosen.length === k) {
+                        const cand = [...baseSymbols];
+                        for (const d of chosen) cand[d] = SYMBOLS.OFF;
+                        if (isCandidateValid(cand, checkChief)) {
+                            const sc = scoreCandidate(chosen, cand);
+                            if (sc > bestScore) {
+                                bestScore = sc;
+                                bestCand = cand;
+                            }
+                        }
+                        return;
+                    }
+                    for (let i = startIdx; i <= unfixedWeekdays.length - (k - chosen.length); i++) {
+                        chosen.push(unfixedWeekdays[i]);
+                        searchComb(i + 1, chosen);
+                        chosen.pop();
+                    }
+                };
+
+                searchComb(0, []);
+                if (bestCand) return bestCand;
+            }
+        }
+
+        return baseSymbols;
     }
 
     solveStaffScheduleWeeklyInternal(s, targetOff, maxConsec, strictLevel) {
@@ -1298,7 +1573,7 @@ class ShiftScheduler {
         // すでに固定されている公休日数（休: 1.0, 半休: 0.5）
         let fixedPublicOff = 0;
         for (let d = 0; d < numDays; d++) {
-            if (this.grid[s][d].isFixed) {
+            if (this.grid[s][d].isFixed || this.grid[s][d].isAfterPreSpecial) {
                 const sym = this.grid[s][d].symbol;
                 if (sym === SYMBOLS.OFF) fixedPublicOff += 1.0;
                 else if (sym === SYMBOLS.HALF_WORK_OFF || sym === SYMBOLS.HALF_OFF_WORK) fixedPublicOff += 0.5;
@@ -1336,7 +1611,7 @@ class ShiftScheduler {
         weekSpans.forEach(wSpan => {
             let fixedHolidayCount = 0;
             wSpan.forEach(d => {
-                const sym = self.grid[s][d].isFixed ? self.grid[s][d].symbol : '';
+                const sym = (self.grid[s][d].isFixed || self.grid[s][d].isAfterPreSpecial) ? self.grid[s][d].symbol : '';
                 if (isHolidaySymbol(sym) || sym === SYMBOLS.TRIP || isHalfDuty(sym)) {
                     fixedHolidayCount++;
                 }
@@ -1443,7 +1718,7 @@ class ShiftScheduler {
             if (countNeeded === 0) return [[]];
 
             const wSpan = weekSpans[wIdx];
-            const blankDays = wSpan.filter(d => !self.grid[s][d].isFixed && self.canPlaceHoliday(s, d, strictLevel));
+            const blankDays = wSpan.filter(d => !self.grid[s][d].isFixed && !self.grid[s][d].isAfterPreSpecial && self.canPlaceHoliday(s, d, strictLevel));
             if (blankDays.length < countNeeded) return [];
 
             const choices = [];
@@ -1520,7 +1795,7 @@ class ShiftScheduler {
                     const gridSymbols = new Array(numDays);
                     let currentOff = 0;
                     for (let d = 0; d < numDays; d++) {
-                        if (self.grid[s][d].isFixed) {
+                        if (self.grid[s][d].isFixed || self.grid[s][d].isAfterPreSpecial) {
                             gridSymbols[d] = self.grid[s][d].symbol;
                             if (gridSymbols[d] === SYMBOLS.OFF) currentOff += 1.0;
                             else if (gridSymbols[d] === SYMBOLS.HALF_WORK_OFF || gridSymbols[d] === SYMBOLS.HALF_OFF_WORK) currentOff += 0.5;
@@ -1675,6 +1950,9 @@ class ShiftScheduler {
 
             const candidates = [];
             for (let s = 0; s < this.numStaff; s++) {
+                if (this.staffList[s].isUnused) continue;
+                // ★ 係長は特殊勤務(8時含む)なし（事前希望で入力されたもののみ残し、自動割当は行わない）
+                if (this.staffList[s].isSectionChief) continue;
                 if (!this.staffList[s].can8) continue;
                 // 基本勤務表で「○」として組まれているスタッフ（未固定）
                 if (this.grid[s][d].isFixed || this.grid[s][d].symbol !== SYMBOLS.WORK) continue;
@@ -1724,8 +2002,9 @@ class ShiftScheduler {
     optimizeSoftConstraints() {
         // 単発勤務の解消パス（公休数を変えずに同スタッフ内の日勤・公休のスワップで解消を試みる）
         for (let s = 0; s < this.numStaff; s++) {
+            if (this.staffList[s].isUnused || this.staffList[s].isSectionChief) continue;
             for (let d = 0; d < this.numDays; d++) {
-                if (this.grid[s][d].isFixed) continue;
+                if (this.grid[s][d].isFixed || this.grid[s][d].isAfterPreSpecial) continue;
                 if (this.grid[s][d].symbol !== SYMBOLS.WORK) continue;
 
                 const prev = this.getSymbol(s, d - 1);
@@ -1805,6 +2084,8 @@ class ShiftScheduler {
                     const curMinCnt = daily.find(d => d.day === minDay).count;
 
                     for (const s of staffIndices) {
+                        if (this.staffList[s].isSectionChief) continue;
+                        if (this.grid[s][maxDay].isAfterPreSpecial || this.grid[s][minDay].isAfterPreSpecial) continue;
                         const staffWeight = this.staffList[s].isHalf ? 0.5 : 1.0;
                         // セクション内実数の差がスタッフの実数重みより大きい場合のみスワップ
                         if (curMaxCnt - curMinCnt <= staffWeight + 0.01) continue;
@@ -1898,7 +2179,7 @@ class ShiftScheduler {
                     // gap === 1.0 のときは 0.5スタッフ(isHalf)を最優先、gap >= 1.5 のときは 1.0スタッフを優先
                     const staffOrder = [];
                     for (let s = 0; s < this.numStaff; s++) {
-                        if (!this.staffList[s].isUnused) staffOrder.push(s);
+                        if (!this.staffList[s].isUnused && !this.staffList[s].isSectionChief) staffOrder.push(s);
                     }
                     staffOrder.sort((a, b) => {
                         const wA = this.staffList[a].isHalf ? 0.5 : 1.0;
@@ -1937,7 +2218,7 @@ class ShiftScheduler {
             const halfStaffIndices = [];
             const fullStaffIndices = [];
             for (let s = 0; s < this.numStaff; s++) {
-                if (this.staffList[s].isUnused) continue;
+                if (this.staffList[s].isUnused || this.staffList[s].isSectionChief) continue;
                 if (this.staffList[s].isHalf) halfStaffIndices.push(s);
                 else fullStaffIndices.push(s);
             }
@@ -2099,7 +2380,7 @@ class ShiftScheduler {
 
         // 連勤違反の自動リペアパス（公休数を変えずに同スタッフ内の余剰休日とスワップ）
         for (let s = 0; s < this.numStaff; s++) {
-            if (this.staffList[s].isUnused) continue;
+            if (this.staffList[s].isUnused || this.staffList[s].isSectionChief) continue;
             if (!this.isStaffHardValid(s)) {
                 const sequence = [];
                 for (let i = 0; i < 5; i++) sequence.push(this.staffList[s].prevDays[i] || '');
@@ -2158,7 +2439,7 @@ class ShiftScheduler {
             const maxWeekdayOff = this.getMaxAllowedUnfixedWeekdayOffForSectionChief(s);
             let unfixedWeekdayOff = 0;
             for (let d = 0; d < this.numDays; d++) {
-                if (!this.grid[s][d].isFixed && this.isWeekdayIndex(d) && isHolidaySymbol(this.grid[s][d].symbol)) {
+                if (!this.grid[s][d].isFixed && !this.grid[s][d].isAfterPreSpecial && this.isWeekdayIndex(d) && isHolidaySymbol(this.grid[s][d].symbol)) {
                     unfixedWeekdayOff++;
                 }
             }
@@ -2196,8 +2477,8 @@ class ShiftScheduler {
             }
         }
 
-        // 5連勤後の2連休ルール（allow6Consecがfalseのスタッフ）
-        if (!staff.allow6Consec) {
+        // 5連勤後の2連休ルール（allow6Consecがfalseのスタッフ。係長は土日希望出勤による単休＋平日代休を柔軟許容）
+        if (!staff.allow6Consec && !staff.isSectionChief) {
             let workStreak = 0;
             for (let idx = 0; idx < sequence.length; idx++) {
                 if (isWorkSymbol(sequence[idx])) {
@@ -2264,9 +2545,9 @@ class ShiftScheduler {
                 const sym = this.grid[s][d].symbol;
                 if (this.staffList[s].canSched && sym === SYMBOLS.WORK) schedWork++;
                 if (this.staffList[s].isFullTime && isWorkSymbol(sym) && sym !== SYMBOLS.TRIP) ftWork++;
-                if (this.staffList[s].can8 && isWorkSymbol(sym)) {
+                if ((this.staffList[s].can8 && !this.staffList[s].isSectionChief && isWorkSymbol(sym)) || sym === SYMBOLS.H8) {
                     totalH8Cand++;
-                    if (!this.staffList[s].canSched) pureH8Cand++;
+                    if (!this.staffList[s].canSched || sym === SYMBOLS.H8) pureH8Cand++;
                 }
             }
             const totalSched = this.staffList.filter(s => !s.isUnused && s.canSched).length;
@@ -2388,10 +2669,10 @@ class ShiftScheduler {
             }
         }
 
-        // 4. 5連勤後の2連休チェック（allow6Consecがfalseのスタッフ）
+        // 4. 5連勤後の2連休チェック（allow6Consecがfalseのスタッフ。係長が土日希望出勤により単休＋平日代休となる場合は柔軟許容）
         for (let s = 0; s < this.numStaff; s++) {
             const staff = this.staffList[s];
-            if (staff.isUnused || staff.allow6Consec) continue;
+            if (staff.isUnused || staff.allow6Consec || staff.isSectionChief) continue;
 
             const seq = [];
             for (let p = 0; p < 5; p++) {
@@ -2523,7 +2804,7 @@ class ShiftScheduler {
 
             // 通常: offDays === standardHolidays (8.0日) でOK
             // リフ取得時: リフ1日で公休8日(計9日)、リフ複数・前借りで公休7〜8日(計9〜11日)など柔軟に合格判定
-            const isStandardPass = (Math.abs(offDays - this.options.standardHolidays) < 0.01);
+            const isStandardPass = (Math.abs(offDays - this.options.standardHolidays) < 0.01) || (staff.isSectionChief && offDays >= this.options.standardHolidays - 1.0 && offDays <= this.options.standardHolidays + 4.0);
             const isRefPass = (refDays > 0 && (offDays + refDays >= 9.0 || (Math.abs(offDays + refDays - (this.options.standardHolidays + 1.0)) < 0.01)));
 
             if (Math.abs(this.options.standardHolidays - 8.5) < 0.01) {
@@ -2707,8 +2988,9 @@ function validateScheduleGrid(grid, staffList, options = {}) {
         if (staff.isUnused) continue;
         const maxAllowed = staff.allow6Consec ? 6 : 5;
 
-        // A. 個別不可フラグチェック
+        // A. 個別不可フラグチェック（係長に希望入力された特殊勤務はトグルに関わらず許可・保持）
         for (let d = 0; d < numDays; d++) {
+            if (staff.isSectionChief) break;
             const sym = getSym(s, d);
             const dayNum = d + 1;
             if (sym === SYMBOLS.H8 && !staff.can8) {
@@ -2776,8 +3058,8 @@ function validateScheduleGrid(grid, staffList, options = {}) {
             }
         }
 
-        // D. 5連勤後の2連休チェック（allow6Consecがfalseのスタッフ）
-        if (!staff.allow6Consec) {
+        // D. 5連勤後の2連休チェック（allow6Consecがfalseのスタッフ。係長が土日希望出勤により単休＋平日代休となる場合は柔軟許容）
+        if (!staff.allow6Consec && !staff.isSectionChief) {
             let workStreak = 0;
             for (let idx = 0; idx < sequence.length; idx++) {
                 if (isWorkSymbol(sequence[idx])) {
@@ -2836,7 +3118,7 @@ function validateScheduleGrid(grid, staffList, options = {}) {
             else if (SYMBOLS.REF_SUMMER.includes(sym) || SYMBOLS.REF_WINTER.includes(sym)) refDays += 1.0;
         }
 
-        const isStandardPass = (Math.abs(offDays - standardHolidays) < 0.01);
+        const isStandardPass = (Math.abs(offDays - standardHolidays) < 0.01) || (staff.isSectionChief && offDays >= standardHolidays - 1.0 && offDays <= standardHolidays + 4.0);
         const isRefPass = (refDays > 0 && (offDays + refDays >= 9.0 || (Math.abs(offDays + refDays - (standardHolidays + 1.0)) < 0.01)));
 
         if (Math.abs(standardHolidays - 8.5) < 0.01) {
@@ -3118,6 +3400,8 @@ function autoAssignRefreshHolidaysCore(staffList, dates, options = {}) {
             if (staffWithRefInCurrentTerm.has(sIdx)) continue;
 
             const st = staffList[sIdx];
+            // ★ 係長は原則「平日出勤・土日休」のため、自動配分で勝手に平日にリフを入れない（希望入力のみ保持）
+            if (st.isSectionChief) continue;
             // 過去にこの記号を取得済みなら除外（二重取得防止！）
             const history = obtainedHistory[st.id] || obtainedHistory[sIdx];
             const hasObtained = (history instanceof Set) ? history.has(grp.symbol) : (Array.isArray(history) && history.includes(grp.symbol));
