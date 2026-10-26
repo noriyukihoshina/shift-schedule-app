@@ -417,7 +417,7 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     // ==========================================
-    // ★ 期間別ローカルストレージ自動保存＆復元管理
+    // ★ クラウド専用自動保存＆復元管理（PCブラウザ内 localStorage 非保存化）
     // ==========================================
     // ★ 部署別設定 (APP_CONFIG) に対応したストレージキー動的生成
     const appConfig = window.APP_CONFIG || { deptId: 'master', deptName: 'マスター統括', password: '77777' };
@@ -426,6 +426,30 @@ document.addEventListener('DOMContentLoaded', () => {
     const STORAGE_KEY_LAST_ACTIVE = `shift_schedule_${deptPrefix}last_active_start_date`;
     const STORAGE_KEY_SAVED_TERMS = `shift_schedule_${deptPrefix}saved_terms`;
     const STORAGE_KEY_STAFF_MASTER = `shift_schedule_${deptPrefix}staff_master`;
+
+    // ★ PCブラウザの window.localStorage には一切データを残さず、メモリキャッシュ（_cloudMem）＋クラウドのみで管理
+    const _cloudMem = new Map();
+    try {
+        // 既存のブラウザ内 localStorage に残っている過去データがあれば、初回クラウド未同期時の保険としてメモリに移した上でブラウザから完全消去する
+        const keysToClean = [];
+        for (let i = 0; i < window.localStorage.length; i++) {
+            const k = window.localStorage.key(i);
+            if (k && k.startsWith('shift_schedule_')) {
+                _cloudMem.set(k, window.localStorage.getItem(k));
+                keysToClean.push(k);
+            }
+        }
+        keysToClean.forEach(k => window.localStorage.removeItem(k));
+    } catch (e) {}
+
+    // このスコープ内の localStorage 操作はすべてインメモリ（_cloudMem）に向け、ブラウザには一切保存しない
+    const localStorage = {
+        getItem(k) { return _cloudMem.has(String(k)) ? _cloudMem.get(String(k)) : null; },
+        setItem(k, v) { _cloudMem.set(String(k), String(v)); },
+        removeItem(k) { _cloudMem.delete(String(k)); },
+        key(i) { return Array.from(_cloudMem.keys())[i] ?? null; },
+        get length() { return _cloudMem.size; }
+    };
 
     // ==========================================
     // ★ クラウド自動保存 ＆ 別PC間リアルタイム同期エンジン
@@ -449,13 +473,13 @@ document.addEventListener('DOMContentLoaded', () => {
             if (badge) { badge.style.background = '#eff6ff'; badge.style.color = '#1d4ed8'; badge.style.borderColor = '#93c5fd'; }
             if (dot) dot.style.background = '#3b82f6';
         } else if (mode === 'synced') {
-            badgeText.textContent = customText || `☁️ クラウド自動保存済 (${nowStr}) [別PC同期OK]`;
+            badgeText.textContent = customText || `☁️ クラウド自動保存済 (${nowStr}) [クラウド専用]`;
             if (badge) { badge.style.background = '#ecfdf5'; badge.style.color = '#047857'; badge.style.borderColor = '#a7f3d0'; }
             if (dot) dot.style.background = '#10b981';
         } else {
-            badgeText.textContent = customText || `💾 自動保存済 (${nowStr})`;
-            if (badge) { badge.style.background = '#ecfdf5'; badge.style.color = '#047857'; badge.style.borderColor = '#a7f3d0'; }
-            if (dot) dot.style.background = '#10b981';
+            badgeText.textContent = customText || `☁️ クラウド保存待機中 (${nowStr})`;
+            if (badge) { badge.style.background = '#fef3c7'; badge.style.color = '#b45309'; badge.style.borderColor = '#fcd34d'; }
+            if (dot) dot.style.background = '#f59e0b';
         }
     }
 
@@ -464,7 +488,7 @@ document.addEventListener('DOMContentLoaded', () => {
         if (isCloudInitialSyncDone && !isRestoringFromCloud) {
             scheduleCloudSync();
         } else {
-            setCloudStatusBadge('local', `💾 自動保存済 (${timeStr})`);
+            setCloudStatusBadge('syncing', `☁️ クラウド同期中 (${timeStr})`);
         }
     }
 
@@ -530,7 +554,6 @@ document.addEventListener('DOMContentLoaded', () => {
                 setCloudStatusBadge('local');
             }
         } catch (err) {
-            // ローカルファイル(file://)等で開いている場合はブラウザ保存表示にフォールバック
             setCloudStatusBadge('local');
         } finally {
             isCloudSyncInFlight = false;
@@ -563,7 +586,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 return false;
             }
 
-            // クラウド上にまだデータが存在しない場合：現在のPCのデータをクラウドへ初期アップロード！
+            // クラウド上にまだデータが存在しない場合：現在のメモリデータをクラウドへ初期アップロード！
             if (!resJson.exists || !resJson.cloudState) {
                 isCloudInitialSyncDone = true;
                 await pushStateToCloud(true);
@@ -575,6 +598,9 @@ document.addEventListener('DOMContentLoaded', () => {
 
             isRestoringFromCloud = true;
             try {
+                // クラウドのみを正とするため、メモリキャッシュを一度クリアしてクラウドデータで完全同期
+                _cloudMem.clear();
+
                 // 1. スタッフマスター（全トグル・役職・所属・氏名・備考）のクラウド復元
                 if (Array.isArray(cloud.staffMaster) && cloud.staffMaster.length > 0) {
                     localStorage.setItem(STORAGE_KEY_STAFF_MASTER, JSON.stringify(cloud.staffMaster));
@@ -590,11 +616,10 @@ document.addEventListener('DOMContentLoaded', () => {
                     });
                 }
 
-                // 3. 保存済みターム一覧の同期
+                // 3. 保存済みターム一覧の同期（クラウド上のターム一覧を正とする）
                 if (Array.isArray(cloud.savedTerms)) {
-                    const localTerms = getSavedTerms();
-                    const mergedTerms = Array.from(new Set([...localTerms, ...cloud.savedTerms])).sort();
-                    localStorage.setItem(STORAGE_KEY_SAVED_TERMS, JSON.stringify(mergedTerms));
+                    const sortedTerms = Array.from(new Set(cloud.savedTerms)).sort();
+                    localStorage.setItem(STORAGE_KEY_SAVED_TERMS, JSON.stringify(sortedTerms));
                 }
 
                 // 4. 表示中タームの再読込＆画面反映
@@ -2366,7 +2391,7 @@ document.addEventListener('DOMContentLoaded', () => {
             } else {
                 currentWorkingStartDate = newDate;
                 initNewTerm(newDate);
-                showToast(`🆕 新規期間（${newDate}～）を開始しました（ブラウザ自動保存中）`);
+                showToast(`🆕 新規期間（${newDate}～）を開始しました（クラウド自動保存中）`);
             }
             renderSavedTermsSelect();
         });
