@@ -1055,7 +1055,9 @@ class ShiftScheduler {
                 const scGrid = this.solveSectionChiefSchedule(s, this.options.standardHolidays, maxConsec);
                 if (scGrid) {
                     for (let d = 0; d < this.numDays; d++) {
-                        if (!this.grid[s][d].isFixed) this.setSymbol(s, d, scGrid[d], false);
+                        const curSym = this.grid[s][d].symbol;
+                        const isRef = SYMBOLS.REF_SUMMER.includes(curSym) || SYMBOLS.REF_WINTER.includes(curSym);
+                        if (!this.grid[s][d].isFixed && !isRef) this.setSymbol(s, d, scGrid[d], false);
                     }
                 }
             }
@@ -1603,7 +1605,8 @@ class ShiftScheduler {
         for (let d = 0; d < numDays; d++) {
             const cell = this.grid[s][d];
             const isWkday = this.isWeekdayIndex(d);
-            if (cell.isFixed || cell.isAfterPreSpecial) {
+            const isRefSym = SYMBOLS.REF_SUMMER.includes(cell.symbol) || SYMBOLS.REF_WINTER.includes(cell.symbol);
+            if (cell.isFixed || cell.isAfterPreSpecial || isRefSym) {
                 baseSymbols[d] = cell.symbol;
                 if (cell.symbol === SYMBOLS.OFF) currentOff += 1.0;
                 else if (cell.symbol === SYMBOLS.HALF_WORK_OFF || cell.symbol === SYMBOLS.HALF_OFF_WORK) currentOff += 0.5;
@@ -3684,15 +3687,35 @@ function autoAssignRefreshHolidaysCore(staffList, dates, options = {}) {
     // 各リフグループごとに均等配分
     for (const grp of groups) {
         const daysInTerm = grp.dayIndices.length;
-        const targetCount = Math.round(activeStaffCount * (daysInTerm / grp.totalMonthDays));
+
+        // 過去タームで既にこのグループの記号を取得済みの有効スタッフ数をカウント
+        let alreadyObtainedInPast = 0;
+        for (const sIdx of activeStaffIndices) {
+            const st = staffList[sIdx];
+            const history = obtainedHistory[st.id] || obtainedHistory[sIdx];
+            const hasObtained = (history instanceof Set) ? history.has(grp.symbol) : (Array.isArray(history) && history.includes(grp.symbol));
+            if (hasObtained) alreadyObtainedInPast++;
+        }
+        const remainingUnobtained = Math.max(0, activeStaffCount - alreadyObtainedInPast);
+
+        // このタームに当該月の最終日（月末日）が含まれているか（＝その月のリフを消化する最終タームか）
+        const isLastTermOfMonth = grp.dayIndices.some(dIdx => dates[dIdx] && dates[dIdx].day === grp.totalMonthDays);
+
+        // ★ 月末日を含むターム（例: 第4タームの6/24〜6/30の上1）では、前ターム未取得の残り全スタッフ数を目標値にし、
+        // 「前ターム取得数 ＋ 当ターム取得数 ＝ 全有効スタッフ数」が100%完全一致するようにする！
+        const targetCount = isLastTermOfMonth
+            ? remainingUnobtained
+            : Math.min(remainingUnobtained, Math.round(activeStaffCount * (daysInTerm / grp.totalMonthDays)));
 
         // 今タームで既に手動入力等でこのグループの記号を持っている人数
         let alreadyInTermForThisGroup = 0;
+        const staffWithThisGroupInTerm = new Set();
         staffList.forEach((st, sIdx) => {
             if (st.isUnused) return;
             for (const d of grp.dayIndices) {
                 if (st.days[d] === grp.symbol) {
                     alreadyInTermForThisGroup++;
+                    staffWithThisGroupInTerm.add(sIdx);
                     break;
                 }
             }
@@ -3703,19 +3726,25 @@ function autoAssignRefreshHolidaysCore(staffList, dates, options = {}) {
         // 候補スタッフの抽出
         const candidates = [];
         for (const sIdx of activeStaffIndices) {
-            // 今タームですでにリフを持っているスタッフは除外
-            if (staffWithRefInCurrentTerm.has(sIdx)) continue;
+            // 既に当タームでこの記号を持っているスタッフは除外
+            if (staffWithThisGroupInTerm.has(sIdx)) continue;
+            // 月末最終ターム以外（次タームにも同月が続く場合）は、1人1ターム1リフの原則で既に別リフを持つスタッフを除外
+            if (!isLastTermOfMonth && staffWithRefInCurrentTerm.has(sIdx)) continue;
 
             const st = staffList[sIdx];
-            // ★ 係長は原則「平日出勤・土日休」のため、自動配分で勝手に平日にリフを入れない（希望入力のみ保持）
-            if (st.isSectionChief) continue;
             // 過去にこの記号を取得済みなら除外（二重取得防止！）
             const history = obtainedHistory[st.id] || obtainedHistory[sIdx];
             const hasObtained = (history instanceof Set) ? history.has(grp.symbol) : (Array.isArray(history) && history.includes(grp.symbol));
             if (hasObtained) continue;
 
-            // 対象期間内に空欄セルがあるか
-            const freeDays = grp.dayIndices.filter(d => st.days[d] === '');
+            // 対象期間内に空欄セルがあるか（係長は土日休を確保するため平日の空欄セルを優先抽出）
+            let freeDays = grp.dayIndices.filter(d => st.days[d] === '');
+            if (st.isSectionChief) {
+                const weekdayFreeDays = freeDays.filter(d => dates[d] && !dates[d].isSat && !dates[d].isSun);
+                if (weekdayFreeDays.length > 0) {
+                    freeDays = weekdayFreeDays;
+                }
+            }
             if (freeDays.length === 0) continue;
 
             candidates.push({
@@ -3727,6 +3756,10 @@ function autoAssignRefreshHolidaysCore(staffList, dates, options = {}) {
 
         // 候補者を属性均等に並び替え（偏りを抑える）
         candidates.sort((a, b) => {
+            // 月末最終タームで他のリフもまだ持っていない人を先に優先
+            const hasOtherRefA = staffWithRefInCurrentTerm.has(a.sIdx) ? 1 : 0;
+            const hasOtherRefB = staffWithRefInCurrentTerm.has(b.sIdx) ? 1 : 0;
+            if (hasOtherRefA !== hasOtherRefB) return hasOtherRefA - hasOtherRefB;
             const weightA = ((a.staff.isSectionChief || a.staff.isChief) ? 2 : 0) + (a.staff.isFullTime ? 2 : 0) + (a.staff.canSched ? 1 : 0);
             const weightB = ((b.staff.isSectionChief || b.staff.isChief) ? 2 : 0) + (b.staff.isFullTime ? 2 : 0) + (b.staff.canSched ? 1 : 0);
             if (weightA !== weightB) return weightA - weightB;
@@ -3756,9 +3789,12 @@ function autoAssignRefreshHolidaysCore(staffList, dates, options = {}) {
                 if (d - 2 >= 0 && isHolidaySymbol(st.days[d - 2]) && isHolidaySymbol(st.days[d - 1])) score += 15;
                 if (d + 2 < dates.length && isHolidaySymbol(st.days[d + 1]) && isHolidaySymbol(st.days[d + 2])) score += 15;
 
-                // 3. 土日祝日の適正分散（土日だけに偏らないように平日も同等に評価）
+                // 3. 土日祝日の適正分散（係長は土日公休と連休になる金曜・月曜等の平日を高評価）
                 const dObj = dates[d];
-                if (dObj.isSun || dObj.isSat || dObj.isHol) {
+                if (st.isSectionChief) {
+                    if (!dObj.isSun && !dObj.isSat) score += 50;
+                    if (dObj.wIdx === 0 || dObj.wIdx === 4) score += 25; // 月曜・金曜は土日と3連休になるため優遇
+                } else if (dObj.isSun || dObj.isSat || dObj.isHol) {
                     score += 5;
                 }
 

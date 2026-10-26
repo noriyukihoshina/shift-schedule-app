@@ -829,6 +829,10 @@ document.addEventListener('DOMContentLoaded', () => {
             currentWorkingStartDate = targetStart;
             const term = getTermInfo();
 
+            // ★ 別ターム読み込み時に前タームの自動配分リフ追跡メモリを必ずクリア（他タームへの誤警告防止）
+            autoAssignedRefKeys.clear();
+            autoAssignedStaffIds.clear();
+
             // 1. 公休日数（第13タームはデフォルト8.5、明示保存があればそれを優先）
             const stdSel = document.getElementById('standardHolidaySelect');
             if (stdSel) {
@@ -909,6 +913,32 @@ document.addEventListener('DOMContentLoaded', () => {
                 }
             } else {
                 dayOffsets = [...defaultOffsets];
+            }
+
+            // 3.5 月末最終タームで旧仕様により係長のリフが未配分だった場合の自動補完
+            const refGroupsInTerm = (typeof getTermRefreshGroups === 'function') ? getTermRefreshGroups(term.dates) : [];
+            if (refGroupsInTerm.length > 0 && staffList.some(st => !st.isUnused && st.days.some(sym => SYMBOLS.REF_SUMMER.includes(sym) || SYMBOLS.REF_WINTER.includes(sym)))) {
+                const { pastHistory } = getObtainedRefreshHistory(targetStart);
+                refGroupsInTerm.forEach(grp => {
+                    const isLastTermOfMonth = grp.dayIndices.some(dIdx => term.dates[dIdx] && term.dates[dIdx].day === grp.totalMonthDays);
+                    if (!isLastTermOfMonth) return;
+                    staffList.forEach((st, sIdx) => {
+                        if (st.isUnused || !st.isSectionChief) return;
+                        const pastSet = pastHistory[st.id] || new Set();
+                        const hasInPast = (pastSet instanceof Set) ? pastSet.has(grp.symbol) : false;
+                        const hasInCurrent = st.days.includes(grp.symbol) || (data.outputGrid && data.outputGrid[sIdx] && data.outputGrid[sIdx].some(c => c && c.symbol === grp.symbol));
+                        if (!hasInPast && !hasInCurrent) {
+                            const wkdayCandidates = grp.dayIndices.filter(d => term.dates[d] && !term.dates[d].isSat && !term.dates[d].isSun && st.days[d] === '');
+                            const pickD = wkdayCandidates.find(d => term.dates[d].wIdx === 4 || term.dates[d].wIdx === 0) ?? wkdayCandidates[0];
+                            if (pickD !== undefined) {
+                                st.days[pickD] = grp.symbol;
+                                if (data.outputGrid && data.outputGrid[sIdx] && data.outputGrid[sIdx][pickD]) {
+                                    data.outputGrid[sIdx][pickD] = { symbol: grp.symbol, isFixed: false, isAutoAssignedRef: true };
+                                }
+                            }
+                        }
+                    });
+                });
             }
 
             // 4. 入力テーブル描画
@@ -2054,15 +2084,24 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     // ★ 自動配分されたリフの誤消去検知チェック（ユーザー要望: 自動配分リフを間違えて消した場合に検知）
+    // ※ 前タームからの続きで既にリフ（上1等）を取得済みのため当タームで配分対象外となったスタッフは警告しない
     function checkMissingAutoAssignedRef(grid, staffList, res) {
-        if (!autoAssignedStaffIds || autoAssignedStaffIds.size === 0) return;
         if (!grid || !Array.isArray(grid)) return;
+        const curStartDate = document.getElementById('termStartDate')?.value || currentWorkingStartDate;
 
         staffList.forEach((st, sIdx) => {
             if (st.isUnused) return;
-            if (!autoAssignedStaffIds.has(st.id)) return;
 
-            // 当該スタッフのリフ（上1〜5、下1〜3）日数をグリッドから走査
+            // 当タームの希望入力シート（staffList[sIdx].days）にリフが入っているか、または当タームで自動配分されたかを確認
+            const hasRefInCurrentInput = Array.isArray(st.days) && st.days.some(sym =>
+                SYMBOLS.REF_SUMMER.includes(sym) || SYMBOLS.REF_WINTER.includes(sym)
+            );
+            const wasAutoAssignedInCurrentTerm = autoAssignedStaffIds && autoAssignedStaffIds.has(`${curStartDate}:${st.id}`);
+
+            // 当タームで最初から配分されていないスタッフ（前タームで上1等を取得済みで当ターム対象外のスタッフ）はチェック対象外
+            if (!hasRefInCurrentInput && !wasAutoAssignedInCurrentTerm) return;
+
+            // 当該スタッフのリフ（上1〜5、下1〜3）日数を出力グリッドから走査
             let refCount = 0;
             for (let d = 0; d < NUM_DAYS; d++) {
                 const cell = grid[sIdx] ? grid[sIdx][d] : null;
@@ -2651,11 +2690,11 @@ document.addEventListener('DOMContentLoaded', () => {
         });
 
         if (res.assignedCount > 0) {
-            // ★ 自動配分されたリフのセルおよび対象スタッフを記録（通常文字・編集自由扱い＆誤消去検知用）
+            // ★ 自動配分されたリフのセルおよび対象スタッフを当ターム日付付きで記録（通常文字・編集自由扱い＆誤消去検知用）
             if (Array.isArray(res.assignments)) {
                 res.assignments.forEach(a => {
-                    autoAssignedRefKeys.add(`${a.staffIndex},${a.dayIndex}`);
-                    autoAssignedStaffIds.add(a.staffId);
+                    autoAssignedRefKeys.add(`${curStartDate}:${a.staffIndex},${a.dayIndex}`);
+                    autoAssignedStaffIds.add(`${curStartDate}:${a.staffId}`);
                 });
             }
             renderInputTable();
@@ -2849,25 +2888,11 @@ document.addEventListener('DOMContentLoaded', () => {
     if (solveBtn) {
         solveBtn.addEventListener('click', () => {
             // ★ リフレッシュ休暇自動配分連携:
-            // ターム内にリフ対象月が含まれており、かつまだリフが一切入っていない場合、自動配分を先に適用！
+            // ターム内にリフ対象月が含まれており、まだ必要人数分に達していないグループ（月末最終タームの未消化分含む）があれば自動配分を補完適用！
             const term = getTermInfo();
             const refGroups = (typeof getTermRefreshGroups === 'function') ? getTermRefreshGroups(term.dates) : [];
             if (refGroups && refGroups.length > 0) {
-                let hasRef = false;
-                for (let s = 0; s < NUM_STAFF; s++) {
-                    if (staffList[s].isUnused) continue;
-                    for (let d = 0; d < NUM_DAYS; d++) {
-                        const sym = staffList[s].days[d];
-                        if (SYMBOLS.REF_SUMMER.includes(sym) || SYMBOLS.REF_WINTER.includes(sym)) {
-                            hasRef = true;
-                            break;
-                        }
-                    }
-                    if (hasRef) break;
-                }
-                if (!hasRef) {
-                    handleAutoAssignRefreshHolidays({ silent: true });
-                }
+                handleAutoAssignRefreshHolidays({ silent: true });
             }
 
             setSolveLoading(true);
@@ -2876,6 +2901,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 try {
                     const stdHolidayVal = parseFloat(document.getElementById('standardHolidaySelect')?.value || '8.0');
                     const term = getTermInfo();
+                    const curStartDate = document.getElementById('termStartDate')?.value || currentWorkingStartDate;
                     const scheduler = new ShiftScheduler(staffList, {
                         standardHolidays: stdHolidayVal,
                         dates: term.dates,
@@ -2896,7 +2922,7 @@ document.addEventListener('DOMContentLoaded', () => {
                                     if (!cell) continue;
                                     const sym = cell.symbol || cell;
                                     const isRef = SYMBOLS.REF_SUMMER.includes(sym) || SYMBOLS.REF_WINTER.includes(sym);
-                                    if (isRef && autoAssignedRefKeys.has(`${s},${d}`)) {
+                                    if (isRef && autoAssignedRefKeys.has(`${curStartDate}:${s},${d}`)) {
                                         cell.isFixed = false;
                                         cell.isAutoAssignedRef = true;
                                     }
@@ -2928,7 +2954,7 @@ document.addEventListener('DOMContentLoaded', () => {
                                             if (!cell) continue;
                                             const sym = cell.symbol || cell;
                                             const isRef = SYMBOLS.REF_SUMMER.includes(sym) || SYMBOLS.REF_WINTER.includes(sym);
-                                            if (isRef && autoAssignedRefKeys.has(`${s},${d}`)) {
+                                            if (isRef && autoAssignedRefKeys.has(`${curStartDate}:${s},${d}`)) {
                                                 cell.isFixed = false;
                                                 cell.isAutoAssignedRef = true;
                                             }
