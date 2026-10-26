@@ -302,14 +302,47 @@ function validateInitialState(staffList, options = {}) {
                 }
             });
         }
+        // F. 個人別の希望公休（休）過多チェック
+        const stdHol = options.standardHolidays !== undefined ? options.standardHolidays : 8.0;
+        let wishPublicOff = 0;
+        const wishHolidayDays = [];
+        for (let d = 0; d < numDays; d++) {
+            const sym = staff.days[d];
+            if (!sym) continue;
+            if (sym === SYMBOLS.OFF) {
+                wishPublicOff += 1.0;
+                wishHolidayDays.push(d);
+            } else if (sym === SYMBOLS.HALF_WORK_OFF || sym === SYMBOLS.HALF_OFF_WORK) {
+                wishPublicOff += 0.5;
+                wishHolidayDays.push(d);
+            } else if (isHolidaySymbol(sym) || isHalfDuty(sym)) {
+                wishHolidayDays.push(d);
+            }
+        }
+        if (wishPublicOff > stdHol + 0.01 && !(staff.isSectionChief && wishPublicOff <= stdHol + 4.0)) {
+            errors.push(`【スタッフ No.${staff.id} ${staff.name}】事前希望の公休（休）が${wishPublicOff}日入力されており、基準公休日数（${stdHol}日）を超過しています。`);
+            wishHolidayDays.forEach(d => {
+                conflictCells.push({
+                    staffIndex: sIdx,
+                    dayIndex: d,
+                    reason: `希望公休数が基準(${stdHol}日)を超過しています（現在:${wishPublicOff}日）`
+                });
+            });
+        }
     });
+
+    // 希望休（休・有・上1〜5・下1〜3・半休）判定ヘルパー
+    const isWishLeaveSymbol = (sym) => {
+        if (!sym) return false;
+        return isHolidaySymbol(sym) || isHalfDuty(sym);
+    };
 
     // 2. 日別の事前枠超過・希望休過多・属性別出勤可能数チェック
     for (let d = 0; d < numDays; d++) {
         const dayNum = d + 1;
         let earlyStaff = [], lateStaff = [], eveStaff = [], h8Staff = [];
         let holidayStaff = [];
-        let schedAvailable = 0, roleAvailable = 0, fullTimeAvailable = 0;
+        let schedAvailable = 0, roleAvailable = 0, fullTimeAvailable = 0, can8Available = 0;
 
         staffList.forEach((staff, sIdx) => {
             if (staff.isUnused) return;
@@ -318,13 +351,15 @@ function validateInitialState(staffList, options = {}) {
             if (sym === SYMBOLS.LATE || sym === SYMBOLS.NO_ALLOW_LATE) lateStaff.push(sIdx);
             if (sym === SYMBOLS.EVE || sym === SYMBOLS.NO_ALLOW_EVE) eveStaff.push(sIdx);
             if (sym === SYMBOLS.H8) h8Staff.push(sIdx);
-            if (isHolidaySymbol(sym)) {
-                holidayStaff.push(sIdx);
+            if (isWishLeaveSymbol(sym) || isExcludeSymbol(sym)) {
+                if (isWishLeaveSymbol(sym)) holidayStaff.push(sIdx);
             } else {
-                // 出勤可能スタッフ
-                if (staff.canSched) schedAvailable++;
+                // 出勤可能スタッフ（空欄または出勤系記号）
+                // スケ可は「○」で出勤できる必要があるため、特殊勤務や出張が事前固定されている場合はスケ可日勤(○)としてカウントしない
+                if (staff.canSched && (!sym || sym === SYMBOLS.WORK || sym === '〇' || sym === '◯')) schedAvailable++;
                 if ((staff.isSectionChief || staff.isChief) && sym !== SYMBOLS.TRIP) roleAvailable++;
                 if (staff.isFullTime && sym !== SYMBOLS.TRIP) fullTimeAvailable++;
+                if (staff.can8 && !staff.isSectionChief && (!sym || sym === SYMBOLS.WORK || sym === '〇' || sym === '◯' || sym === SYMBOLS.H8)) can8Available++;
             }
         });
 
@@ -350,15 +385,43 @@ function validateInitialState(staffList, options = {}) {
         if (availableCount < 7) {
             errors.push(`【${dayNum}日目】出勤可能スタッフが${availableCount}名しかおらず、必須特殊勤務数（早3+遅1+E2+8時1=計7名）を満たせません（希望休が多すぎます）。`);
             holidayStaff.forEach(sIdx => {
-                conflictCells.push({ staffIndex: sIdx, dayIndex: d, reason: `${dayNum}日目: 希望休が多すぎます。出勤に変更可能なスタッフを調整してください。` });
+                conflictCells.push({ staffIndex: sIdx, dayIndex: d, reason: `${dayNum}日目: 希望休（休・有・上・下）が多すぎます。出勤に変更可能なスタッフを調整してください。` });
             });
         }
 
-        // 属性充足チェック（事前希望の重複で物理的に不足する場合）
+        // 属性充足チェック（事前希望休の重複で物理的に不足する場合、該当日に希望休[休・有・上・下]が入っている全対象スタッフにブルー網掛けを付与）
         const totalSched = staffList.filter(s => !s.isUnused && s.canSched).length;
         if (totalSched >= 2 && schedAvailable < 2) {
             errors.push(`【${dayNum}日目】「スケ可」スタッフの出勤可能人数が${schedAvailable}名しかおらず、必要数（2名以上）を満たせません（スケ可スタッフの希望休重複をご確認ください）。`);
+            staffList.forEach((st, sIdx) => {
+                if (st.isUnused || !st.canSched) return;
+                const sym = st.days[d];
+                if (isWishLeaveSymbol(sym) || (sym && sym !== SYMBOLS.WORK)) {
+                    conflictCells.push({
+                        staffIndex: sIdx,
+                        dayIndex: d,
+                        reason: `⚠️ ${dayNum}日目: スケ可スタッフの希望休（${sym}）が重複し、スケ可2名以上を満たせません`
+                    });
+                }
+            });
         }
+
+        const totalCan8 = staffList.filter(s => !s.isUnused && !s.isSectionChief && s.can8).length;
+        if (totalCan8 >= 1 && can8Available < 1) {
+            errors.push(`【${dayNum}日目】「8時可」スタッフの出勤可能人数が0名となっており、8時勤務（1名）を配置できません（8時可スタッフの希望休重複をご確認ください）。`);
+            staffList.forEach((st, sIdx) => {
+                if (st.isUnused || st.isSectionChief || !st.can8) return;
+                const sym = st.days[d];
+                if (isWishLeaveSymbol(sym) || (sym && sym !== SYMBOLS.WORK && sym !== SYMBOLS.H8)) {
+                    conflictCells.push({
+                        staffIndex: sIdx,
+                        dayIndex: d,
+                        reason: `⚠️ ${dayNum}日目: 8時可スタッフ全員に希望休（${sym}）等が重なっており、8時勤務を配置できません`
+                    });
+                }
+            });
+        }
+
         // 係長・主任・副主任の充足チェック
         const sectionChiefs = staffList.filter(s => !s.isUnused && s.isSectionChief);
         const chiefs = staffList.filter(s => !s.isUnused && s.isChief);
@@ -368,22 +431,28 @@ function validateInitialState(staffList, options = {}) {
         const curDateInfo = (dates && dates[d]) ? dates[d] : null;
         const isWeekday = curDateInfo ? (curDateInfo.wIdx >= 0 && curDateInfo.wIdx <= 4) : ((d % 7) >= 0 && (d % 7) <= 4);
 
-        if (sectionChiefs.length > 0) {
-            // 係長不在時における主任代替 ➔ 副主任（AとB両方）代替チェック
+        if (sectionChiefs.length > 0 || chiefs.length > 0) {
+            // 係長は平日は原則出勤、土日は原則休み（土日は希望の○等が入っている場合のみ出勤扱い）
             let scAvailableCount = 0;
             sectionChiefs.forEach(sc => {
                 const sym = sc.days[d];
-                if (!isHolidaySymbol(sym) && sym !== SYMBOLS.TRIP && !isExcludeSymbol(sym)) {
-                    scAvailableCount++;
+                if (isWeekday) {
+                    if (!isWishLeaveSymbol(sym) && sym !== SYMBOLS.TRIP && !isExcludeSymbol(sym)) {
+                        scAvailableCount++;
+                    }
+                } else {
+                    if (sym && isWorkSymbol(sym) && sym !== SYMBOLS.TRIP && !isHalfDuty(sym)) {
+                        scAvailableCount++;
+                    }
                 }
             });
 
-            // 係長が全員不在（休・有・リフ・特休・出張等）が確定している日の場合
+            // 係長が不在（土日、または平日の希望休・有・リフ・出張等）の日の場合
             if (scAvailableCount === 0) {
                 let chiefAvailableCount = 0;
                 chiefs.forEach(ch => {
                     const sym = ch.days[d];
-                    if (!isHolidaySymbol(sym) && sym !== SYMBOLS.TRIP && !isExcludeSymbol(sym)) {
+                    if (!isWishLeaveSymbol(sym) && sym !== SYMBOLS.TRIP && !isExcludeSymbol(sym)) {
                         chiefAvailableCount++;
                     }
                 });
@@ -393,7 +462,7 @@ function validateInitialState(staffList, options = {}) {
                     let subAAvailable = 0, subBAvailable = 0;
                     subChiefs.forEach(sub => {
                         const sym = sub.days[d];
-                        if (!isHolidaySymbol(sym) && sym !== SYMBOLS.TRIP && !isExcludeSymbol(sym)) {
+                        if (!isWishLeaveSymbol(sym) && sym !== SYMBOLS.TRIP && !isExcludeSymbol(sym)) {
                             const sec = sub.section || '';
                             if (sec === 'PT A' || sec === 'OT A') subAAvailable++;
                             else if (sec === 'PT B' || sec === 'OT B') subBAvailable++;
@@ -402,23 +471,39 @@ function validateInitialState(staffList, options = {}) {
                     const subABOk = (subAAvailable >= 1 && subBAvailable >= 1);
                     if (!subABOk) {
                         errors.push(`【${dayNum}日目】係長・主任ともに不在ですが、副主任（Aチーム・Bチーム両方）の出勤可能者が不足しています（主任1名以上、または副主任をA・B両方配置してください）。`);
-                        sectionChiefs.forEach(sc => {
-                            const scIdx = staffList.indexOf(sc);
-                            if (scIdx >= 0) {
-                                conflictCells.push({
-                                    staffIndex: scIdx,
-                                    dayIndex: d,
-                                    reason: `⚠️ 役職不在エラー: 係長・主任が不在で、副主任(A・B両方)も不足しています`
-                                });
+                        // その日に希望休（休・有・上・下・半休・出張）が入っている係長・主任・副主任すべてにブルー網掛けを付与
+                        staffList.forEach((st, sIdx) => {
+                            if (st.isUnused) return;
+                            if (st.isSectionChief || st.isChief || st.isSubChief) {
+                                const sym = st.days[d];
+                                if (isWishLeaveSymbol(sym) || sym === SYMBOLS.TRIP) {
+                                    conflictCells.push({
+                                        staffIndex: sIdx,
+                                        dayIndex: d,
+                                        reason: `⚠️ ${dayNum}日目: 役職者（係長・主任・副主任A/B）の希望休（${sym}）が重なり、役職者不在となっています`
+                                    });
+                                }
                             }
                         });
                     }
                 }
             }
         }
+
         const totalFullTime = staffList.filter(s => !s.isUnused && s.isFullTime).length;
         if (totalFullTime >= 3 && fullTimeAvailable < 3) {
             errors.push(`【${dayNum}日目】「専従」スタッフの出勤可能人数が${fullTimeAvailable}名しかおらず、必要数（3名以上）を満たせません（専従スタッフの希望休重複をご確認ください）。`);
+            staffList.forEach((st, sIdx) => {
+                if (st.isUnused || !st.isFullTime) return;
+                const sym = st.days[d];
+                if (isWishLeaveSymbol(sym) || sym === SYMBOLS.TRIP) {
+                    conflictCells.push({
+                        staffIndex: sIdx,
+                        dayIndex: d,
+                        reason: `⚠️ ${dayNum}日目: 専従スタッフの希望休（${sym}）が重なり、専従3名以上を満たせません`
+                    });
+                }
+            });
         }
     }
 
@@ -854,7 +939,7 @@ class ShiftScheduler {
                             }
                         }
                     }
-                    if (otherTeamSubWorking < 1 && strictLevel <= 1) return false;
+                    if (otherTeamSubWorking < 1) return false;
                 }
             }
         }
@@ -987,6 +1072,9 @@ class ShiftScheduler {
         if (!specialResult.success && !force) {
             return specialResult;
         }
+
+        // ★ 係長不在日の主任・副主任（Aチーム1名以上かつBチーム1名以上）出勤保証リペア
+        this.ensureRoleCoverage();
 
         // ステップ3: 特殊勤務を崩さず、一般勤務(○)と公休(休)のスワップで出勤人数を厳格に平準化
         this.balanceDailyWorkforce();
@@ -1149,7 +1237,7 @@ class ShiftScheduler {
                                         // otherD を ○ にスワップできるか一時的に試す
                                         this.setSymbol(s, otherD, SYMBOLS.WORK, false);
                                         this.setSymbol(s, d + 1, SYMBOLS.OFF, false);
-                                        const valid = this.isStaffHardValid(s);
+                                        const valid = this.isStaffHardValid(s) && this.isGlobalAttributesValid();
                                         // 元に戻す
                                         this.setSymbol(s, otherD, SYMBOLS.OFF, false);
                                         this.setSymbol(s, d + 1, SYMBOLS.WORK, false);
@@ -1384,6 +1472,99 @@ class ShiftScheduler {
                         this.setSymbol(s, d, SYMBOLS.WORK, false);
                     }
                 }
+            }
+        }
+
+        // ★ 係長不在日の主任・副主任（Aチーム1名以上かつBチーム1名以上）出勤保証リペア
+        this.ensureRoleCoverage();
+    }
+
+    /**
+     * 係長不在日に「主任1名以上」または「副主任A（PT A/OT A）1名以上 かつ 副主任B（PT B/OT B）1名以上」が
+     * 確実に出勤しているかを全日で点検し、不足日があれば主任または該当チームの副主任の非固定公休を他日とスワップして自動リペアする
+     */
+    ensureRoleCoverage() {
+        const scIndices = [];
+        const chIndices = [];
+        const subAIndices = [];
+        const subBIndices = [];
+        for (let s = 0; s < this.numStaff; s++) {
+            const st = this.staffList[s];
+            if (st.isUnused) continue;
+            if (st.isSectionChief) scIndices.push(s);
+            if (st.isChief) chIndices.push(s);
+            if (st.isSubChief) {
+                const sec = st.section || '';
+                if (sec === 'PT A' || sec === 'OT A') subAIndices.push(s);
+                else if (sec === 'PT B' || sec === 'OT B') subBIndices.push(s);
+            }
+        }
+        if (chIndices.length === 0 && subAIndices.length === 0 && subBIndices.length === 0) return;
+
+        const isWorkingOnDay = (s, d) => {
+            const sym = this.grid[s][d].symbol;
+            return isWorkSymbol(sym) && sym !== SYMBOLS.TRIP && !isExcludeSymbol(sym);
+        };
+
+        const isRoleCoveredOnDay = (d) => {
+            if (scIndices.some(s => isWorkingOnDay(s, d))) return true;
+            if (chIndices.some(s => isWorkingOnDay(s, d))) return true;
+            const hasSubA = subAIndices.some(s => isWorkingOnDay(s, d));
+            const hasSubB = subBIndices.some(s => isWorkingOnDay(s, d));
+            if ((subAIndices.length === 0 || hasSubA) && (subBIndices.length === 0 || hasSubB) && (hasSubA || hasSubB)) {
+                return true;
+            }
+            return false;
+        };
+
+        const tryBringInStaffOnDay = (targetStaffIndices, d) => {
+            for (const s of targetStaffIndices) {
+                if (isWorkingOnDay(s, d)) return true;
+                if (this.grid[s][d].isFixed || this.grid[s][d].isAfterPreSpecial || this.grid[s][d].symbol !== SYMBOLS.OFF) continue;
+
+                // 他日の非固定「○」を「休」にスワップできる日を探索（同週優先、他日の役職カバレッジを壊さない日を優先）
+                const dWeek = this.weekSpans.findIndex(span => span.includes(d));
+                const candDays = [];
+                for (let otherD = 0; otherD < this.numDays; otherD++) {
+                    if (otherD === d) continue;
+                    if (this.grid[s][otherD].isFixed || this.grid[s][otherD].symbol !== SYMBOLS.WORK) continue;
+                    const oWeek = this.weekSpans.findIndex(span => span.includes(otherD));
+                    candDays.push({
+                        day: otherD,
+                        sameWeek: (oWeek === dWeek) ? 1 : 0,
+                        realLoad: this.getDailyEffectiveRealLoad(otherD)
+                    });
+                }
+                candDays.sort((a, b) => {
+                    if (a.sameWeek !== b.sameWeek) return b.sameWeek - a.sameWeek;
+                    return b.realLoad - a.realLoad;
+                });
+
+                for (const cObj of candDays) {
+                    const otherD = cObj.day;
+                    this.setSymbol(s, d, SYMBOLS.WORK, false);
+                    this.setSymbol(s, otherD, SYMBOLS.OFF, false);
+                    const ok = this.isStaffHardValid(s) && isRoleCoveredOnDay(otherD) && this.isGlobalAttributesValid();
+                    if (ok) {
+                        return true;
+                    }
+                    this.setSymbol(s, d, SYMBOLS.OFF, false);
+                    this.setSymbol(s, otherD, SYMBOLS.WORK, false);
+                }
+            }
+            return false;
+        };
+
+        for (let d = 0; d < this.numDays; d++) {
+            if (isRoleCoveredOnDay(d)) continue;
+            // 1. まず主任を出勤させられるか試行
+            if (tryBringInStaffOnDay(chIndices, d) && isRoleCoveredOnDay(d)) continue;
+            // 2. 主任が無理なら、不足している副主任A・副主任Bを両方揃えるよう試行
+            if (!subAIndices.some(s => isWorkingOnDay(s, d))) {
+                tryBringInStaffOnDay(subAIndices, d);
+            }
+            if (!subBIndices.some(s => isWorkingOnDay(s, d))) {
+                tryBringInStaffOnDay(subBIndices, d);
             }
         }
     }
@@ -1748,18 +1929,23 @@ class ShiftScheduler {
         });
 
         // 選択された休日候補のスコア計算ヘルパー
+        const expectedAvgEffectiveOffAfterSelf = overallAvgOff + (neededOff * staffRealW) / numDays;
         function calcChoiceScore(days, isConsecutive = false) {
             let score = 0;
-            if (isConsecutive) score += 100;
+            if (isConsecutive) score += 80;
 
             for (const d of days) {
                 const currentOff = dailyOffCounts[d];
-                // ★ 出勤人数平準化の徹底強化:
-                // 日別加減枠（土日祝-2等）を加味した目標休日数（平日約16名、土日祝約18名）からの乖離をペナルティ化
+                // ★ 出勤人数（実数合計）平準化の徹底強化:
+                // 日別加減枠（土日祝-2等）を加味した現在の進行度における動的理想休日実数からの乖離を二乗ペナルティ化
+                // （これにより第5週の最終3日間でも日曜26日目に休日が集中せず、26〜28日目の実数合計が最初からフラットになる）
                 const offset = (self.dayOffsets && self.dayOffsets[d]) ? self.dayOffsets[d] : 0;
-                const idealOff = 16 - offset;
-                const diffFromIdeal = currentOff - idealOff;
-                score -= diffFromIdeal * 25;
+                const effectiveOffAfter = currentOff + staffRealW + offset;
+                const diffFromIdeal = effectiveOffAfter - expectedAvgEffectiveOffAfterSelf;
+                score -= diffFromIdeal * 65;
+                if (diffFromIdeal > 0) {
+                    score -= Math.pow(diffFromIdeal, 2) * 45;
+                }
 
                 if (staff.can8) score -= dailyH8OffCounts[d] * 30;
                 if (staff.canSched) score -= dailySchedOffCounts[d] * 35;
@@ -2954,11 +3140,11 @@ class ShiftScheduler {
                 const sec = this.staffList[s].section || 'その他';
                 let staffWorkAmt = 0;
 
-                if (sym === SYMBOLS.EARLY) { early++; totalWork += 1.0; staffWorkAmt = 1.0; }
-                else if (sym === SYMBOLS.LATE) { late++; totalWork += 1.0; staffWorkAmt = 1.0; }
-                else if (sym === SYMBOLS.EVE) { eve++; totalWork += 1.0; staffWorkAmt = 1.0; }
+                if (sym === SYMBOLS.EARLY || sym === SYMBOLS.NO_ALLOW_EARLY) { early++; totalWork += 1.0; staffWorkAmt = 1.0; }
+                else if (sym === SYMBOLS.LATE || sym === SYMBOLS.NO_ALLOW_LATE) { late++; totalWork += 1.0; staffWorkAmt = 1.0; }
+                else if (sym === SYMBOLS.EVE || sym === SYMBOLS.NO_ALLOW_EVE) { eve++; totalWork += 1.0; staffWorkAmt = 1.0; }
                 else if (sym === SYMBOLS.H8) { h8++; totalWork += 1.0; staffWorkAmt = 1.0; }
-                else if (sym === SYMBOLS.WORK || sym === SYMBOLS.TRIP) { normal++; totalWork += 1.0; staffWorkAmt = 1.0; }
+                else if (sym === SYMBOLS.WORK || sym === '〇' || sym === '◯' || sym === SYMBOLS.TRIP) { normal++; totalWork += 1.0; staffWorkAmt = 1.0; }
                 else if (sym === SYMBOLS.OFF) { off += 1.0; }
                 else if (sym === SYMBOLS.PAID) { paid += 1.0; }
                 else if (SYMBOLS.REF_SUMMER.includes(sym) || SYMBOLS.REF_WINTER.includes(sym)) { ref += 1.0; }
@@ -3003,19 +3189,31 @@ class ShiftScheduler {
         }
 
         const staffStats = [];
+        const refBreakdownMap = {};
+        const allRefSyms = [...SYMBOLS.REF_SUMMER, ...SYMBOLS.REF_WINTER];
+        allRefSyms.forEach(sym => { refBreakdownMap[sym] = { symbol: sym, days: 0, staffSet: new Set() }; });
+
         for (let s = 0; s < this.numStaff; s++) {
             let workDays = 0, offDays = 0, paidDays = 0, refDays = 0;
             let early = 0, late = 0, eve = 0, h8 = 0;
+            const staffRefSyms = [];
             for (let d = 0; d < this.numDays; d++) {
                 const sym = this.grid[s][d].symbol;
-                if (sym === SYMBOLS.EARLY) { early++; workDays += 1.0; }
-                else if (sym === SYMBOLS.LATE) { late++; workDays += 1.0; }
-                else if (sym === SYMBOLS.EVE) { eve++; workDays += 1.0; }
+                if (sym === SYMBOLS.EARLY || sym === SYMBOLS.NO_ALLOW_EARLY) { early++; workDays += 1.0; }
+                else if (sym === SYMBOLS.LATE || sym === SYMBOLS.NO_ALLOW_LATE) { late++; workDays += 1.0; }
+                else if (sym === SYMBOLS.EVE || sym === SYMBOLS.NO_ALLOW_EVE) { eve++; workDays += 1.0; }
                 else if (sym === SYMBOLS.H8) { h8++; workDays += 1.0; }
-                else if (sym === SYMBOLS.WORK || sym === SYMBOLS.TRIP) { workDays += 1.0; }
+                else if (sym === SYMBOLS.WORK || sym === '〇' || sym === '◯' || sym === SYMBOLS.TRIP) { workDays += 1.0; }
                 else if (sym === SYMBOLS.OFF) { offDays += 1.0; }
                 else if (sym === SYMBOLS.PAID) { paidDays += 1.0; }
-                else if (SYMBOLS.REF_SUMMER.includes(sym) || SYMBOLS.REF_WINTER.includes(sym)) { refDays += 1.0; }
+                else if (SYMBOLS.REF_SUMMER.includes(sym) || SYMBOLS.REF_WINTER.includes(sym)) {
+                    refDays += 1.0;
+                    staffRefSyms.push(sym);
+                    if (!this.staffList[s].isUnused && refBreakdownMap[sym]) {
+                        refBreakdownMap[sym].days += 1;
+                        refBreakdownMap[sym].staffSet.add(s);
+                    }
+                }
                 else if (sym === SYMBOLS.HALF_WORK_OFF || sym === SYMBOLS.HALF_OFF_WORK) {
                     workDays += 0.5;
                     offDays += 0.5;
@@ -3034,6 +3232,7 @@ class ShiftScheduler {
                 offDays,
                 paidDays,
                 refDays,
+                refSyms: staffRefSyms,
                 early,
                 late,
                 eve,
@@ -3041,7 +3240,13 @@ class ShiftScheduler {
             });
         }
 
-        return { daily, staffStats };
+        const refBreakdown = allRefSyms.map(sym => ({
+            symbol: sym,
+            days: refBreakdownMap[sym].days,
+            staffCount: refBreakdownMap[sym].staffSet.size
+        })).filter(item => item.days > 0);
+
+        return { daily, staffStats, refBreakdown };
     }
 }
 

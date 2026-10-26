@@ -884,7 +884,22 @@ document.addEventListener('DOMContentLoaded', () => {
             const defaultOffsets = createDefaultDayOffsets(term.dates);
             if (Array.isArray(data.dayOffsets) && data.dayOffsets.length >= 28) {
                 const hasAnyNonZero = data.dayOffsets.some(v => v !== 0);
-                if (!hasAnyNonZero) {
+                // 古い月曜始まりダミー(d=5,6が土日)のまま水曜始まりタームに保存されてしまった古いデータの自動補正判定:
+                // 実際の土日祝(defaultOffsets === -2)の日のうち半分以上が0で、かつ実際の平日に-2が混入している場合はカレンダー整合補正
+                let weekendMatchCount = 0;
+                let weekendTotalCount = 0;
+                let weekdayMinusTwoCount = 0;
+                for (let d = 0; d < NUM_DAYS; d++) {
+                    if (defaultOffsets[d] === -2) {
+                        weekendTotalCount++;
+                        if (data.dayOffsets[d] < 0) weekendMatchCount++;
+                    } else if (data.dayOffsets[d] === -2) {
+                        weekdayMinusTwoCount++;
+                    }
+                }
+                const isStaleMisalignedOffsets = (weekendTotalCount >= 6 && weekendMatchCount <= 2 && weekdayMinusTwoCount >= 4);
+
+                if (!hasAnyNonZero || isStaleMisalignedOffsets) {
                     dayOffsets = [...defaultOffsets];
                 } else {
                     dayOffsets = [...data.dayOffsets];
@@ -3368,7 +3383,7 @@ document.addEventListener('DOMContentLoaded', () => {
             const wAvg = (wSum / weekdayDaily.length).toFixed(1);
 
             if (weekdayBadgeEl) weekdayBadgeEl.textContent = `${weekdayDaily.length} 日間`;
-            if (weekdayRangeEl) weekdayRangeEl.textContent = `実数 ${rMin} 〜 ${rMax} 名 (ブレ幅: ${Number((rMax - rMin).toFixed(2))})`;
+            if (weekdayRangeEl) weekdayRangeEl.textContent = `実数 ${rMin} 〜 ${rMax} 名 (ブレ幅: 実数 ${Number((rMax - rMin).toFixed(2))} 名)`;
             if (weekdayAvgEl) {
                 weekdayAvgEl.innerHTML = `実数 ${rAvg} 名 <span style="font-size:0.78rem; color:#64748b; font-weight:normal;">(出勤計: ${wAvg}名)</span>`;
             }
@@ -3396,7 +3411,7 @@ document.addEventListener('DOMContentLoaded', () => {
             const hAvg = (hSum / holidayDaily.length).toFixed(1);
 
             if (holidayBadgeEl) holidayBadgeEl.textContent = `${holidayDaily.length} 日間`;
-            if (holidayRangeEl) holidayRangeEl.textContent = `実数 ${rMin} 〜 ${rMax} 名 (ブレ幅: ${Number((rMax - rMin).toFixed(2))})`;
+            if (holidayRangeEl) holidayRangeEl.textContent = `実数 ${rMin} 〜 ${rMax} 名 (ブレ幅: 実数 ${Number((rMax - rMin).toFixed(2))} 名)`;
             if (holidayAvgEl) {
                 holidayAvgEl.innerHTML = `実数 ${rAvg} 名 <span style="font-size:0.78rem; color:#64748b; font-weight:normal;">(出勤計: ${hAvg}名)</span>`;
             }
@@ -3407,19 +3422,42 @@ document.addEventListener('DOMContentLoaded', () => {
             if (holidayAvgEl) holidayAvgEl.textContent = '- 名';
         }
 
-        // --- 有休取得合計数 ---
+        // --- 有休 ＆ リフレッシュ休暇（上1〜上5、下1〜下3）取得合計数 ---
         const validStaffStats = stats.staffStats.filter(s => !s.isUnused);
         const totalPaidDays = validStaffStats.reduce((sum, s) => sum + s.paidDays, 0);
         const paidStaffCount = validStaffStats.filter(s => s.paidDays > 0).length;
+        const totalRefDays = validStaffStats.reduce((sum, s) => sum + (s.refDays || 0), 0);
+        const refStaffCount = validStaffStats.filter(s => (s.refDays || 0) > 0).length;
 
         const totalPaidEl = document.getElementById('statTotalPaidDays');
         const paidStaffEl = document.getElementById('statPaidStaffCount');
         if (totalPaidEl) {
             const formattedPaid = (totalPaidDays % 1 === 0) ? totalPaidDays.toFixed(0) : totalPaidDays.toFixed(1);
-            totalPaidEl.textContent = `${formattedPaid} 日`;
+            const formattedRef = (totalRefDays % 1 === 0) ? totalRefDays.toFixed(0) : totalRefDays.toFixed(1);
+            totalPaidEl.innerHTML = `有休 ${formattedPaid} 日 <span style="font-size:1.15rem; color:#047857; font-weight:800; margin-left:6px;">/ リフ ${formattedRef} 日</span>`;
         }
         if (paidStaffEl) {
-            paidStaffEl.textContent = `${paidStaffCount} 名`;
+            paidStaffEl.innerHTML = `有休 ${paidStaffCount} 名 <span style="color:#047857; font-weight:700;">/ リフ ${refStaffCount} 名</span>`;
+        }
+
+        // 当タームで取得しているリフレッシュ休暇の記号別内訳（上1、下2など）を表示
+        let refDetailEl = document.getElementById('statRefBreakdownDetail');
+        if (!refDetailEl && totalPaidEl && totalPaidEl.parentElement) {
+            refDetailEl = document.createElement('div');
+            refDetailEl.id = 'statRefBreakdownDetail';
+            refDetailEl.style.cssText = 'margin-top: 6px; padding-top: 6px; border-top: 1px dashed #fed7aa; font-size: 0.8rem; color: #065f46; line-height: 1.5;';
+            totalPaidEl.parentElement.appendChild(refDetailEl);
+        }
+        if (refDetailEl) {
+            const breakdown = stats.refBreakdown || [];
+            if (breakdown.length > 0) {
+                const badgesHtml = breakdown.map(item =>
+                    `<span style="display:inline-block; background:#ecfdf5; border:1px solid #6ee7b7; color:#047857; font-weight:700; padding:1px 7px; border-radius:9999px; margin-right:4px; margin-bottom:2px; font-size:0.76rem;">${item.symbol}: ${item.days}日 (${item.staffCount}名)</span>`
+                ).join('');
+                refDetailEl.innerHTML = `<div style="font-weight:700; color:#047857; margin-bottom:2px;">🌴 当ターム取得リフレッシュ休暇内訳:</div><div>${badgesHtml}</div>`;
+            } else {
+                refDetailEl.innerHTML = `<span style="color:#64748b;">🌴 当ターム取得リフレッシュ休暇: 0日（取得なし）</span>`;
+            }
         }
 
         // --- 全日（期間内）の実数合計 ---
@@ -3430,7 +3468,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
         const workRangeEl = document.getElementById('statWorkRange');
         const avgWorkEl = document.getElementById('statAvgWork');
-        if (workRangeEl) workRangeEl.textContent = `実数 ${allMin} 〜 ${allMax} 名 (ブレ幅: ${Number((allMax - allMin).toFixed(2))})`;
+        if (workRangeEl) workRangeEl.textContent = `実数 ${allMin} 〜 ${allMax} 名 (ブレ幅: 実数 ${Number((allMax - allMin).toFixed(2))} 名)`;
         if (avgWorkEl) avgWorkEl.textContent = `実数 ${allAvg} 名`;
 
         // --- 特殊勤務（早・遅・E・8時）の配置累計 ---

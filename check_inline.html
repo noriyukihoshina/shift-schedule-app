@@ -1,4 +1,4 @@
-﻿<!DOCTYPE html><html><head><title>Inline Check</title></head><body><div id='errors'></div><script>
+<!DOCTYPE html><html><head><title>Inline Check</title></head><body><div id='errors'></div><script>
 window.onerror = function(msg, url, line, col, error) { document.getElementById('errors').innerHTML += '<div>WINDOW ERR: ' + msg + ' at ' + line + ' | ' + (error ? error.stack : '') + '</div>'; };
 </script><script>
 try {
