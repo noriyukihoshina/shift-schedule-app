@@ -186,6 +186,7 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     // ★ スタッフ属性マスターの保存（タームを切り替えても・リロードしてもトグルや設定を完全維持）
+    // ※ 備考（remarks）はターム固有情報のためマスターには含めず、ターム間での混入・引き継ぎを防止する
     function saveStaffMaster() {
         try {
             const masterList = staffList.map(s => {
@@ -206,8 +207,7 @@ document.addEventListener('DOMContentLoaded', () => {
                     isHalf: !!s.isHalf,
                     isFullTime: !!s.isFullTime,
                     allow6Consec: !!s.allow6Consec,
-                    prevName: cleanTextValue(s.prevName || ''),
-                    remarks: cleanTextValue(s.remarks || '')
+                    prevName: cleanTextValue(s.prevName || '')
                 };
             });
             localStorage.setItem(STORAGE_KEY_STAFF_MASTER, JSON.stringify(masterList));
@@ -235,7 +235,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 staffList[idx].isFullTime = ms.isFullTime !== undefined ? !!ms.isFullTime : staffList[idx].isFullTime;
                 staffList[idx].allow6Consec = !!ms.allow6Consec;
                 staffList[idx].prevName = cleanTextValue(ms.prevName || '');
-                staffList[idx].remarks = cleanTextValue(ms.remarks || '');
+                // ※ remarks（備考）はターム固有のためマスターから上書きしない
                 enforceRoleExclusivity(staffList[idx]);
             }
         });
@@ -641,6 +641,7 @@ document.addEventListener('DOMContentLoaded', () => {
                     loadTermFromStorage(finalDate);
                 } else {
                     loadStaffMaster();
+                    staffList.forEach(s => { s.remarks = ''; });
                     renderInputTable();
                 }
                 renderSavedTermsSelect();
@@ -867,13 +868,11 @@ document.addEventListener('DOMContentLoaded', () => {
             });
 
             // ★ スタッフマスターが存在する場合は、トグル・役職・所属・氏名等のマスター設定を最優先で同期！
-            // （ただしターム固有の備考 remarks が入っている場合は残し、空ならマスターの remarks を使用）
-            const remarksBackup = staffList.map(st => st.remarks);
+            // （※備考 remarks はターム固有情報のため、当該タームの remarks をそのまま維持しマスターからは引き継がない）
+            const termRemarks = staffList.map(st => st.remarks || '');
             if (loadStaffMaster()) {
                 staffList.forEach((st, idx) => {
-                    if (remarksBackup[idx] && !st.remarks) {
-                        st.remarks = remarksBackup[idx];
-                    }
+                    st.remarks = termRemarks[idx] || '';
                 });
             } else {
                 // マスター未作成なら現在の状態でマスターを初期保存
@@ -1119,10 +1118,11 @@ document.addEventListener('DOMContentLoaded', () => {
         // 先に getTermInfo() を呼んで NUM_DAYS (28 or 29) を確定させる
         const term = getTermInfo();
 
-        // スタッフ基本設定マスターを引き継ぎ復元！
+        // スタッフ基本設定マスターを引き継ぎ復元！（※備考 remarks はターム固有のため白紙リセット）
         loadStaffMaster();
         staffList.forEach(s => {
             enforceRoleExclusivity(s);
+            s.remarks = '';
             s.prevDays = ['', '', '', '', ''];
             s.days = new Array(NUM_DAYS).fill('');
         });
@@ -4486,9 +4486,10 @@ document.addEventListener('DOMContentLoaded', () => {
             const rng = `C${r}:${lastDayCol}${r}`;
             const fOff = `COUNTIF(${rng},&quot;休&quot;)+0.5*(COUNTIF(${rng},&quot;○/休&quot;)+COUNTIF(${rng},&quot;〇/休&quot;)+COUNTIF(${rng},&quot;休/○&quot;)+COUNTIF(${rng},&quot;休/〇&quot;))`;
             const fPaid = `COUNTIF(${rng},&quot;有&quot;)+0.5*(COUNTIF(${rng},&quot;○/有&quot;)+COUNTIF(${rng},&quot;〇/有&quot;)+COUNTIF(${rng},&quot;有/○&quot;)+COUNTIF(${rng},&quot;有/〇&quot;))`;
+            // ★ スタッフ入力用の空白勤務表では、備考欄も完全に空欄で出力する（他タームの備考が残らないようにする）
             sheet1 += `\n      <c r="${colOff}${r}" s="7"><f>${fOff}</f><v>0</v></c>
       <c r="${colPaid}${r}" s="7"><f>${fPaid}</f><v>0</v></c>
-      <c r="${colRemarks}${r}" s="6" t="inlineStr"><is><t>${escapeXmlText(staff.remarks || '')}</t></is></c>
+      <c r="${colRemarks}${r}" s="6"/>
     </row>`;
         });
 
@@ -4570,9 +4571,10 @@ document.addEventListener('DOMContentLoaded', () => {
     // ==========================================
     function applyScheduleImport(extractedItems, mode = 'merge', remarksMap = null) {
         const term = getTermInfo();
-        // mode: 'replace' の場合は既存の入力希望を一度クリア
+        // mode: 'replace' の場合は既存の入力希望および当タームの備考を一度クリア
         if (mode === 'replace') {
             for (let s = 0; s < NUM_STAFF; s++) {
+                staffList[s].remarks = '';
                 for (let d = 0; d < NUM_DAYS; d++) {
                     staffList[s].days[d] = '';
                 }
