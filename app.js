@@ -797,6 +797,7 @@ document.addEventListener('DOMContentLoaded', () => {
                     : null,
                 activeTab: activeTab,
                 dayOffsets: [...dayOffsets],
+                sectionTeamLeveledRev45: true,
                 updatedAt: new Date().toISOString()
             };
 
@@ -974,11 +975,33 @@ document.addEventListener('DOMContentLoaded', () => {
                     if (hasUnfixedSpecialInLoaded) break;
                 }
                 const loadedLoads = [];
+                const secArrays = { 'PT A': [], 'PT B': [], 'OT A': [], 'OT B': [], teamA: [], teamB: [] };
                 for (let d = 0; d < NUM_DAYS; d++) {
                     loadedLoads.push(scheduler.getDailyEffectiveRealLoad(d));
+                    if (typeof scheduler.getDailySectionWorkMap === 'function') {
+                        const sm = scheduler.getDailySectionWorkMap(d);
+                        secArrays['PT A'].push(sm['PT A']);
+                        secArrays['PT B'].push(sm['PT B']);
+                        secArrays['OT A'].push(sm['OT A']);
+                        secArrays['OT B'].push(sm['OT B']);
+                        secArrays.teamA.push(sm.teamA);
+                        secArrays.teamB.push(sm.teamB);
+                    }
                 }
                 const loadedLoadDiff = Math.max(...loadedLoads) - Math.min(...loadedLoads);
-                if (loadedLoadDiff > 3.0) {
+                const calcSpread = (arr) => arr.length > 0 ? (Math.max(...arr) - Math.min(...arr)) : 0;
+                const maxSecSpread = Math.max(
+                    calcSpread(secArrays['PT A']),
+                    calcSpread(secArrays['PT B']),
+                    calcSpread(secArrays['OT A']),
+                    calcSpread(secArrays['OT B'])
+                );
+                const maxTeamSpread = Math.max(calcSpread(secArrays.teamA), calcSpread(secArrays.teamB));
+
+                if (loadedLoadDiff > 3.0 || (!data.sectionTeamLeveledRev45 && (maxSecSpread >= 5 || maxTeamSpread >= 6))) {
+                    // まず既存のグリッドに対してクロススワップ平準化を適用
+                    scheduler.balanceDailyWorkforce();
+                    // もし初期配置から組み直した方がさらにセクション・チームのブレが小さく制約エラーも0件なら採用
                     const freshSched = new ShiftScheduler(staffList, {
                         standardHolidays: stdVal,
                         dates: term.dates,
@@ -989,14 +1012,35 @@ document.addEventListener('DOMContentLoaded', () => {
                         if (hasUnfixedSpecialInLoaded) {
                             const reSpec = freshSched.assignSpecialDutiesToGrid({ force: true });
                             if (reSpec && reSpec.grid) {
-                                scheduler.grid = reSpec.grid;
-                            } else {
-                                scheduler.grid = reBase.grid;
+                                freshSched.grid = reSpec.grid;
                             }
-                        } else {
-                            scheduler.grid = reBase.grid;
+                        }
+                        const freshVal = validateScheduleGrid(freshSched.grid, staffList, {
+                            dates: term.dates,
+                            standardHolidays: stdVal,
+                            isFinal: hasUnfixedSpecialInLoaded
+                        });
+                        const curVal = validateScheduleGrid(scheduler.grid, staffList, {
+                            dates: term.dates,
+                            standardHolidays: stdVal,
+                            isFinal: hasUnfixedSpecialInLoaded
+                        });
+                        if (freshVal.errors.length <= curVal.errors.length) {
+                            scheduler.grid = freshSched.grid;
                         }
                     }
+                    data.outputGrid = scheduler.grid;
+                    data.sectionTeamLeveledRev45 = true;
+                    try {
+                        localStorage.setItem(`${STORAGE_KEY_PREFIX}${targetStart}`, JSON.stringify(data));
+                    } catch (e) {}
+                } else if (!data.sectionTeamLeveledRev45) {
+                    scheduler.balanceDailyWorkforce();
+                    data.outputGrid = scheduler.grid;
+                    data.sectionTeamLeveledRev45 = true;
+                    try {
+                        localStorage.setItem(`${STORAGE_KEY_PREFIX}${targetStart}`, JSON.stringify(data));
+                    } catch (e) {}
                 }
 
                 const newStats = scheduler.calculateStats();
