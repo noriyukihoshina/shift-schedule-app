@@ -40,6 +40,14 @@ module.exports = async function handler(req, res) {
         'Content-Type': 'application/json'
     };
 
+    function slimTermData(tData) {
+        if (!tData || typeof tData !== 'object') return tData;
+        const copy = { ...tData };
+        // lastSolveStats はクライアント側で outputGrid から瞬時に再計算されるため除外して1MB制限超過を防止
+        delete copy.lastSolveStats;
+        return copy;
+    }
+
     async function fetchCurrentCloudFile() {
         const resp = await fetch(`${ghApiUrl}?t=${Date.now()}`, {
             method: 'GET',
@@ -54,7 +62,23 @@ module.exports = async function handler(req, res) {
             throw new Error(`GitHub GET error (${resp.status}): ${errTxt}`);
         }
         const json = await resp.json();
-        const contentStr = Buffer.from(json.content || '', 'base64').toString('utf8');
+        let base64Raw = json.content || '';
+
+        // GitHub Contents API は 1MB 超のファイルで content が空になるため Git Blobs API (最大100MB) で取得
+        if (!base64Raw && json.sha) {
+            const blobUrl = `https://api.github.com/repos/${owner}/${repo}/git/blobs/${json.sha}`;
+            const blobResp = await fetch(blobUrl, {
+                method: 'GET',
+                headers: ghHeaders,
+                cache: 'no-store'
+            });
+            if (blobResp.ok) {
+                const blobJson = await blobResp.json();
+                base64Raw = blobJson.content || '';
+            }
+        }
+
+        const contentStr = Buffer.from(base64Raw, 'base64').toString('utf8');
         let parsed = null;
         try {
             parsed = JSON.parse(contentStr);
@@ -105,13 +129,17 @@ module.exports = async function handler(req, res) {
                 if (!merged.terms || typeof merged.terms !== 'object') {
                     merged.terms = {};
                 }
+                // 既存のタームデータからも冗長な lastSolveStats を除去してスリム化
+                Object.keys(merged.terms).forEach(k => {
+                    merged.terms[k] = slimTermData(merged.terms[k]);
+                });
                 if (fullTermsMap && typeof fullTermsMap === 'object') {
                     Object.keys(fullTermsMap).forEach(k => {
-                        merged.terms[k] = fullTermsMap[k];
+                        merged.terms[k] = slimTermData(fullTermsMap[k]);
                     });
                 }
                 if (termDate && termData) {
-                    merged.terms[termDate] = termData;
+                    merged.terms[termDate] = slimTermData(termData);
                     if (!merged.savedTerms.includes(termDate)) {
                         merged.savedTerms.push(termDate);
                         merged.savedTerms.sort();

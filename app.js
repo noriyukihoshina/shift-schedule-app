@@ -586,11 +586,17 @@ document.addEventListener('DOMContentLoaded', () => {
                 return false;
             }
 
-            // クラウド上にまだデータが存在しない場合：現在のメモリデータをクラウドへ初期アップロード！
-            if (!resJson.exists || !resJson.cloudState) {
+            // クラウド上にまだファイル自体が存在しない場合のみ：現在のメモリデータをクラウドへ初期アップロード！
+            // （※ exists === true で cloudState が null の場合は一時的な通信・デコードエラーのためクラウドを上書きしない）
+            if (!resJson.exists) {
                 isCloudInitialSyncDone = true;
                 await pushStateToCloud(true);
                 return true;
+            }
+            if (!resJson.cloudState) {
+                isCloudInitialSyncDone = true;
+                setCloudStatusBadge('local');
+                return false;
             }
 
             const cloud = resJson.cloudState;
@@ -792,9 +798,6 @@ document.addEventListener('DOMContentLoaded', () => {
                 outputGrid: (lastSolveResult && lastSolveResult.grid) 
                     ? lastSolveResult.grid.map(row => row.map(c => ({ ...c }))) 
                     : null,
-                lastSolveStats: (lastSolveResult && lastSolveResult.stats) 
-                    ? lastSolveResult.stats 
-                    : null,
                 activeTab: activeTab,
                 dayOffsets: [...dayOffsets],
                 sectionTeamLeveledRev45: true,
@@ -916,30 +919,47 @@ document.addEventListener('DOMContentLoaded', () => {
                 dayOffsets = [...defaultOffsets];
             }
 
-            // 3.5 月末最終タームで旧仕様により係長のリフが未配分だった場合の自動補完
+            // 3.5 リフレッシュ休暇対象タームの自動補完（未配分グループや月末最終タームの未消化分を確実に付与）
             const refGroupsInTerm = (typeof getTermRefreshGroups === 'function') ? getTermRefreshGroups(term.dates) : [];
-            if (refGroupsInTerm.length > 0 && staffList.some(st => !st.isUnused && st.days.some(sym => SYMBOLS.REF_SUMMER.includes(sym) || SYMBOLS.REF_WINTER.includes(sym)))) {
-                const { pastHistory } = getObtainedRefreshHistory(targetStart);
-                refGroupsInTerm.forEach(grp => {
-                    const isLastTermOfMonth = grp.dayIndices.some(dIdx => term.dates[dIdx] && term.dates[dIdx].day === grp.totalMonthDays);
-                    if (!isLastTermOfMonth) return;
+            if (refGroupsInTerm.length > 0 && typeof autoAssignRefreshHolidaysCore === 'function') {
+                // outputGrid 側にだけリフが存在する場合は staffList.days にも同期
+                if (data.outputGrid && Array.isArray(data.outputGrid)) {
                     staffList.forEach((st, sIdx) => {
-                        if (st.isUnused || !st.isSectionChief) return;
-                        const pastSet = pastHistory[st.id] || new Set();
-                        const hasInPast = (pastSet instanceof Set) ? pastSet.has(grp.symbol) : false;
-                        const hasInCurrent = st.days.includes(grp.symbol) || (data.outputGrid && data.outputGrid[sIdx] && data.outputGrid[sIdx].some(c => c && c.symbol === grp.symbol));
-                        if (!hasInPast && !hasInCurrent) {
-                            const wkdayCandidates = grp.dayIndices.filter(d => term.dates[d] && !term.dates[d].isSat && !term.dates[d].isSun && st.days[d] === '');
-                            const pickD = wkdayCandidates.find(d => term.dates[d].wIdx === 4 || term.dates[d].wIdx === 0) ?? wkdayCandidates[0];
-                            if (pickD !== undefined) {
-                                st.days[pickD] = grp.symbol;
-                                if (data.outputGrid && data.outputGrid[sIdx] && data.outputGrid[sIdx][pickD]) {
-                                    data.outputGrid[sIdx][pickD] = { symbol: grp.symbol, isFixed: false, isAutoAssignedRef: true };
-                                }
+                        if (st.isUnused || !Array.isArray(data.outputGrid[sIdx])) return;
+                        for (let d = 0; d < NUM_DAYS; d++) {
+                            const c = data.outputGrid[sIdx][d];
+                            const sym = (c && c.symbol) ? c.symbol : c;
+                            if ((SYMBOLS.REF_SUMMER.includes(sym) || SYMBOLS.REF_WINTER.includes(sym)) && !st.days[d]) {
+                                st.days[d] = sym;
                             }
                         }
                     });
+                }
+
+                const { pastHistory, futureHistory } = getObtainedRefreshHistory(targetStart);
+                const autoRes = autoAssignRefreshHolidaysCore(staffList, term.dates, {
+                    obtainedHistory: pastHistory,
+                    futureHistory: futureHistory
                 });
+                if (autoRes && autoRes.assignedCount > 0 && Array.isArray(autoRes.assignments)) {
+                    autoRes.assignments.forEach(a => {
+                        autoAssignedRefKeys.add(`${targetStart}:${a.staffIndex},${a.dayIndex}`);
+                        autoAssignedStaffIds.add(`${targetStart}:${a.staffId}`);
+                        if (data.staffList && data.staffList[a.staffIndex] && Array.isArray(data.staffList[a.staffIndex].days)) {
+                            data.staffList[a.staffIndex].days[a.dayIndex] = a.symbol;
+                        }
+                        if (data.outputGrid && data.outputGrid[a.staffIndex] && data.outputGrid[a.staffIndex][a.dayIndex]) {
+                            data.outputGrid[a.staffIndex][a.dayIndex] = {
+                                symbol: a.symbol,
+                                isFixed: false,
+                                isAutoAssignedRef: true
+                            };
+                        }
+                    });
+                    try {
+                        localStorage.setItem(`${STORAGE_KEY_PREFIX}${targetStart}`, JSON.stringify(data));
+                    } catch (e) {}
+                }
             }
 
             // 4. 入力テーブル描画
@@ -1217,6 +1237,22 @@ document.addEventListener('DOMContentLoaded', () => {
         const prevTerm = findPreviousTerm(newStartDate);
         if (prevTerm) {
             applyPreviousTermHistory(prevTerm, false);
+        }
+
+        // ★ リフレッシュ休暇対象月（6〜10月の上1〜5、12〜2月の下1〜3）が含まれる場合は新規開始時にも日割り自動配分を実施！
+        const refGroupsInTerm = (typeof getTermRefreshGroups === 'function') ? getTermRefreshGroups(term.dates) : [];
+        if (refGroupsInTerm.length > 0 && typeof autoAssignRefreshHolidaysCore === 'function') {
+            const { pastHistory, futureHistory } = getObtainedRefreshHistory(newStartDate);
+            const autoRes = autoAssignRefreshHolidaysCore(staffList, term.dates, {
+                obtainedHistory: pastHistory,
+                futureHistory: futureHistory
+            });
+            if (autoRes && autoRes.assignedCount > 0 && Array.isArray(autoRes.assignments)) {
+                autoRes.assignments.forEach(a => {
+                    autoAssignedRefKeys.add(`${newStartDate}:${a.staffIndex},${a.dayIndex}`);
+                    autoAssignedStaffIds.add(`${newStartDate}:${a.staffId}`);
+                });
+            }
         }
 
         renderInputTable();
@@ -2623,17 +2659,21 @@ document.addEventListener('DOMContentLoaded', () => {
     function getObtainedRefreshHistory(currentStartDate) {
         const pastHistory = {};
         const currentHistory = {};
+        const futureHistory = {};
         const allHistoryDetails = [];
 
         for (let i = 1; i <= NUM_STAFF; i++) {
             pastHistory[i] = new Set();
             currentHistory[i] = new Set();
+            futureHistory[i] = new Set();
         }
 
         try {
             const terms = getSavedTerms();
             terms.forEach(termDate => {
-                const isCurrent = (termDate === currentStartDate);
+                // 当ターム分は現在メモリ上の staffList.days / lastSolveResult.grid を最優先で参照するためスキップ
+                if (termDate === currentStartDate) return;
+                const isPast = (termDate < currentStartDate);
                 const raw = localStorage.getItem(`${STORAGE_KEY_PREFIX}${termDate}`);
                 if (!raw) return;
                 const data = JSON.parse(raw);
@@ -2643,15 +2683,15 @@ document.addEventListener('DOMContentLoaded', () => {
                     data.outputGrid.forEach((row, sIdx) => {
                         const staffId = sIdx + 1;
                         if (!pastHistory[staffId]) pastHistory[staffId] = new Set();
-                        if (!currentHistory[staffId]) currentHistory[staffId] = new Set();
+                        if (!futureHistory[staffId]) futureHistory[staffId] = new Set();
 
                         row.forEach((cell, dIdx) => {
                             const sym = (cell && cell.symbol) ? cell.symbol : cell;
                             if (SYMBOLS.REF_SUMMER.includes(sym) || SYMBOLS.REF_WINTER.includes(sym)) {
-                                if (isCurrent) {
-                                    currentHistory[staffId].add(sym);
-                                } else {
+                                if (isPast) {
                                     pastHistory[staffId].add(sym);
+                                } else {
+                                    futureHistory[staffId].add(sym);
                                 }
                                 allHistoryDetails.push({
                                     staffId,
@@ -2659,7 +2699,7 @@ document.addEventListener('DOMContentLoaded', () => {
                                     termDate,
                                     symbol: sym,
                                     dayIndex: dIdx,
-                                    isCurrent
+                                    isCurrent: false
                                 });
                             }
                         });
@@ -2668,15 +2708,15 @@ document.addEventListener('DOMContentLoaded', () => {
                     data.staffList.forEach((st, sIdx) => {
                         const staffId = st.id || (sIdx + 1);
                         if (!pastHistory[staffId]) pastHistory[staffId] = new Set();
-                        if (!currentHistory[staffId]) currentHistory[staffId] = new Set();
+                        if (!futureHistory[staffId]) futureHistory[staffId] = new Set();
 
                         if (Array.isArray(st.days)) {
                             st.days.forEach((sym, dIdx) => {
                                 if (SYMBOLS.REF_SUMMER.includes(sym) || SYMBOLS.REF_WINTER.includes(sym)) {
-                                    if (isCurrent) {
-                                        currentHistory[staffId].add(sym);
-                                    } else {
+                                    if (isPast) {
                                         pastHistory[staffId].add(sym);
+                                    } else {
+                                        futureHistory[staffId].add(sym);
                                     }
                                     allHistoryDetails.push({
                                         staffId,
@@ -2684,7 +2724,7 @@ document.addEventListener('DOMContentLoaded', () => {
                                         termDate,
                                         symbol: sym,
                                         dayIndex: dIdx,
-                                        isCurrent
+                                        isCurrent: false
                                     });
                                 }
                             });
@@ -2696,13 +2736,29 @@ document.addEventListener('DOMContentLoaded', () => {
             console.error('リフ取得履歴のスキャン中にエラー:', e);
         }
 
-        // 現在メモリ上の staffList.days にあるリフも当ターム取得として追加
-        staffList.forEach(st => {
+        // 現在メモリ上の staffList.days（および確定グリッドがある場合は lastSolveResult.grid）にあるリフを当ターム取得として追加
+        staffList.forEach((st, sIdx) => {
             if (st.isUnused) return;
-            const staffId = st.id;
+            const staffId = st.id || (sIdx + 1);
             if (!currentHistory[staffId]) currentHistory[staffId] = new Set();
             if (Array.isArray(st.days)) {
-                st.days.forEach(sym => {
+                st.days.forEach((sym, dIdx) => {
+                    if (SYMBOLS.REF_SUMMER.includes(sym) || SYMBOLS.REF_WINTER.includes(sym)) {
+                        currentHistory[staffId].add(sym);
+                        allHistoryDetails.push({
+                            staffId,
+                            staffName: st.name,
+                            termDate: currentStartDate,
+                            symbol: sym,
+                            dayIndex: dIdx,
+                            isCurrent: true
+                        });
+                    }
+                });
+            }
+            if (lastSolveResult && Array.isArray(lastSolveResult.grid) && Array.isArray(lastSolveResult.grid[sIdx])) {
+                lastSolveResult.grid[sIdx].forEach((cell, dIdx) => {
+                    const sym = (cell && cell.symbol) ? cell.symbol : cell;
                     if (SYMBOLS.REF_SUMMER.includes(sym) || SYMBOLS.REF_WINTER.includes(sym)) {
                         currentHistory[staffId].add(sym);
                     }
@@ -2710,7 +2766,7 @@ document.addEventListener('DOMContentLoaded', () => {
             }
         });
 
-        return { pastHistory, currentHistory, allHistoryDetails };
+        return { pastHistory, currentHistory, futureHistory, allHistoryDetails };
     }
 
     function handleAutoAssignRefreshHolidays(options = {}) {
@@ -2726,11 +2782,12 @@ document.addEventListener('DOMContentLoaded', () => {
         }
 
         const curStartDate = document.getElementById('termStartDate')?.value || currentWorkingStartDate;
-        const { pastHistory } = getObtainedRefreshHistory(curStartDate);
+        const { pastHistory, futureHistory } = getObtainedRefreshHistory(curStartDate);
 
         pushHistory();
         const res = autoAssignRefreshHolidaysCore(staffList, term.dates, {
-            obtainedHistory: pastHistory
+            obtainedHistory: pastHistory,
+            futureHistory: futureHistory
         });
 
         if (res.assignedCount > 0) {
@@ -2800,7 +2857,7 @@ document.addEventListener('DOMContentLoaded', () => {
         if (!modal || !container) return;
 
         const curStartDate = document.getElementById('termStartDate')?.value || currentWorkingStartDate;
-        const { pastHistory, currentHistory } = getObtainedRefreshHistory(curStartDate);
+        const { pastHistory, currentHistory, futureHistory } = getObtainedRefreshHistory(curStartDate);
 
         const refSymbols = ['上1', '上2', '上3', '上4', '上5', '下1', '下2', '下3'];
         const activeStaff = staffList.filter(s => !s.isUnused);
@@ -2831,6 +2888,7 @@ document.addEventListener('DOMContentLoaded', () => {
             const sId = st.id;
             const past = pastHistory[sId] || new Set();
             const cur = currentHistory[sId] || new Set();
+            const fut = (futureHistory && futureHistory[sId]) ? futureHistory[sId] : new Set();
             let staffCount = 0;
 
             html += `<tr>`;
@@ -2842,10 +2900,10 @@ document.addEventListener('DOMContentLoaded', () => {
                     staffCount++;
                     totalObtainedAll++;
                     html += `<td style="padding: 4px; border: 1px solid #e2e8f0; text-align: center; background: #dcfce7; color: #15803d; font-weight: 800;" title="当タームで取得">🌴 当ターム</td>`;
-                } else if (past.has(sym)) {
+                } else if (past.has(sym) || fut.has(sym)) {
                     staffCount++;
                     totalObtainedAll++;
-                    html += `<td style="padding: 4px; border: 1px solid #e2e8f0; text-align: center; background: #e0f2fe; color: #0369a1; font-weight: 700;" title="過去タームで取得済">✅ 済</td>`;
+                    html += `<td style="padding: 4px; border: 1px solid #e2e8f0; text-align: center; background: #e0f2fe; color: #0369a1; font-weight: 700;" title="他タームで取得済">✅ 済</td>`;
                 } else {
                     html += `<td style="padding: 4px; border: 1px solid #e2e8f0; text-align: center; color: #94a3b8;">-</td>`;
                 }
@@ -3783,12 +3841,24 @@ document.addEventListener('DOMContentLoaded', () => {
     const clearAllBtn = document.getElementById('clearAllBtn');
     if (clearAllBtn) {
         clearAllBtn.addEventListener('click', () => {
-            if (confirm('すべての事前入力枠および設定をクリアしますか？')) {
+            if (confirm('すべての事前入力枠（希望休・備考等）をクリアしますか？（※スタッフ氏名・役職・所属設定は保持されます）')) {
                 pushHistory();
                 clearConflictHighlights();
-                initStaffData();
+                loadStaffMaster();
+                staffList.forEach(s => {
+                    enforceRoleExclusivity(s);
+                    s.remarks = '';
+                    s.prevDays = ['', '', '', '', ''];
+                    s.days = new Array(NUM_DAYS).fill('');
+                });
+                autoAssignedRefKeys.clear();
+                autoAssignedStaffIds.clear();
+                lastSolveResult = null;
+                lastScheduler = null;
+                clearOutputTables();
                 renderInputTable();
-                showToast('🧹 全消去しました（「↩ 戻る」で元に戻せます）');
+                saveCurrentTermToStorage();
+                showToast('🧹 事前入力枠を全消去しました（「↩ 戻る」で元に戻せます）');
             }
         });
     }
@@ -4649,6 +4719,11 @@ document.addEventListener('DOMContentLoaded', () => {
                     staffList[s].days[d] = '';
                 }
             }
+            autoAssignedRefKeys.clear();
+            autoAssignedStaffIds.clear();
+            lastSolveResult = null;
+            lastScheduler = null;
+            clearOutputTables();
         }
 
         if (remarksMap && typeof remarksMap === 'object') {

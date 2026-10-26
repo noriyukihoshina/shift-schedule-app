@@ -4100,7 +4100,8 @@ function autoAssignRefreshHolidaysCore(staffList, dates, options = {}) {
         };
     }
 
-    const obtainedHistory = options.obtainedHistory || {}; // staffId -> Set of symbols or Array
+    const obtainedHistory = options.obtainedHistory || {}; // staffId -> Set of symbols or Array (当タームより過去のターム取得履歴)
+    const futureHistory = options.futureHistory || {};     // staffId -> Set of symbols or Array (当タームより未来のターム取得履歴)
     const assignments = [];
     const groupResults = [];
     let totalAssigned = 0;
@@ -4155,11 +4156,24 @@ function autoAssignRefreshHolidaysCore(staffList, dates, options = {}) {
         // このタームに当該月の最終日（月末日）が含まれているか（＝その月のリフを消化する最終タームか）
         const isLastTermOfMonth = grp.dayIndices.some(dIdx => dates[dIdx] && dates[dIdx].day === grp.totalMonthDays);
 
-        // ★ 月末日を含むターム（例: 第4タームの6/24〜6/30の上1）では、前ターム未取得の残り全スタッフ数を目標値にし、
-        // 「前ターム取得数 ＋ 当ターム取得数 ＝ 全有効スタッフ数」が100%完全一致するようにする！
+        // ★ 目標人数の計算:
+        // 1. 月末日を含まない前半ターム（例: 第3タームの6月分 上1、第4タームの7月分 上2、第9タームの12月分 下1）は日割り人数
+        // 2. 月末日を含む後半ターム（例: 第4タームの6月分 上1、第5タームの7月分 上2、第10タームの12月分 下1）:
+        //    - 前タームで既に一部が配分済み（alreadyObtainedInPast > 0）なら「残り全員（remainingUnobtained）」で前ターム＋当ターム＝45名を100%完全一致させる
+        //    - 前タームが未作成・白紙（alreadyObtainedInPast === 0）のまま先に後半タームを開いた場合も、
+        //      全45名を後半だけに詰め込まず「全45名 - 前ターム予定日割り人数」を目標値にすることで、
+        //      同ターム内の別月リフ（例: 第4タームの 上1 と 上2）が両方確実に適正人数で付与されるようにする！
+        const proportionalTarget = Math.min(
+            remainingUnobtained,
+            Math.round(activeStaffCount * (daysInTerm / grp.totalMonthDays))
+        );
+        const prevDaysInMonth = Math.max(0, grp.totalMonthDays - daysInTerm);
+        const expectedPrevAssigned = Math.round(activeStaffCount * (prevDaysInMonth / grp.totalMonthDays));
+        const fallbackLastTermTarget = Math.min(remainingUnobtained, Math.max(0, activeStaffCount - expectedPrevAssigned));
+
         const targetCount = isLastTermOfMonth
-            ? remainingUnobtained
-            : Math.min(remainingUnobtained, Math.round(activeStaffCount * (daysInTerm / grp.totalMonthDays)));
+            ? ((alreadyObtainedInPast > 0 || daysInTerm >= grp.totalMonthDays) ? remainingUnobtained : fallbackLastTermTarget)
+            : proportionalTarget;
 
         // 今タームで既に手動入力等でこのグループの記号を持っている人数
         let alreadyInTermForThisGroup = 0;
@@ -4182,14 +4196,16 @@ function autoAssignRefreshHolidaysCore(staffList, dates, options = {}) {
         for (const sIdx of activeStaffIndices) {
             // 既に当タームでこの記号を持っているスタッフは除外
             if (staffWithThisGroupInTerm.has(sIdx)) continue;
-            // 月末最終ターム以外（次タームにも同月が続く場合）は、1人1ターム1リフの原則で既に別リフを持つスタッフを除外
-            if (!isLastTermOfMonth && staffWithRefInCurrentTerm.has(sIdx)) continue;
 
             const st = staffList[sIdx];
             // 過去にこの記号を取得済みなら除外（二重取得防止！）
             const history = obtainedHistory[st.id] || obtainedHistory[sIdx];
             const hasObtained = (history instanceof Set) ? history.has(grp.symbol) : (Array.isArray(history) && history.includes(grp.symbol));
             if (hasObtained) continue;
+
+            // 未来タームで既にこの記号が割り当てられているかチェック（ソートで未取得者を最優先にするため）
+            const futHist = futureHistory[st.id] || futureHistory[sIdx];
+            const hasInFuture = (futHist instanceof Set) ? futHist.has(grp.symbol) : (Array.isArray(futHist) && futHist.includes(grp.symbol));
 
             // 対象期間内に空欄セルがあるか（係長は土日休を確保するため平日の空欄セルを優先抽出）
             let freeDays = grp.dayIndices.filter(d => st.days[d] === '');
@@ -4204,13 +4220,17 @@ function autoAssignRefreshHolidaysCore(staffList, dates, options = {}) {
             candidates.push({
                 sIdx,
                 staff: st,
-                freeDays
+                freeDays,
+                hasInFuture: hasInFuture ? 1 : 0
             });
         }
 
-        // 候補者を属性均等に並び替え（偏りを抑える）
+        // 候補者を並び替え:
+        // 1. 未来タームでこの記号をまだ持っていない人を最優先（逆順でタームを開いた場合も重複を防止）
+        // 2. 当ターム内で他のリフをまだ持っていない人を優先（1人1ターム1リフの原則を維持しつつ、2グループあるタームでも目標人数を100%確実に達成）
+        // 3. 役職・専従・スケジュール管理属性の均等分散
         candidates.sort((a, b) => {
-            // 月末最終タームで他のリフもまだ持っていない人を先に優先
+            if (a.hasInFuture !== b.hasInFuture) return a.hasInFuture - b.hasInFuture;
             const hasOtherRefA = staffWithRefInCurrentTerm.has(a.sIdx) ? 1 : 0;
             const hasOtherRefB = staffWithRefInCurrentTerm.has(b.sIdx) ? 1 : 0;
             if (hasOtherRefA !== hasOtherRefB) return hasOtherRefA - hasOtherRefB;
@@ -4227,6 +4247,15 @@ function autoAssignRefreshHolidaysCore(staffList, dates, options = {}) {
             const sIdx = cand.sIdx;
             const st = cand.staff;
 
+            // 当ターム内で既に別リフが入っている日があれば取得（近接配置を避けるため）
+            const existingRefDays = [];
+            for (let ed = 0; ed < dates.length; ed++) {
+                const esym = st.days[ed];
+                if (SYMBOLS.REF_SUMMER.includes(esym) || SYMBOLS.REF_WINTER.includes(esym)) {
+                    existingRefDays.push(ed);
+                }
+            }
+
             // 最適日のスコアリング
             let bestDay = -1;
             let bestScore = -999999;
@@ -4236,6 +4265,13 @@ function autoAssignRefreshHolidaysCore(staffList, dates, options = {}) {
 
                 // 1. 日別負荷平準化: すでにリフが入っている人数が多い日は減点
                 score -= dailyRefCount[d] * 25;
+
+                // 1.5 同ターム内で既に別リフがある場合は別週（7日以上離す）を強く優遇
+                for (const erd of existingRefDays) {
+                    if (Math.abs(d - erd) < 7) {
+                        score -= 120;
+                    }
+                }
 
                 // 2. 連休ボーナス: 前後が休日なら加点
                 if (d - 1 >= 0 && isHolidaySymbol(st.days[d - 1])) score += 30;
