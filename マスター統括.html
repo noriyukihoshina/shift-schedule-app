@@ -436,7 +436,7 @@
                 <!-- 1. 平日の出勤人数（平準化状況 & 平均） -->
                 <div class="stat-card" style="border-top: 4px solid #2563eb;">
                     <div class="stat-card-title" style="display: flex; align-items: center; justify-content: space-between;">
-                        <span>🏢 平日の出勤人数（平準化状況）</span>
+                        <span>🏢 平日の出勤人数・実数（平準化状況）</span>
                         <span id="statWeekdayBadge" style="font-size: 0.75rem; background: #eff6ff; color: #1d4ed8; padding: 2px 8px; border-radius: 9999px; font-weight: 700;">- 日間</span>
                     </div>
                     <div class="stat-card-value" id="statWeekdayWorkRange" style="font-size: 1.3rem; color: #1e3a8a;">- 〜 - 名</div>
@@ -450,7 +450,7 @@
                 <!-- 2. 土日祝の出勤人数（平準化状況 & 平均） -->
                 <div class="stat-card" style="border-top: 4px solid #dc2626;">
                     <div class="stat-card-title" style="display: flex; align-items: center; justify-content: space-between;">
-                        <span>🎌 土日祝の出勤人数（平準化状況）</span>
+                        <span>🎌 土日祝の出勤人数・実数（平準化状況）</span>
                         <span id="statHolidayBadge" style="font-size: 0.75rem; background: #fef2f2; color: #b91c1c; padding: 2px 8px; border-radius: 9999px; font-weight: 700;">- 日間</span>
                     </div>
                     <div class="stat-card-value" id="statHolidayWorkRange" style="font-size: 1.3rem; color: #991b1b;">- 〜 - 名</div>
@@ -478,7 +478,7 @@
                 <!-- 4. 全日（28日間）の出勤人数 -->
                 <div class="stat-card" style="border-top: 4px solid #64748b;">
                     <div class="stat-card-title" style="display: flex; align-items: center; justify-content: space-between;">
-                        <span>📊 全日（28日間）の出勤人数</span>
+                        <span>📊 全日（28日間）の出勤人数・実数</span>
                         <span style="font-size: 0.75rem; background: #f1f5f9; color: #475569; padding: 2px 8px; border-radius: 9999px; font-weight: 700;">28日間</span>
                     </div>
                     <div class="stat-card-value" id="statWorkRange" style="font-size: 1.3rem; color: #1e293b;">- 〜 - 名</div>
@@ -502,7 +502,7 @@
 
             <!-- 日別出勤人数グラフ -->
             <div class="toolbar-card" style="flex-direction: column; align-items: stretch;">
-                <div style="font-weight: 700; color: #1e293b; margin-bottom: 0.75rem;">日別出勤人数グラフ（28日間）</div>
+                <div style="font-weight: 700; color: #1e293b; margin-bottom: 0.75rem;">日別出勤人数（実数合計）グラフ（28日間）</div>
                 <div id="dailyWorkChart" style="display: flex; gap: 6px; align-items: flex-end; padding: 1rem 0; height: 160px;">
                     <div style="color: #94a3b8; font-size: 0.85rem; margin: auto;">勤務表を自動生成するとグラフが表示されます</div>
                 </div>
@@ -638,7 +638,7 @@
             password: '77777'
         };
     </script>
-    <script src="solver.js?v=20261026_rev40"></script>
-    <script src="app.js?v=20261026_rev40"></script>
+    <script src="solver.js?v=20261026_rev41"></script>
+    <script src="app.js?v=20261026_rev41"></script>
 </body>
 </html>

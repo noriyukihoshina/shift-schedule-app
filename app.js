@@ -928,6 +928,37 @@ document.addEventListener('DOMContentLoaded', () => {
                     while (rCopy.length < NUM_DAYS) rCopy.push({ symbol: '', isFixed: false });
                     return rCopy.slice(0, NUM_DAYS);
                 });
+
+                // ★ 過去の旧エンジン（rev37以前）で生成された出力データがクラウドに残っており、
+                // 26日目（日曜）に25.5名のような極端な落ち込み（実数負荷の最大-最小差 > 3.0）がある基本勤務表の場合は、
+                // 最新の平準化エンジン（rev41）で自動再計算して異常値を即座に解消する
+                let hasUnfixedSpecialInLoaded = false;
+                for (let s = 0; s < NUM_STAFF; s++) {
+                    if (!scheduler.grid[s]) continue;
+                    for (let d = 0; d < NUM_DAYS; d++) {
+                        const c = scheduler.grid[s][d];
+                        if (c && !c.isFixed && (isRestrictedSpecial(c.symbol) || c.symbol === SYMBOLS.H8)) {
+                            hasUnfixedSpecialInLoaded = true;
+                            break;
+                        }
+                    }
+                    if (hasUnfixedSpecialInLoaded) break;
+                }
+                const loadedLoads = [];
+                for (let d = 0; d < NUM_DAYS; d++) {
+                    loadedLoads.push(scheduler.getDailyEffectiveRealLoad(d));
+                }
+                const loadedLoadDiff = Math.max(...loadedLoads) - Math.min(...loadedLoads);
+                if (!hasUnfixedSpecialInLoaded && loadedLoadDiff > 3.0) {
+                    const reSolved = scheduler.solveBaseSchedule({ force: true });
+                    if (reSolved && reSolved.grid) {
+                        scheduler.grid = reSolved.grid;
+                    }
+                } else if (loadedLoadDiff > 3.0) {
+                    scheduler.balanceDailyWorkforce();
+                    scheduler.ensureRoleCoverage();
+                }
+
                 const newStats = scheduler.calculateStats();
                 lastScheduler = scheduler;
                 lastSolveResult = {
@@ -2949,6 +2980,41 @@ document.addEventListener('DOMContentLoaded', () => {
                 // 最新のスタッフ属性（係長・主任・副主任・8時可・0.5等）と日別加減枠を確実に同期してから特殊勤務を割り当てる
                 lastScheduler.staffList = JSON.parse(JSON.stringify(staffList));
                 lastScheduler.dayOffsets = [...dayOffsets];
+
+                // ★ もし古いバージョンで生成された基本勤務表に極端な実数偏り（例: 最終週の日曜だけ25.5名に落ち込む等、実数負荷の最大-最小差が3.0を超える状態）が
+                // 残っており、かつまだ手動での非固定特殊勤務編集が行われていない場合は、最新の平準化エンジンで基本勤務表を一度クリーンに再構築してから特殊勤務を割り当てる
+                let hasUnfixedSpecialInGrid = false;
+                for (let s = 0; s < NUM_STAFF; s++) {
+                    if (!lastScheduler.grid[s]) continue;
+                    for (let d = 0; d < NUM_DAYS; d++) {
+                        const c = lastScheduler.grid[s][d];
+                        if (c && !c.isFixed && (isRestrictedSpecial(c.symbol) || c.symbol === SYMBOLS.H8)) {
+                            hasUnfixedSpecialInGrid = true;
+                            break;
+                        }
+                    }
+                    if (hasUnfixedSpecialInGrid) break;
+                }
+                if (!hasUnfixedSpecialInGrid) {
+                    const loads = [];
+                    for (let d = 0; d < NUM_DAYS; d++) {
+                        loads.push(lastScheduler.getDailyEffectiveRealLoad(d));
+                    }
+                    const loadDiff = Math.max(...loads) - Math.min(...loads);
+                    if (loadDiff > 3.0) {
+                        const stdHolidayVal = parseFloat(document.getElementById('standardHolidaySelect')?.value || '8.0');
+                        const freshScheduler = new ShiftScheduler(staffList, {
+                            standardHolidays: stdHolidayVal,
+                            dates: getTermInfo().dates,
+                            dayOffsets: [...dayOffsets]
+                        });
+                        const reBase = freshScheduler.solveBaseSchedule();
+                        if (reBase && reBase.success) {
+                            lastScheduler = freshScheduler;
+                        }
+                    }
+                }
+
                 const specialResult = lastScheduler.assignSpecialDutiesToGrid();
                 btns.forEach(b => {
                     if (b) {
@@ -3503,7 +3569,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 const dayBadge = di.isHoliday ? '祝' : di.weekday;
                 chartHtml += `
                     <div style="flex:1; display:flex; flex-direction:column; align-items:center; gap:3px;" title="${di.label} (${di.weekday})${di.isHoliday ? ' 祝日' : ''}: 実数合計 ${dispReal}名 (出勤人数合計 ${d.totalWork}名)">
-                        <span style="font-size:0.68rem; font-weight:700; color:#1e293b;">${dispReal}</span>
+                        <span style="font-size:0.65rem; font-weight:700; color:#1e293b; white-space:nowrap;"><span style="font-size:0.55rem; color:#475569; font-weight:600;">実数</span>${dispReal}</span>
                         <div style="width:100%; background:#f1f5f9; height:110px; border-radius:4px; display:flex; align-items:flex-end;">
                             <div style="width:100%; background:${barColor}; height:${pct}%; border-radius:4px; transition:height 0.3s;"></div>
                         </div>
