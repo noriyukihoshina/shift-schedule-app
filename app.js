@@ -919,49 +919,6 @@ document.addEventListener('DOMContentLoaded', () => {
                 dayOffsets = [...defaultOffsets];
             }
 
-            // 3.5 リフレッシュ休暇対象タームの自動補完（未配分グループや月末最終タームの未消化分を確実に付与）
-            const refGroupsInTerm = (typeof getTermRefreshGroups === 'function') ? getTermRefreshGroups(term.dates) : [];
-            if (refGroupsInTerm.length > 0 && typeof autoAssignRefreshHolidaysCore === 'function') {
-                // outputGrid 側にだけリフが存在する場合は staffList.days にも同期
-                if (data.outputGrid && Array.isArray(data.outputGrid)) {
-                    staffList.forEach((st, sIdx) => {
-                        if (st.isUnused || !Array.isArray(data.outputGrid[sIdx])) return;
-                        for (let d = 0; d < NUM_DAYS; d++) {
-                            const c = data.outputGrid[sIdx][d];
-                            const sym = (c && c.symbol) ? c.symbol : c;
-                            if ((SYMBOLS.REF_SUMMER.includes(sym) || SYMBOLS.REF_WINTER.includes(sym)) && !st.days[d]) {
-                                st.days[d] = sym;
-                            }
-                        }
-                    });
-                }
-
-                const { pastHistory, futureHistory } = getObtainedRefreshHistory(targetStart);
-                const autoRes = autoAssignRefreshHolidaysCore(staffList, term.dates, {
-                    obtainedHistory: pastHistory,
-                    futureHistory: futureHistory
-                });
-                if (autoRes && autoRes.assignedCount > 0 && Array.isArray(autoRes.assignments)) {
-                    autoRes.assignments.forEach(a => {
-                        autoAssignedRefKeys.add(`${targetStart}:${a.staffIndex},${a.dayIndex}`);
-                        autoAssignedStaffIds.add(`${targetStart}:${a.staffId}`);
-                        if (data.staffList && data.staffList[a.staffIndex] && Array.isArray(data.staffList[a.staffIndex].days)) {
-                            data.staffList[a.staffIndex].days[a.dayIndex] = a.symbol;
-                        }
-                        if (data.outputGrid && data.outputGrid[a.staffIndex] && data.outputGrid[a.staffIndex][a.dayIndex]) {
-                            data.outputGrid[a.staffIndex][a.dayIndex] = {
-                                symbol: a.symbol,
-                                isFixed: false,
-                                isAutoAssignedRef: true
-                            };
-                        }
-                    });
-                    try {
-                        localStorage.setItem(`${STORAGE_KEY_PREFIX}${targetStart}`, JSON.stringify(data));
-                    } catch (e) {}
-                }
-            }
-
             // 4. 入力テーブル描画
             renderInputTable();
 
@@ -1237,22 +1194,6 @@ document.addEventListener('DOMContentLoaded', () => {
         const prevTerm = findPreviousTerm(newStartDate);
         if (prevTerm) {
             applyPreviousTermHistory(prevTerm, false);
-        }
-
-        // ★ リフレッシュ休暇対象月（6〜10月の上1〜5、12〜2月の下1〜3）が含まれる場合は新規開始時にも日割り自動配分を実施！
-        const refGroupsInTerm = (typeof getTermRefreshGroups === 'function') ? getTermRefreshGroups(term.dates) : [];
-        if (refGroupsInTerm.length > 0 && typeof autoAssignRefreshHolidaysCore === 'function') {
-            const { pastHistory, futureHistory } = getObtainedRefreshHistory(newStartDate);
-            const autoRes = autoAssignRefreshHolidaysCore(staffList, term.dates, {
-                obtainedHistory: pastHistory,
-                futureHistory: futureHistory
-            });
-            if (autoRes && autoRes.assignedCount > 0 && Array.isArray(autoRes.assignments)) {
-                autoRes.assignments.forEach(a => {
-                    autoAssignedRefKeys.add(`${newStartDate}:${a.staffIndex},${a.dayIndex}`);
-                    autoAssignedStaffIds.add(`${newStartDate}:${a.staffId}`);
-                });
-            }
         }
 
         renderInputTable();
@@ -2604,6 +2545,7 @@ document.addEventListener('DOMContentLoaded', () => {
             const term = getTermInfo();
             if (confirm(`【${term.title}】の作業内容（希望入力・作成済み勤務表）を初期状態（白紙）に戻しますか？`)) {
                 initNewTerm(currentWorkingStartDate);
+                pushStateToCloud(false);
                 showToast(`🗑️ 【${term.title}】を白紙に戻しました`);
             }
         });
@@ -3858,6 +3800,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 clearOutputTables();
                 renderInputTable();
                 saveCurrentTermToStorage();
+                pushStateToCloud(false);
                 showToast('🧹 事前入力枠を全消去しました（「↩ 戻る」で元に戻せます）');
             }
         });
