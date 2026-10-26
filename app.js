@@ -2826,6 +2826,7 @@ document.addEventListener('DOMContentLoaded', () => {
                         renderOutputTable(result.grid, result.stats);
                         renderStatsDashboard(result.stats);
                         switchTab('outputTab');
+                        checkWorkAreaConstraints(false);
                         saveCurrentTermToStorage(); // ★ 生成データをブラウザに自動保存
                         showToast('⚡ 基本勤務表を生成しました（修正作業エリアで微調整を行ってください）');
                     } else {
@@ -2857,6 +2858,7 @@ document.addEventListener('DOMContentLoaded', () => {
                                 renderOutputTable(forceResult.grid, forceResult.stats);
                                 renderStatsDashboard(forceResult.stats);
                                 switchTab('outputTab');
+                                checkWorkAreaConstraints(false);
                                 saveCurrentTermToStorage(); // ★ 強制生成データをブラウザに自動保存
                                 showToast('⚡ エラーを無視して基本勤務表を生成しました（修正作業エリアで微調整してください）');
                             }
@@ -4397,6 +4399,15 @@ document.addEventListener('DOMContentLoaded', () => {
         }, 2000);
         showToast('📄 スタッフ配布用の空白勤務表（.xlsx）をダウンロードしました！');
     }
+    const ALLOWED_SYMBOLS = new Set([
+        '○', '休', '有', '出', '早', '遅', 'E', '8時',
+        'ハヤ', 'オソ', 'イブ',
+        '○/休', '休/○', '○/有', '有/○',
+        '上1', '上2', '上3', '上4', '上5',
+        '下1', '下2', '下3', '下4', '下5',
+        'ー'
+    ]);
+
     function normalizeSymbol(val) {
         if (!val) return null;
         let s = val.toString().trim();
@@ -4414,6 +4425,7 @@ document.addEventListener('DOMContentLoaded', () => {
         if (s === 'ハヤ' || s === 'はや') return 'ハヤ';
         if (s === 'オソ' || s === 'おそ') return 'オソ';
         if (s === 'イブ' || s === 'いぶ') return 'イブ';
+        if (s === 'ー' || s === '―' || s === '─' || s === '-' || s === 'ｰ' || s === '対象外') return 'ー';
 
         // 半日勤務の揺れ
         s = s.replace(/[〇◯◦•･●]/g, '○').replace(/公休/g, '休').replace(/有休/g, '有');
@@ -4560,8 +4572,8 @@ document.addEventListener('DOMContentLoaded', () => {
                 try {
                     const ds = new DecompressionStream('deflate-raw');
                     const writer = ds.writable.getWriter();
-                    writer.write(compData);
-                    writer.close();
+                    writer.write(compData).catch(() => {});
+                    writer.close().catch(() => {});
                     const reader = ds.readable.getReader();
                     const chunks = [];
                     while (true) {
@@ -4586,6 +4598,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
         if (cdEntries.length > 0) {
             for (const ce of cdEntries) {
+                if (!ce.name.endsWith('.xml') && !ce.name.endsWith('.rels')) continue;
                 const pos = ce.localOffset;
                 if (pos + 30 <= bytes.length && view.getUint32(pos, true) === 0x04034b50) {
                     const nameLen = view.getUint16(pos + 26, true);
@@ -4609,10 +4622,12 @@ document.addEventListener('DOMContentLoaded', () => {
                     const extraLen = view.getUint16(pos + 28, true);
                     const name = textDecoder.decode(bytes.subarray(pos + 30, pos + 30 + nameLen));
                     const dataStart = pos + 30 + nameLen + extraLen;
-                    const compData = bytes.subarray(dataStart, dataStart + compSize);
-                    const decompData = await inflateEntry(method, compData);
-                    if (decompData) {
-                        entries[name] = textDecoder.decode(decompData);
+                    if (name.endsWith('.xml') || name.endsWith('.rels')) {
+                        const compData = bytes.subarray(dataStart, dataStart + compSize);
+                        const decompData = await inflateEntry(method, compData);
+                        if (decompData) {
+                            entries[name] = textDecoder.decode(decompData);
+                        }
                     }
                     pos = dataStart + (compSize || 1);
                 } else {
@@ -4623,16 +4638,19 @@ document.addEventListener('DOMContentLoaded', () => {
 
         // sharedStrings.xml の抽出（★ <rPh> ふりがなタグを完全除外！）
         const sharedStrings = [];
-        if (entries['xl/sharedStrings.xml']) {
+        const sharedKey = Object.keys(entries).find(k => k.toLowerCase() === 'xl/sharedstrings.xml');
+        if (sharedKey && entries[sharedKey]) {
             const parser = new DOMParser();
-            const xmlDoc = parser.parseFromString(entries['xl/sharedStrings.xml'], 'text/xml');
+            const xmlDoc = parser.parseFromString(entries[sharedKey], 'text/xml');
             const siNodes = xmlDoc.getElementsByTagName('si');
             for (let i = 0; i < siNodes.length; i++) {
                 sharedStrings.push(extractXmlTextWithoutPhonetic(siNodes[i]));
             }
         }
 
-        const sheetXml = entries['xl/worksheets/sheet1.xml'];
+        const sheetKey = Object.keys(entries).find(k => k.toLowerCase() === 'xl/worksheets/sheet1.xml')
+            || Object.keys(entries).find(k => /^xl\/worksheets\/sheet\d+\.xml$/i.test(k));
+        const sheetXml = sheetKey ? entries[sheetKey] : null;
         if (!sheetXml) {
             throw new Error('Excelシート（sheet1.xml）が見つかりませんでした。');
         }
