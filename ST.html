@@ -37,20 +37,16 @@
     <!-- Table Navigation -->
     <!-- Table Navigation -->
     <!-- Table Navigation -->
+    <!-- Table Navigation -->
+    <!-- Table Navigation -->
     <!-- ナビゲーションタブ -->
+        <!-- Navigation Tabs (Master Table) -->
+        <!-- Navigation Tabs -->
     <nav class="tab-container">
-        <button class="tab-btn active" data-tab="inputTab">
-            <span>📋</span> 希望入力
-        </button>
-        <button class="tab-btn" data-tab="outputTab">
-            <span>✏️</span> 修正作業エリア
-        </button>
-        <button class="tab-btn" data-tab="checkTab">
-            <span>🔍</span> 最終チェック&完成
-        </button>
-        <button class="tab-btn" data-tab="statsTab">
-            <span>📈</span> 勤務分析・平準化ダッシュボード
-        </button>
+        <button class="tab-btn active" data-tab="inputTab"><span>搭</span> 希望入力</button>
+        <button class="tab-btn" data-tab="outputTab"><span>笨擾ｸ・/span> 修正作業エリア</button>
+        <button class="tab-btn" data-tab="checkTab"><span>剥</span> 最終チェック&完成</button>
+        <button class="tab-btn" data-tab="statsTab"><span>嶋</span> 勤務分析繝ｻ平準化ダッシュボード</button>
     </nav>
 
     <!-- メインコンテンツ -->
@@ -241,7 +237,7 @@
         </section>
 
         <!-- 2. 出力シートタブ -->
-        <section id="outputTab" class="tab-panel">
+        <section id="outputTab" class="tab-panel" style="display:none;">
             <!-- ツールバー・操作エリア（統一レイアウト） -->
             <div class="toolbar-card" style="flex-direction: column; align-items: stretch; gap: 10px;">
                 <!-- 1行目: シートタイトル ＆ アクションボタン群 -->
@@ -348,7 +344,7 @@
                 <!-- 1行目: シートタイトル ＆ アクションボタン群 -->
                 <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 10px;">
                     <div style="display: flex; align-items: center; gap: 0.75rem;">
-                        <span id="checkTitleDisplay" style="font-weight: 800; color: #1e293b; font-size: 1.05rem;">🔍 最終チェック&完成</span>
+                        <span id="checkTitleDisplay" style="font-weight: 800; color: #1e293b; font-size: 1.05rem;">🏢 全フロア統合</span>
                     </div>
                     <div class="action-group" style="display: flex; gap: 8px; flex-wrap: wrap; align-items: center;">
                         <button class="btn btn-primary" id="checkCopyForExcelBtn" style="font-size: 0.82rem; padding: 5px 12px; font-weight: 700;" title="完成勤務表をExcel貼り付け用にコピーします（赤字太字・数式付き）">
@@ -649,6 +645,8 @@
         <!-- Dept Config -->
         <!-- Dept Config -->
         <!-- Dept Config -->
+        <!-- Dept Config -->
+        <!-- Dept Config -->
     <script>
         window.APP_CONFIG = {
             deptId: 'st',
@@ -658,8 +656,8 @@
             theme: 'theme-st'
         };
     </script>
-    <script src="solver.js?v=20261028_rev49"></script>
-    <script src="app.js?v=20261028_rev49"></script>
+    <script src="solver.js?v=20261028_rev52"></script>
+    <script src="app.js?v=20261028_rev52"></script>
 </body>
 </html>
 

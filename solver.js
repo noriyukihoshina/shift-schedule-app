@@ -527,7 +527,7 @@ class ShiftScheduler {
         this.dayOffsets = Array.isArray(this.options.dayOffsets) ? [...this.options.dayOffsets] : new Array(this.numDays).fill(0);
         this.weekSpans = getSunToSatWeekSpans(this.options.dates, this.numDays);
         this.grid = [];
-        this.isST = !!options.isST || this.staffList.some(st => !st.isUnused && (st.floor === '1F' || st.floor === '2F' || st.floor === '3F' || st.floor === '南'));
+        this.isST = !!(options && options.isST) || !!(this.options && this.options.isST);
         this.initGrid();
     }
 
