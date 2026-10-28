@@ -2597,7 +2597,10 @@ document.addEventListener('DOMContentLoaded', () => {
             btn.classList.toggle('active', btn.dataset.tab === tabId);
         });
         tabPanels.forEach(panel => {
-            panel.classList.toggle('active', panel.id === tabId);
+            const isActive = (panel.id === tabId);
+            panel.classList.toggle('active', isActive);
+            // ★ インラインスタイルが存在していても確実に強制表示/非表示を同期切り替え！
+            panel.style.display = isActive ? 'block' : 'none';
         });
         if (isMaster && tabId === 'checkTab') {
             renderMasterIntegrationView();
