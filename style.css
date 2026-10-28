@@ -997,3 +997,165 @@ input:checked + .toggle-slider:before {
     border-color: #10b981;
     color: #ffffff !important;
 }
+
+/* ========================================================
+   ★ テーブル背景テーマカラー（薄く淡い色指定）
+   ST：ピンク / 1階：ブルー / 2階：オレンジ / 3階：みどり / マスター：黄色
+   ======================================================== */
+
+/* 1. STテーブル: 薄く淡いピンク */
+body.theme-st {
+    background-color: #fff9fa;
+}
+body.theme-st .sheet-wrapper {
+    background-color: #fff2f5 !important;
+    border-color: #fbcfe8 !important;
+}
+body.theme-st .sheet-table {
+    background-color: #fff5f8 !important;
+}
+body.theme-st .sheet-table tbody td:not(.prev-col-cell):not([style*="background"]) {
+    background-color: #fff5f8 !important;
+}
+body.theme-st .sheet-table tbody tr:hover td {
+    background-color: #ffe4ec !important;
+}
+body.theme-st .sticky-col-1,
+body.theme-st .sticky-col-2 {
+    background-color: #ffe4ec !important;
+}
+body.theme-st thead th.sticky-col-1,
+body.theme-st thead th.sticky-col-2 {
+    background-color: #fbcfe8 !important;
+}
+
+/* 2. 1階病棟テーブル: 薄く淡いブルー */
+body.theme-1f {
+    background-color: #f8fbff;
+}
+body.theme-1f .sheet-wrapper {
+    background-color: #f0f7ff !important;
+    border-color: #bae6fd !important;
+}
+body.theme-1f .sheet-table {
+    background-color: #f0f8ff !important;
+}
+body.theme-1f .sheet-table tbody td:not(.prev-col-cell):not([style*="background"]) {
+    background-color: #f0f8ff !important;
+}
+body.theme-1f .sheet-table tbody tr:hover td {
+    background-color: #e0f2fe !important;
+}
+body.theme-1f .sticky-col-1,
+body.theme-1f .sticky-col-2 {
+    background-color: #e0f2fe !important;
+}
+body.theme-1f thead th.sticky-col-1,
+body.theme-1f thead th.sticky-col-2 {
+    background-color: #bae6fd !important;
+}
+
+/* 3. 2階病棟テーブル: 薄く淡いオレンジ */
+body.theme-2f {
+    background-color: #fffbf7;
+}
+body.theme-2f .sheet-wrapper {
+    background-color: #fff4ea !important;
+    border-color: #fed7aa !important;
+}
+body.theme-2f .sheet-table {
+    background-color: #fff8f0 !important;
+}
+body.theme-2f .sheet-table tbody td:not(.prev-col-cell):not([style*="background"]) {
+    background-color: #fff8f0 !important;
+}
+body.theme-2f .sheet-table tbody tr:hover td {
+    background-color: #ffedd5 !important;
+}
+body.theme-2f .sticky-col-1,
+body.theme-2f .sticky-col-2 {
+    background-color: #ffedd5 !important;
+}
+body.theme-2f thead th.sticky-col-1,
+body.theme-2f thead th.sticky-col-2 {
+    background-color: #fed7aa !important;
+}
+
+/* 4. 3階病棟テーブル: 薄く淡いみどり */
+body.theme-3f {
+    background-color: #f7fdf9;
+}
+body.theme-3f .sheet-wrapper {
+    background-color: #edfcf2 !important;
+    border-color: #bbf7d0 !important;
+}
+body.theme-3f .sheet-table {
+    background-color: #f2fcf5 !important;
+}
+body.theme-3f .sheet-table tbody td:not(.prev-col-cell):not([style*="background"]) {
+    background-color: #f2fcf5 !important;
+}
+body.theme-3f .sheet-table tbody tr:hover td {
+    background-color: #dcfce7 !important;
+}
+body.theme-3f .sticky-col-1,
+body.theme-3f .sticky-col-2 {
+    background-color: #dcfce7 !important;
+}
+body.theme-3f thead th.sticky-col-1,
+body.theme-3f thead th.sticky-col-2 {
+    background-color: #bbf7d0 !important;
+}
+
+/* 5. マスターテーブル: 薄く淡い黄色 */
+body.theme-master {
+    background-color: #fefef5;
+}
+body.theme-master .sheet-wrapper {
+    background-color: #fefde8 !important;
+    border-color: #fef08a !important;
+}
+body.theme-master .sheet-table {
+    background-color: #fffdf0 !important;
+}
+body.theme-master .sheet-table tbody td:not(.prev-col-cell):not([style*="background"]) {
+    background-color: #fffdf0 !important;
+}
+body.theme-master .sheet-table tbody tr:hover td {
+    background-color: #fef9c3 !important;
+}
+body.theme-master .sticky-col-1,
+body.theme-master .sticky-col-2 {
+    background-color: #fef9c3 !important;
+}
+body.theme-master thead th.sticky-col-1,
+body.theme-master thead th.sticky-col-2 {
+    background-color: #fef08a !important;
+}
+
+/* 6. 南病棟テーブル: 薄く淡いラベンダー/淡紫 */
+body.theme-south {
+    background-color: #fcfaff;
+}
+body.theme-south .sheet-wrapper {
+    background-color: #f7f2fe !important;
+    border-color: #e9d5ff !important;
+}
+body.theme-south .sheet-table {
+    background-color: #faf5ff !important;
+}
+body.theme-south .sheet-table tbody td:not(.prev-col-cell):not([style*="background"]) {
+    background-color: #faf5ff !important;
+}
+body.theme-south .sheet-table tbody tr:hover td {
+    background-color: #f3e8ff !important;
+}
+body.theme-south .sticky-col-1,
+body.theme-south .sticky-col-2 {
+    background-color: #f3e8ff !important;
+}
+body.theme-south thead th.sticky-col-1,
+body.theme-south thead th.sticky-col-2 {
+    background-color: #e9d5ff !important;
+}
+

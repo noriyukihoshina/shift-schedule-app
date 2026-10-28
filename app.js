@@ -1632,6 +1632,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 <th class="remarks-col" rowspan="2" title="委員会等のメモ（ExcelのAG列と自動連携）" style="background:#f8fafc; color:#1e293b; min-width:220px; max-width:320px;">備考（メモ）</th>
             `;
         }
+        headHtml += `
             </tr>
             <tr>
                 <th class="prev-col-header">前5</th>
