@@ -1,4 +1,4 @@
-/**
+﻿/**
  * 勤務表作成システム - アプリケーションロジック (app.js)
  * 最新版:
  * - 8時可フラグ: 1〜9番目のスタッフのみON（現場の実態に完全一致）
@@ -2220,11 +2220,47 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     }
 
+    // ★ ST役職者の出勤状況を取得（POテーブルで役職者不在時にST役職者をカウント可能にする）
+    function getSTChiefCoverageDays(floorKey, startDate) {
+        const chiefDays = new Set();
+        const subChiefDays = new Set();
+        if (isST || !floorKey) return { chiefDays, subChiefDays };
+        try {
+            const rawSt = localStorage.getItem('shift_schedule_st_term_' + startDate);
+            if (!rawSt) return { chiefDays, subChiefDays };
+            const stData = JSON.parse(rawSt);
+            if (!stData || !Array.isArray(stData.staffList)) return { chiefDays, subChiefDays };
+            stData.staffList.forEach((st, sIdx) => {
+                if (st.isUnused) return;
+                const matchesFloor = (st.floor === floorKey || (st.floor && st.floor.includes(floorKey)));
+                if (!matchesFloor) return;
+                const days = (stData.outputGrid && stData.outputGrid[sIdx]) ? stData.outputGrid[sIdx] : (st.days || []);
+                for (let d = 0; d < days.length; d++) {
+                    const cell = days[d];
+                    const sym = (cell && typeof cell === 'object') ? cell.symbol : (cell || '');
+                    const isWorking = sym && sym !== '休' && sym !== '有' && sym !== '特' && !sym.startsWith('上') && !sym.startsWith('下');
+                    if (isWorking) {
+                        if (st.isSectionChief || st.isChief) chiefDays.add(d);
+                        if (st.isSubChief) subChiefDays.add(d);
+                    }
+                }
+            });
+        } catch (e) {
+            console.warn('ST役職者データ読み込みスキップ:', e);
+        }
+        return { chiefDays, subChiefDays };
+    }
+
     function checkInputConstraints(showToastOnSuccess = false) {
         const term = getTermInfo();
+        const curStartDate = document.getElementById('termStartDate')?.value || currentWorkingStartDate;
+        const stCoverage = getSTChiefCoverageDays(currentFloor, curStartDate);
         const res = validateInitialState(staffList, {
             dates: term.dates,
-            standardHolidays: 8.0
+            standardHolidays: parseFloat(document.getElementById('standardHolidaySelect')?.value || '8.0'),
+            isST: isST,
+            stChiefWorkingDays: stCoverage.chiefDays,
+            stSubChiefWorkingDays: stCoverage.subChiefDays
         });
 
         if (res.errors && res.errors.length > 0) {
@@ -3225,11 +3261,14 @@ document.addEventListener('DOMContentLoaded', () => {
                     const stdHolidayVal = parseFloat(document.getElementById('standardHolidaySelect')?.value || '8.0');
                     const term = getTermInfo();
                     const curStartDate = document.getElementById('termStartDate')?.value || currentWorkingStartDate;
+                    const stCoverage = getSTChiefCoverageDays(currentFloor, curStartDate);
                     const scheduler = new ShiftScheduler(staffList, {
                         standardHolidays: stdHolidayVal,
                         dates: term.dates,
                         dayOffsets: [...dayOffsets],
-                        isST: isST
+                        isST: isST,
+                        stChiefWorkingDays: stCoverage.chiefDays,
+                        stSubChiefWorkingDays: stCoverage.subChiefDays
                     });
                     const result = scheduler.solveBaseSchedule();
 
@@ -3319,11 +3358,15 @@ document.addEventListener('DOMContentLoaded', () => {
                 if (!lastScheduler) {
                     // 基本勤務表がまだない場合はまず第1段階を実行
                     const stdHolidayVal = parseFloat(document.getElementById('standardHolidaySelect')?.value || '8.0');
+                    const curStartDate3 = document.getElementById('termStartDate')?.value || currentWorkingStartDate;
+                    const stCoverage3 = getSTChiefCoverageDays(currentFloor, curStartDate3);
                     lastScheduler = new ShiftScheduler(staffList, {
                         standardHolidays: stdHolidayVal,
                         dates: getTermInfo().dates,
                         dayOffsets: [...dayOffsets],
-                        isST: isST
+                        isST: isST,
+                        stChiefWorkingDays: stCoverage3.chiefDays,
+                        stSubChiefWorkingDays: stCoverage3.subChiefDays
                     });
                     const baseResult = lastScheduler.solveBaseSchedule();
                     if (!baseResult.success) {

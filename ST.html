@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>勤務予定表 自動作成システム - マスターテーブル</title>
+    <title>勤務予定表 自動作成システム - ST専用テーブル</title>
     <link rel="stylesheet" href="style.css">
 </head>
 <body class="theme-st">
@@ -12,7 +12,7 @@
     <header class="app-header" style="display: flex; justify-content: space-between; align-items: center;">
         <div class="header-title">
             <span style="font-size: 1.3rem;">📅</span>
-            <h1 style="font-size: 1.15rem; font-weight: 700;">勤務予定表 自動作成システム 縲・(System.Collections.Hashtable.name)縲・/h1>
+            <h1 style="font-size: 1.15rem; font-weight: 700;">勤務予定表 自動作成システム 〜 ST専用テーブル 〜</h1>
         </div>
         <div style="display: flex; align-items: center; gap: 8px; font-size: 0.82rem;">
             <span id="autoSaveStatusBadge" style="display: inline-flex; align-items: center; gap: 6px; background: #ecfdf5; color: #047857; border: 1px solid #a7f3d0; padding: 4px 12px; border-radius: 9999px; font-weight: 700; box-shadow: 0 1px 2px rgba(0,0,0,0.05);">
@@ -45,14 +45,9 @@
     <!-- Table Navigation -->
     <!-- Table Navigation -->
     <!-- Table Navigation -->
+    <!-- Table Navigation -->
+    <!-- Table Navigation -->
     <!-- ナビゲーションタブ -->
-        <!-- Navigation Tabs (Master Table) -->
-        <!-- Navigation Tabs (Master Table) -->
-        <!-- Navigation Tabs (Master Table) -->
-        <!-- Navigation Tabs (Master Table) -->
-        <!-- Navigation Tabs (Master Table) -->
-        <!-- Navigation Tabs (Master Table) -->
-        <!-- Navigation Tabs (Master Table) -->
         <!-- Navigation Tabs -->
     <nav class="tab-container">
         <button class="tab-btn active" data-tab="inputTab">&#x1F4CB; 希望入力</button>
@@ -134,6 +129,8 @@
                                 <option value="9.0">リフ月: 9.0日</option>
                             </select>
                         </div>
+</div>
+</div>
 </div>
 </div>
 <button type="button" class="btn btn-primary manual-save-btn" style="font-size:0.82rem; padding:4px 14px; font-weight:700; background:#0284c7; color:#ffffff; border:none; border-radius:4px; box-shadow:0 1px 3px rgba(0,0,0,0.1); cursor:pointer; margin-left:8px;">&#x1F4BE; 保存</button></div>
@@ -668,17 +665,20 @@
         <!-- Dept Config -->
         <!-- Dept Config -->
         <!-- Dept Config -->
+        <!-- Dept Config -->
+        <!-- Dept Config -->
     <script>
         window.APP_CONFIG = {
             deptId: 'st',
             deptName: 'ST専用テーブル',
             
             isST: true,
+            
             theme: 'theme-st'
         };
     </script>
-    <script src="solver.js?v=20261028_rev53"></script>
-    <script src="app.js?v=20261028_rev53"></script>
+    <script src="solver.js?v=20261028_rev57"></script>
+    <script src="app.js?v=20261028_rev57"></script>
 </body>
 </html>
 

@@ -431,7 +431,8 @@ function validateInitialState(staffList, options = {}) {
         const curDateInfo = (dates && dates[d]) ? dates[d] : null;
         const isWeekday = curDateInfo ? (curDateInfo.wIdx >= 0 && curDateInfo.wIdx <= 4) : ((d % 7) >= 0 && (d % 7) <= 4);
 
-        if (sectionChiefs.length > 0 || chiefs.length > 0) {
+        // ★ 役職者出勤制約: STテーブル単独では制約なし。POテーブルでは係長・主任・副主任の出勤を求めるが、ST役職者が出勤していれば条件クリア可能
+        if (!options.isST && (sectionChiefs.length > 0 || chiefs.length > 0)) {
             // 係長は平日は原則出勤、土日は原則休み（土日は希望の○等が入っている場合のみ出勤扱い）
             let scAvailableCount = 0;
             sectionChiefs.forEach(sc => {
@@ -457,6 +458,12 @@ function validateInitialState(staffList, options = {}) {
                     }
                 });
 
+                // ★ ST主任が出勤しているかチェック（同階STの主任が出勤ならOK）
+                const hasStChiefOnDay = options.stChiefWorkingDays && options.stChiefWorkingDays.has(d);
+                if (hasStChiefOnDay) {
+                    chiefAvailableCount++;
+                }
+
                 if (chiefAvailableCount < 1) {
                     // 主任も全員不在の場合、副主任がAチーム(PT A/OT A)とBチーム(PT B/OT B)どちらも出勤可能かチェック
                     let subAAvailable = 0, subBAvailable = 0;
@@ -468,9 +475,13 @@ function validateInitialState(staffList, options = {}) {
                             else if (sec === 'PT B' || sec === 'OT B') subBAvailable++;
                         }
                     });
-                    const subABOk = (subAAvailable >= 1 && subBAvailable >= 1);
+
+                    // ★ PT/OTの副主任がAかBに1人いれば、STの副主任を含めて条件クリア
+                    const hasStSubChiefOnDay = options.stSubChiefWorkingDays && options.stSubChiefWorkingDays.has(d);
+                    const subABOk = (subAAvailable >= 1 && subBAvailable >= 1) || (hasStSubChiefOnDay && (subAAvailable >= 1 || subBAvailable >= 1));
+
                     if (!subABOk) {
-                        errors.push(`【${dayNum}日目】係長・主任ともに不在ですが、副主任（Aチーム・Bチーム両方）の出勤可能者が不足しています（主任1名以上、または副主任をA・B両方配置してください）。`);
+                        errors.push(`【${dayNum}日目】係長・主任ともに不在ですが、副主任（Aチーム・Bチーム両方、またはST副主任連携）の出勤可能者が不足しています（主任1名以上、または副主任を配置してください）。`);
                         // その日に希望休（休・有・上・下・半休・出張）が入っている係長・主任・副主任すべてにブルー網掛けを付与
                         staffList.forEach((st, sIdx) => {
                             if (st.isUnused) return;
@@ -491,8 +502,11 @@ function validateInitialState(staffList, options = {}) {
         }
 
         const totalFullTime = staffList.filter(s => !s.isUnused && s.isFullTime).length;
-        if (totalFullTime >= 3 && fullTimeAvailable < 3) {
+        if (!options.isST && totalFullTime >= 3 && fullTimeAvailable < 3) {
             errors.push(`【${dayNum}日目】「専従」スタッフの出勤可能人数が${fullTimeAvailable}名しかおらず、必要数（3名以上）を満たせません（専従スタッフの希望休重複をご確認ください）。`);
+        } else if (options.isST && totalFullTime >= 2 && fullTimeAvailable < 2) {
+            errors.push(`【${dayNum}日目】ST「専従」スタッフの出勤可能人数が${fullTimeAvailable}名しかおらず、必要数（2名）を満たせません（専従スタッフの希望休重複をご確認ください）。`);
+        }
             staffList.forEach((st, sIdx) => {
                 if (st.isUnused || !st.isFullTime) return;
                 const sym = st.days[d];
@@ -2237,6 +2251,7 @@ class ShiftScheduler {
                 else if (sec === 'PT B' || sec === 'OT B') subBIndices.push(s);
             }
         }
+        if (this.isST) return; // ST単独では役職者必須制約なし
         if (chIndices.length === 0 && subAIndices.length === 0 && subBIndices.length === 0) return;
 
         const isWorkingOnDay = (s, d) => {
@@ -2245,11 +2260,17 @@ class ShiftScheduler {
         };
 
         const isRoleCoveredOnDay = (d) => {
+            if (this.isST) return true;
             if (scIndices.some(s => isWorkingOnDay(s, d))) return true;
             if (chIndices.some(s => isWorkingOnDay(s, d))) return true;
+            if (this.options && this.options.stChiefWorkingDays && this.options.stChiefWorkingDays.has(d)) return true;
             const hasSubA = subAIndices.some(s => isWorkingOnDay(s, d));
             const hasSubB = subBIndices.some(s => isWorkingOnDay(s, d));
+            const hasStSub = this.options && this.options.stSubChiefWorkingDays && this.options.stSubChiefWorkingDays.has(d);
             if ((subAIndices.length === 0 || hasSubA) && (subBIndices.length === 0 || hasSubB) && (hasSubA || hasSubB)) {
+                return true;
+            }
+            if (hasStSub && (hasSubA || hasSubB)) {
                 return true;
             }
             return false;
