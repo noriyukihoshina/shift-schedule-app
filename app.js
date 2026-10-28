@@ -1902,14 +1902,21 @@ document.addEventListener('DOMContentLoaded', () => {
                     const c = rowData[d] || { symbol: '' };
                     const sym = c.symbol ? c.symbol.replace(/[◦•･◯〇●]/g, '○') : '';
                     const thickCls = ((d + 1) % 7 === 0) ? 'border-thick-right' : '';
-                    let symStyle = '';
-                    if (sym === '休') { symStyle = 'color:#ef4444; font-weight:700;'; stOffCount++; }
-                    else if (sym === '有') { symStyle = 'color:#15803d; font-weight:800;'; stPaidCount++; }
-                    else if (sym && sym.includes('リフ')) { symStyle = 'color:#059669; font-weight:800;'; stRefCount++; }
-                    else if (sym === '早') { symStyle = 'color:#d97706; font-weight:800;'; stEarlyCount++; stWorkCount += (st.isHalf ? 0.5 : 1); }
-                    else if (isWorkSymbol(sym)) { symStyle = 'color:#1e293b; font-weight:700;'; stWorkCount += (st.isHalf ? 0.5 : 1); }
 
-                    bodyHtml += `<td class="${thickCls}" style="text-align:center; font-size:0.85rem; background:#f0fdf4; ${symStyle}" title="STスタッフ（STテーブルで確定済み）: ${escapeHtmlText(st.name)} / ${sym}">${sym}</td>`;
+                    if (sym === '休') stOffCount++;
+                    else if (sym === '有') stPaidCount++;
+                    else if (sym && sym.includes('リフ')) stRefCount++;
+                    else if (sym === '早') { stEarlyCount++; stWorkCount += (st.isHalf ? 0.5 : 1); }
+                    else if (isWorkSymbol(sym)) { stWorkCount += (st.isHalf ? 0.5 : 1); }
+
+                    // ★ 事前固定希望（本人が希望入力した枠）のみ赤字・太字（fixed-cell）！自動生成された公休等は通常文字
+                    const isCellFixed = !!(c.isFixed || (st.days && st.days[d] && st.days[d] === sym));
+                    const cellCls = isCellFixed ? 'day-cell fixed-cell' : 'day-cell auto-cell';
+                    const cellTitle = isCellFixed
+                        ? `STスタッフ（事前固定希望）: ${escapeHtmlText(st.name)} / ${sym}`
+                        : `STスタッフ（自動配置）: ${escapeHtmlText(st.name)} / ${sym}`;
+
+                    bodyHtml += `<td class="${thickCls} ${cellCls}" style="text-align:center; font-size:0.85rem; background:#f0fdf4;" title="${cellTitle}">${sym}</td>`;
                 }
 
                 bodyHtml += `
@@ -3745,14 +3752,21 @@ document.addEventListener('DOMContentLoaded', () => {
                     const c = rowData[d] || { symbol: '' };
                     const sym = c.symbol ? c.symbol.replace(/[◦•･◯〇●]/g, '○') : '';
                     const thickCls = ((d + 1) % 7 === 0) ? 'border-thick-right' : '';
-                    let symStyle = '';
-                    if (sym === '休') { symStyle = 'color:#ef4444; font-weight:700;'; stOffCount++; }
-                    else if (sym === '有') { symStyle = 'color:#15803d; font-weight:800;'; stPaidCount++; }
-                    else if (sym && sym.includes('リフ')) { symStyle = 'color:#059669; font-weight:800;'; stRefCount++; }
-                    else if (sym === '早') { symStyle = 'color:#d97706; font-weight:800;'; stEarlyCount++; stWorkCount += (st.isHalf ? 0.5 : 1); }
-                    else if (isWorkSymbol(sym)) { symStyle = 'color:#1e293b; font-weight:700;'; stWorkCount += (st.isHalf ? 0.5 : 1); }
 
-                    bodyHtml += `<td class="${thickCls}" style="text-align:center; font-size:0.85rem; background:#f0fdf4; ${symStyle}" title="STスタッフ（STテーブルで確定済み）: ${escapeHtmlText(st.name)} / ${sym}">${sym}</td>`;
+                    if (sym === '休') stOffCount++;
+                    else if (sym === '有') stPaidCount++;
+                    else if (sym && sym.includes('リフ')) stRefCount++;
+                    else if (sym === '早') { stEarlyCount++; stWorkCount += (st.isHalf ? 0.5 : 1); }
+                    else if (isWorkSymbol(sym)) { stWorkCount += (st.isHalf ? 0.5 : 1); }
+
+                    // ★ 事前固定希望（本人が希望入力した枠）のみ赤字・太字（fixed-cell）！自動生成された公休等は通常文字
+                    const isCellFixed = !!(c.isFixed || (st.days && st.days[d] && st.days[d] === sym));
+                    const cellCls = isCellFixed ? 'day-cell fixed-cell' : 'day-cell auto-cell';
+                    const cellTitle = isCellFixed
+                        ? `STスタッフ（事前固定希望）: ${escapeHtmlText(st.name)} / ${sym}`
+                        : `STスタッフ（自動配置）: ${escapeHtmlText(st.name)} / ${sym}`;
+
+                    bodyHtml += `<td class="${thickCls} ${cellCls}" style="text-align:center; font-size:0.85rem; background:#f0fdf4;" title="${cellTitle}">${sym}</td>`;
                 }
 
                 bodyHtml += `
@@ -5471,7 +5485,27 @@ document.addEventListener('DOMContentLoaded', () => {
         }
         const term = getTermInfo();
         const numDays = term.dates.length;
-        const title = `${term.first.m}月${term.first.day}日～${term.last.m}月${term.last.day}日 スタッフ希望勤務入力シート（希望勤務はプルダウンから選択してください）`;
+        const floorPrefix = (function() {
+            if (window.APP_CONFIG) {
+                if (window.APP_CONFIG.deptId === '1f' || window.APP_CONFIG.floor === '1F') return '1階';
+                if (window.APP_CONFIG.deptId === '2f' || window.APP_CONFIG.floor === '2F') return '2階';
+                if (window.APP_CONFIG.deptId === '3f' || window.APP_CONFIG.floor === '3F') return '3階';
+                if (window.APP_CONFIG.deptId === 'south' || window.APP_CONFIG.floor === '南') return '南';
+                if (window.APP_CONFIG.deptName) {
+                    if (window.APP_CONFIG.deptName.includes('1階')) return '1階';
+                    if (window.APP_CONFIG.deptName.includes('2階')) return '2階';
+                    if (window.APP_CONFIG.deptName.includes('3階')) return '3階';
+                    if (window.APP_CONFIG.deptName.includes('南')) return '南';
+                }
+            }
+            const path = window.location.pathname;
+            if (path.includes('1f') || path.includes('1階')) return '1階';
+            if (path.includes('2f') || path.includes('2階')) return '2階';
+            if (path.includes('3f') || path.includes('3階')) return '3階';
+            if (path.includes('south') || path.includes('南')) return '南';
+            return currentFloor ? (currentFloor === '南' ? '南' : `${currentFloor.replace('F', '階')}`) : '';
+        })();
+        const title = `${floorPrefix}${term.first.m}月${term.first.day}日～${term.last.m}月${term.last.day}日 スタッフ希望勤務入力シート（希望勤務はプルダウンから選択してください）`;
 
         const lastDayCol = toColLetter(2 + numDays); // 28日: AD(列30), 29日: AE(列31)
         const colOff = toColLetter(3 + numDays);    // 28日: AE(列31), 29日: AF(列32)
@@ -6251,28 +6285,42 @@ document.addEventListener('DOMContentLoaded', () => {
         const remarksMap = {};
 
         for (let row = dataStartRow; row <= maxRow; row++) {
-            const rowName = cellMap.get(`${row},${nameCol}`)?.text || '';
+            const rawName = cellMap.get(`${row},${nameCol}`)?.text || '';
+            const rowName = cleanTextValue(rawName);
+
             // フッター集計行（出勤人数合計・実数合計・早番等）に達したら終了
             if (['出勤人数合計', '実数合計', 'PT A 出勤', 'OT A 出勤', 'PT B 出勤', 'OT B 出勤', 'ST 出勤', '早番', '遅番', 'E', '8時', '専従'].some(k => rowName.startsWith(k))) {
                 break;
             }
 
-            // スタッフの特定（1. 氏名一致 → 2. 有効スタッフ順 → 3. 行番号順）
+            // スタッフの特定（実在スタッフ名の一致を最優先）
             let staffIdx = -1;
-            if (rowName) {
-                const byName = staffList.findIndex(st => cleanTextValue(st.name) === rowName);
+            if (rowName && !['氏名', 'No', '役職', '所属', 'フロア'].includes(rowName)) {
+                const byName = staffList.findIndex(st => !st.isUnused && cleanTextValue(st.name) === rowName);
                 if (byName >= 0) staffIdx = byName;
             }
+
+            // もしnameColで見つからない場合、A列またはB列でスタッフ名を探す
             if (staffIdx === -1) {
-                const offsetIdx = row - dataStartRow;
-                if (offsetIdx >= 0 && offsetIdx < validStaffIndices.length) {
-                    staffIdx = validStaffIndices[offsetIdx];
-                } else if (offsetIdx >= 0 && offsetIdx < NUM_STAFF) {
-                    staffIdx = offsetIdx;
+                const altCol = (nameCol === 1 ? 2 : 1);
+                const altName = cleanTextValue(cellMap.get(`${row},${altCol}`)?.text || '');
+                if (altName && !['氏名', 'No', '役職', '所属', 'フロア'].includes(altName)) {
+                    const byAltName = staffList.findIndex(st => !st.isUnused && cleanTextValue(st.name) === altName);
+                    if (byAltName >= 0) staffIdx = byAltName;
                 }
             }
 
-            if (staffIdx < 0 || staffIdx >= NUM_STAFF) continue;
+            // A列が明確なスタッフ番号(1〜NUM_STAFF)である場合のフォールバック（※曜日ヘッダー行や空行は完全に弾く）
+            if (staffIdx === -1) {
+                const noText = cleanTextValue(cellMap.get(`${row},1`)?.text || '');
+                const noVal = parseInt(noText, 10);
+                if (!isNaN(noVal) && noVal >= 1 && noVal <= NUM_STAFF && !['水', '木', '金', '土', '日', '月', '火'].includes(noText)) {
+                    staffIdx = noVal - 1;
+                }
+            }
+
+            // 実在スタッフと特定できなかった行（曜日ヘッダー行・フロア区切り空行など）は100%安全にスキップ！
+            if (staffIdx < 0 || staffIdx >= NUM_STAFF || staffList[staffIdx].isUnused) continue;
 
             // 日付セルの読み取り
             for (let d = 0; d < sheetNumDays; d++) {

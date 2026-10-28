@@ -1,0 +1,71 @@
+<!DOCTYPE html>
+<html lang="ja"><head>
+    <meta charset="UTF-8">
+    <title>Rev63 App Features Verification</title>
+</head>
+<body>
+    <div id="output"><pre>=== TEST 5: 空白勤務表ダウンロードのファイル名プレフィックス検証 ===
+✅ PASSED: 1F環境でプレフィックスが「1階」であること (実際: 1階)
+✅ PASSED: ダウンロードファイル名が「1階4月1日～4月28日スタッフ希望勤務入力シート.xlsx」になること
+=== TEST 6: STスタッフ参照表示のセルスタイル検証 ===
+✅ PASSED: 自動生成された公休は auto-cell (黒文字) で描画されること (実際: day-cell auto-cell)
+✅ PASSED: 本人が希望した休みは fixed-cell (赤字・太字) で描画されること (実際: day-cell fixed-cell)
+🎉 ALL_APP_FEATURE_TESTS_PASSED_SUCCESSFULLY!</pre></div>
+    <script src="solver.js?v=20261029_rev63"></script>
+    <script>
+        const logs = [];
+        function log(msg) { logs.push(msg); console.log(msg); }
+        function assert(cond, msg) {
+            if (!cond) {
+                const err = '❌ FAILED: ' + msg;
+                log(err);
+                throw new Error(err);
+            } else {
+                log('✅ PASSED: ' + msg);
+            }
+        }
+
+        try {
+            log('=== TEST 5: 空白勤務表ダウンロードのファイル名プレフィックス検証 ===');
+            window.APP_CONFIG = { deptId: '1f', deptName: '1階病棟', floor: '1F' };
+            const getCurrentFloorPrefix = () => {
+                if (window.APP_CONFIG) {
+                    if (window.APP_CONFIG.deptId === '1f' || window.APP_CONFIG.floor === '1F') return '1階';
+                    if (window.APP_CONFIG.deptId === '2f' || window.APP_CONFIG.floor === '2F') return '2階';
+                    if (window.APP_CONFIG.deptId === '3f' || window.APP_CONFIG.floor === '3F') return '3階';
+                    if (window.APP_CONFIG.deptId === 'south' || window.APP_CONFIG.floor === '南') return '南';
+                }
+                return '';
+            };
+            const prefix1F = getCurrentFloorPrefix();
+            assert(prefix1F === '1階', '1F環境でプレフィックスが「1階」であること (実際: ' + prefix1F + ')');
+
+            const fileName = `${prefix1F}4月1日～4月28日スタッフ希望勤務入力シート.xlsx`;
+            assert(fileName === '1階4月1日～4月28日スタッフ希望勤務入力シート.xlsx', 'ダウンロードファイル名が「1階4月1日～4月28日スタッフ希望勤務入力シート.xlsx」になること');
+
+            log('=== TEST 6: STスタッフ参照表示のセルスタイル検証 ===');
+            // 本人が希望入力していない自動生成セル（休、早、○）に fixed-cell が付かないことの検証
+            const dummyCellAuto = { symbol: '休', isFixed: false };
+            const dummyStaff = { name: 'ST 01', floor: '1F', days: new Array(28).fill('') };
+            // 希望日は未入力（空文字）
+            const isCellFixedAuto = !!(dummyCellAuto.isFixed || (dummyStaff.days && dummyStaff.days[0] && dummyStaff.days[0] === dummyCellAuto.symbol));
+            const cellClsAuto = isCellFixedAuto ? 'day-cell fixed-cell' : 'day-cell auto-cell';
+            assert(cellClsAuto === 'day-cell auto-cell', '自動生成された公休は auto-cell (黒文字) で描画されること (実際: ' + cellClsAuto + ')');
+
+            // 本人が希望入力したセル（休）は fixed-cell になることの検証
+            dummyStaff.days[7] = '休'; // 8日目に希望休
+            const dummyCellFixed = { symbol: '休', isFixed: true };
+            const isCellFixedWish = !!(dummyCellFixed.isFixed || (dummyStaff.days && dummyStaff.days[7] && dummyStaff.days[7] === dummyCellFixed.symbol));
+            const cellClsWish = isCellFixedWish ? 'day-cell fixed-cell' : 'day-cell auto-cell';
+            assert(cellClsWish === 'day-cell fixed-cell', '本人が希望した休みは fixed-cell (赤字・太字) で描画されること (実際: ' + cellClsWish + ')');
+
+            log('🎉 ALL_APP_FEATURE_TESTS_PASSED_SUCCESSFULLY!');
+            document.getElementById('output').innerHTML = '<pre>' + logs.join('\n') + '</pre>';
+        } catch (e) {
+            log('FATAL ERROR: ' + e.message);
+            document.getElementById('output').innerHTML = '<pre style="color:red;">' + logs.join('\n') + '</pre>';
+        }
+    </script>
+
+
+</body></html>

@@ -1,0 +1,174 @@
+<!DOCTYPE html>
+<html lang="ja"><head>
+    <meta charset="UTF-8">
+    <title>Rev63 Comprehensive Verification</title>
+</head>
+<body>
+    <div id="output"><pre style="color:red;">=== TEST 1: STスケ可の日別欠員エラー検知 (validateInitialState) ===
+✅ PASSED: 4/8に1階スケ可の2名が休みの際、8日目1階スケ可エラーが正しく検知される
+✅ PASSED: 4/8の該当セル(ST 01, ST 02)に青網掛け(conflictCells)が付与される
+=== TEST 2: ST自動生成の2段階制御 (基本生成時は早番なし、特殊割当時に早番配置) ===
+✅ PASSED: ST基本勤務表が正常に自動生成される
+✅ PASSED: 基本勤務表生成（ステージ1）では早番が0件であること (実際: 0)
+✅ PASSED: ST特殊勤務割当（ステージ2）が正常に完了する
+✅ PASSED: 特殊勤務割当（ステージ2）で早番が配置されること (実際: 48件)
+=== TEST 3: 係長の平日希望休による公休オーバー解消 (solveSectionChiefSchedule) ===
+✅ PASSED: PO基本勤務表が正常に自動生成される
+✅ PASSED: 係長が平日に2日希望休を入れても、公休数はぴったり8日であること (実際: 8)
+=== TEST 4: 特殊勤務の平準化（8時担当者の特殊勤務2回程度、一般スタッフの特殊勤務増） ===
+poSpecRes.errors: ["【スタッフ No.6 スタッフ 06】公休日数が9日です（標準要件: 8日 / リフ込み計: 9日）。","【スタッフ No.9 スタッフ 09】公休日数が9日です（標準要件: 8日 / リフ込み計: 9日）。","【スタッフ No.10 スタッフ 10】公休日数が7日です（標準要件: 8日 / リフ込み計: 7日）。","【スタッフ No.11 スタッフ 11】公休日数が7日です（標準要件: 8日 / リフ込み計: 7日）。"]
+❌ FAILED: PO特殊勤務割当が正常に完了する
+FATAL ERROR: ❌ FAILED: PO特殊勤務割当が正常に完了する
+Error: ❌ FAILED: PO特殊勤務割当が正常に完了する
+    at assert (file:///C:/Users/coffe/OneDrive/%E3%83%87%E3%82%B9%E3%82%AF%E3%83%88%E3%83%83%E3%83%97/Antigravity/%E5%8B%A4%E5%8B%99%E8%A1%A8%E4%BD%9C%E6%88%90/test_rev63_comprehensive.html:20:23)
+    at file:///C:/Users/coffe/OneDrive/%E3%83%87%E3%82%B9%E3%82%AF%E3%83%88%E3%83%83%E3%83%97/Antigravity/%E5%8B%A4%E5%8B%99%E8%A1%A8%E4%BD%9C%E6%88%90/test_rev63_comprehensive.html:120:13</pre></div>
+    <script src="solver.js?v=20261029_rev63"></script>
+    <script>
+        const logs = [];
+        function log(msg) {
+            logs.push(msg);
+            console.log(msg);
+        }
+        function assert(condition, message) {
+            if (!condition) {
+                const err = '❌ FAILED: ' + message;
+                log(err);
+                throw new Error(err);
+            } else {
+                log('✅ PASSED: ' + message);
+            }
+        }
+
+        try {
+            log('=== TEST 1: STスケ可の日別欠員エラー検知 (validateInitialState) ===');
+            const dummySTStaff = [];
+            for (let i = 1; i <= 16; i++) {
+                const fl = (i <= 4) ? '1F' : ((i <= 8) ? '2F' : ((i <= 12) ? '3F' : '南'));
+                const canSched = (i === 1 || i === 2 || i === 5 || i === 6 || i === 9 || i === 10 || i === 13 || i === 14);
+                const days = new Array(28).fill('');
+                // 4/8（7日目, index 7）に1Fスケ可のST 01とST 02が両方とも「休」
+                if (i === 1 || i === 2) {
+                    days[7] = '休';
+                }
+                dummySTStaff.push({
+                    id: i,
+                    name: 'ST ' + String(i).padStart(2, '0'),
+                    floor: fl,
+                    canSched: canSched,
+                    isFullTime: (i === 3 || i === 8 || i === 12 || i === 16),
+                    isUnused: false,
+                    days: days,
+                    prevDays: ['', '', '', '', '']
+                });
+            }
+
+            const valRes = validateInitialState(dummySTStaff, { isST: true, numDays: 28 });
+            const hasSchedErr = valRes.errors.some(e => e.includes('8日目') && e.includes('1階') && e.includes('スケ可'));
+            assert(hasSchedErr, '4/8に1階スケ可の2名が休みの際、8日目1階スケ可エラーが正しく検知される');
+            const hasConflict = valRes.conflictCells.some(c => c.dayIndex === 7 && (c.staffIndex === 0 || c.staffIndex === 1));
+            assert(hasConflict, '4/8の該当セル(ST 01, ST 02)に青網掛け(conflictCells)が付与される');
+
+            log('=== TEST 2: ST自動生成の2段階制御 (基本生成時は早番なし、特殊割当時に早番配置) ===');
+            // 正常な希望状態に戻す
+            dummySTStaff[0].days[7] = '';
+            dummySTStaff[1].days[7] = '';
+            const stSched = new ShiftScheduler(dummySTStaff, { isST: true, standardHolidays: 8, numDays: 28 });
+
+            // ステージ1: 基本勤務表生成
+            const baseRes = stSched.solveBaseSchedule();
+            assert(baseRes.success, 'ST基本勤務表が正常に自動生成される');
+            let baseEarlyCount = 0;
+            for (let s = 0; s < dummySTStaff.length; s++) {
+                for (let d = 0; d < 28; d++) {
+                    if (stSched.grid[s][d].symbol === SYMBOLS.EARLY) baseEarlyCount++;
+                }
+            }
+            assert(baseEarlyCount === 0, '基本勤務表生成（ステージ1）では早番が0件であること (実際: ' + baseEarlyCount + ')');
+
+            // ステージ2: 特殊勤務割当
+            const specRes = stSched.assignSpecialDutiesToGrid();
+            assert(specRes.success, 'ST特殊勤務割当（ステージ2）が正常に完了する');
+            let specEarlyCount = 0;
+            for (let s = 0; s < dummySTStaff.length; s++) {
+                for (let d = 0; d < 28; d++) {
+                    if (stSched.grid[s][d].symbol === SYMBOLS.EARLY) specEarlyCount++;
+                }
+            }
+            assert(specEarlyCount > 0, '特殊勤務割当（ステージ2）で早番が配置されること (実際: ' + specEarlyCount + '件)');
+
+            log('=== TEST 3: 係長の平日希望休による公休オーバー解消 (solveSectionChiefSchedule) ===');
+            const dummyPOStaff = [];
+            for (let i = 1; i <= 44; i++) {
+                const days = new Array(28).fill('');
+                // 係長（No.1）が平日 4/8（水）と 4/28（火）に希望休「休」
+                if (i === 1) {
+                    days[7] = '休';  // 8日目(水)
+                    days[27] = '休'; // 28日目(火)
+                }
+                dummyPOStaff.push({
+                    id: i,
+                    name: 'スタッフ ' + String(i).padStart(2, '0'),
+                    isSectionChief: (i === 1),
+                    isChief: (i === 2 || i === 3),
+                    isSubChief: (i === 4 || i === 5),
+                    can8: (i >= 3 && i <= 9),
+                    isUnused: false,
+                    days: days,
+                    prevDays: ['', '', '', '', '']
+                });
+            }
+
+            const poSched = new ShiftScheduler(dummyPOStaff, { standardHolidays: 8, numDays: 28 });
+            const poBaseRes = poSched.solveBaseSchedule();
+            assert(poBaseRes.success, 'PO基本勤務表が正常に自動生成される');
+
+            let scOffCount = 0;
+            for (let d = 0; d < 28; d++) {
+                if (poSched.grid[0][d].symbol === SYMBOLS.OFF) scOffCount++;
+            }
+            assert(scOffCount === 8, '係長が平日に2日希望休を入れても、公休数はぴったり8日であること (実際: ' + scOffCount + ')');
+
+            log('=== TEST 4: 特殊勤務の平準化（8時担当者の特殊勤務2回程度、一般スタッフの特殊勤務増） ===');
+            const poSpecRes = poSched.assignSpecialDutiesToGrid();
+            if (!poSpecRes.success) {
+                log('poSpecRes.errors: ' + JSON.stringify(poSpecRes.errors));
+            }
+            assert(poSpecRes.success, 'PO特殊勤務割当が正常に完了する');
+
+            // 8時担当者（3〜9番）と一般スタッフ（10番以降）の特殊勤務（早・遅・E）を集計
+            const h8StaffSpecials = [];
+            for (let s = 2; s <= 8; s++) { // 3〜9番
+                let spCount = 0;
+                for (let d = 0; d < 28; d++) {
+                    const sym = poSched.grid[s][d].symbol;
+                    if (sym === SYMBOLS.EARLY || sym === SYMBOLS.LATE || sym === SYMBOLS.EVE) spCount++;
+                }
+                h8StaffSpecials.push(spCount);
+            }
+            log('8時担当者の特殊勤務回数: ' + JSON.stringify(h8StaffSpecials));
+            const maxH8Special = Math.max(...h8StaffSpecials);
+            assert(maxH8Special <= 2, '8時担当者の特殊勤務（早・遅・E）は最大でも2回以下であること (実際最大: ' + maxH8Special + ')');
+
+            const normalStaffSpecials = [];
+            for (let s = 9; s < 44; s++) { // 10番以降
+                let spCount = 0;
+                for (let d = 0; d < 28; d++) {
+                    const sym = poSched.grid[s][d].symbol;
+                    if (sym === SYMBOLS.EARLY || sym === SYMBOLS.LATE || sym === SYMBOLS.EVE) spCount++;
+                }
+                normalStaffSpecials.push(spCount);
+            }
+            const avgNormalSpecial = normalStaffSpecials.reduce((a, b) => a + b, 0) / normalStaffSpecials.length;
+            log('一般スタッフの特殊勤務平均: ' + avgNormalSpecial.toFixed(2));
+            assert(avgNormalSpecial >= 3.5, '一般スタッフの特殊勤務平均が3.5回以上に引き上げられていること (実際: ' + avgNormalSpecial.toFixed(2) + ')');
+
+            log('🎉 ALL_REV63_TESTS_PASSED_SUCCESSFULLY!');
+            document.getElementById('output').innerHTML = '<pre>' + logs.join('\n') + '</pre>';
+        } catch (e) {
+            log('FATAL ERROR: ' + e.message + '\n' + e.stack);
+            document.getElementById('output').innerHTML = '<pre style="color:red;">' + logs.join('\n') + '</pre>';
+        }
+    </script>
+
+
+</body></html>
