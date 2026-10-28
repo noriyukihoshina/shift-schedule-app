@@ -1,0 +1,75 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8">
+</head>
+<body>
+    <div id="test_out">START</div>
+    <iframe id="test_frame" src="ST.html" style="width:1200px; height:800px;"></iframe>
+    <script>
+        const f = document.getElementById('test_frame');
+        let step = 1;
+
+        f.onload = function() {
+            if (step === 1) {
+                step = 2;
+                setTimeout(function() {
+                    try {
+                        const doc = f.contentDocument;
+                        const win = f.contentWindow;
+
+                        // 1. Change ST04 isFullTime to true
+                        const fullChk4 = doc.querySelector('input[data-flag="isFullTime"][data-s="3"]');
+                        fullChk4.checked = true;
+                        fullChk4.dispatchEvent(new Event('change', { bubbles: true }));
+
+                        // 2. Change ST07 floor to 1F
+                        const f1Chk7 = doc.querySelector('input[data-floor="1F"][data-s="6"]');
+                        f1Chk7.checked = true;
+                        f1Chk7.dispatchEvent(new Event('change', { bubbles: true }));
+
+                        // 3. Verify in window.localStorage immediately
+                        const raw = win.localStorage.getItem('shift_schedule_st_staff_master');
+                        if (!raw) {
+                            document.getElementById('test_out').innerText = 'FAIL_NO_LOCALSTORAGE';
+                            return;
+                        }
+                        const master = JSON.parse(raw);
+                        if (master[3].isFullTime !== true || master[6].floor !== '1F') {
+                            document.getElementById('test_out').innerText = 'FAIL_NOT_SAVED_TO_STORAGE';
+                            return;
+                        }
+
+                        // 4. Reload ST.html to verify persistence across reloads
+                        setTimeout(function() {
+                            f.src = 'ST.html?t=' + Date.now();
+                        }, 200);
+                    } catch (e) {
+                        document.getElementById('test_out').innerText = 'ERROR_STEP1: ' + e.message;
+                    }
+                }, 500);
+            } else if (step === 2) {
+                step = 3;
+                setTimeout(function() {
+                    try {
+                        const doc = f.contentDocument;
+                        const fullChk4 = doc.querySelector('input[data-flag="isFullTime"][data-s="3"]');
+                        const f1Chk7 = doc.querySelector('input[data-floor="1F"][data-s="6"]');
+
+                        const isFull4 = fullChk4 ? fullChk4.checked : false;
+                        const isF1_7 = f1Chk7 ? f1Chk7.checked : false;
+
+                        if (isFull4 === true && isF1_7 === true) {
+                            document.getElementById('test_out').innerText = 'ALL_PERSISTENCE_TESTS_PASSED_SUCCESSFULLY';
+                        } else {
+                            document.getElementById('test_out').innerText = `FAIL_RELOAD_RESTORE: full4=${isFull4}, f1_7=${isF1_7}`;
+                        }
+                    } catch (e) {
+                        document.getElementById('test_out').innerText = 'ERROR_STEP2: ' + e.message;
+                    }
+                }, 500);
+            }
+        };
+    </script>
+</body>
+</html>

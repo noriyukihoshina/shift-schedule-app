@@ -1,0 +1,58 @@
+<!DOCTYPE html>
+<html><head>
+    <meta charset="utf-8">
+    <title>Storage Persistence Test</title>
+</head>
+<body>
+    <div id="test_out">ERROR: staffList is not defined ReferenceError: staffList is not defined<br>    at file:///C:/Users/coffe/OneDrive/%E3%83%87%E3%82%B9%E3%82%AF%E3%83%88%E3%83%83%E3%83%97/Antigravity/%E5%8B%A4%E5%8B%99%E8%A1%A8%E4%BD%9C%E6%88%90/test_localStorage_direct.html:19:36<br>    at file:///C:/Users/coffe/OneDrive/%E3%83%87%E3%82%B9%E3%82%AF%E3%83%88%E3%83%83%E3%83%97/Antigravity/%E5%8B%A4%E5%8B%99%E8%A1%A8%E4%BD%9C%E6%88%90/test_localStorage_direct.html:55:11</div>
+    <script>
+        window.APP_CONFIG = { deptId: 'st', isST: true };
+    </script>
+    <script src="solver.js"></script>
+    <script src="app.js"></script>
+    <script>
+        (function() {
+            try {
+                // 1. Initial State Check
+                // ST 04 defaults: isFullTime = false
+                const st4Initial = staffList[3].isFullTime;
+
+                // 2. User changes ST 04 isFullTime to true, and ST 07 floor to '1F'
+                staffList[3].isFullTime = true;
+                staffList[6].floor = '1F';
+                saveStaffMaster();
+                saveCurrentTermToStorage();
+
+                // Check localStorage directly
+                const masterRaw = window.localStorage.getItem('shift_schedule_st_staff_master');
+                const parsedMaster = JSON.parse(masterRaw);
+                const masterST4 = parsedMaster[3].isFullTime;
+                const masterST7 = parsedMaster[6].floor;
+
+                // 3. Simulate navigating to PO (1F)
+                window.APP_CONFIG = { deptId: '1f', floor: '1F' };
+                // Load PO data (should NOT touch shift_schedule_st_staff_master)
+                loadLinkedSTData('2026-04-01');
+
+                // 4. Simulate navigating back to ST
+                window.APP_CONFIG = { deptId: 'st', isST: true };
+                // Re-initialize staff data from scratch (simulating page reload of ST.html)
+                initStaffData();
+                const loadResult = loadStaffMaster();
+
+                const st4After = staffList[3].isFullTime;
+                const st7After = staffList[6].floor;
+
+                if (st4After === true && st7After === '1F' && masterST4 === true && masterST7 === '1F') {
+                    document.getElementById('test_out').innerText = 'ALL_PERSISTENCE_TESTS_PASSED';
+                } else {
+                    document.getElementById('test_out').innerText = `FAIL: st4After=${st4After}, st7After=${st7After}, masterST4=${masterST4}, masterST7=${masterST7}`;
+                }
+            } catch (err) {
+                document.getElementById('test_out').innerText = 'ERROR: ' + err.message + ' ' + err.stack;
+            }
+        })();
+    </script>
+
+
+</body></html>

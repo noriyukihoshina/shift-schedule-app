@@ -190,9 +190,6 @@ document.addEventListener('DOMContentLoaded', () => {
     // ※ 備考（remarks）はターム固有情報のためマスターには含めず、ターム間での混入・引き継ぎを防止する
     function saveStaffMaster() {
         try {
-            if (isST) {
-                ensureSTMasterIntegrity();
-            }
             const masterList = staffList.map(s => {
                 enforceRoleExclusivity(s);
                 return {
@@ -215,45 +212,10 @@ document.addEventListener('DOMContentLoaded', () => {
                     prevName: cleanTextValue(s.prevName || '')
                 };
             });
-            localStorage.setItem(STORAGE_KEY_STAFF_MASTER, JSON.stringify(masterList));
+            window.localStorage.setItem(STORAGE_KEY_STAFF_MASTER, JSON.stringify(masterList));
         } catch (e) {
             console.error('スタッフマスターの保存に失敗:', e);
         }
-    }
-
-    // ★ STテーブル専用：添付1の公認標準配置（4フロア各4名、専従4名、役職4名、スケ可8名）を永続保証する完全性修復
-    function ensureSTMasterIntegrity() {
-        if (!isST) return false;
-        const hasChiefs = staffList.some(s => s.isSectionChief) && staffList.filter(s => s.isSubChief).length >= 3;
-        const fullTimeCount = staffList.filter(s => s.isFullTime).length;
-        const f1Count = staffList.filter(s => s.floor === '1F').length;
-        const f2Count = staffList.filter(s => s.floor === '2F').length;
-        const f3Count = staffList.filter(s => s.floor === '3F').length;
-        const fSouthCount = staffList.filter(s => s.floor === '南').length;
-
-        // 専従が4名未満、または副主任が3名未満、または各階所属が崩れている場合は公認標準配置を強制修復・適用
-        if (!hasChiefs || fullTimeCount < 4 || f1Count < 4 || f2Count < 4 || f3Count < 4 || fSouthCount < 4) {
-            console.log('STテーブルの不完全なトグルマスターを検知しました。添付1の公認標準配置に自動修復・固定します。');
-            for (let i = 1; i <= NUM_STAFF; i++) {
-                const s = staffList[i - 1];
-                if (!s) continue;
-                s.floor = (i <= 4) ? '1F' : ((i <= 8) ? '2F' : ((i <= 12) ? '3F' : ((i <= 16) ? '南' : '')));
-                s.isUnused = (i > 16);
-                s.canSched = (i === 1 || i === 2 || i === 5 || i === 6 || i === 9 || i === 10 || i === 13 || i === 14);
-                s.isSectionChief = (i === 1);
-                s.isChief = false;
-                s.isSubChief = (i === 5 || i === 9 || i === 13);
-                s.isFullTime = (i === 3 || i === 8 || i === 12 || i === 16);
-                s.isHalf = false;
-                s.allow6Consec = false;
-                s.noEarly = false;
-                s.noLate = true;
-                s.noEve = true;
-                enforceRoleExclusivity(s);
-            }
-            return true;
-        }
-        return false;
     }
 
     function applyMasterArrayToStaffList(masterList) {
@@ -262,7 +224,7 @@ document.addEventListener('DOMContentLoaded', () => {
             if (staffList[idx] && ms) {
                 staffList[idx].name = cleanTextValue(ms.name) || staffList[idx].name;
                 staffList[idx].isUnused = ms.isUnused !== undefined ? !!ms.isUnused : staffList[idx].isUnused;
-                staffList[idx].floor = ms.floor || staffList[idx].floor || '';
+                staffList[idx].floor = ms.floor !== undefined ? ms.floor : staffList[idx].floor;
                 staffList[idx].section = ms.section || '';
                 staffList[idx].can8 = ms.can8 !== undefined ? !!ms.can8 : staffList[idx].can8;
                 staffList[idx].noEarly = !!ms.noEarly;
@@ -283,39 +245,21 @@ document.addEventListener('DOMContentLoaded', () => {
         if (staffList.length > NUM_STAFF) {
             staffList = staffList.slice(0, NUM_STAFF);
         }
-        if (isST) {
-            ensureSTMasterIntegrity();
-        }
         return true;
     }
 
     function loadStaffMaster() {
         try {
-            let raw = localStorage.getItem(STORAGE_KEY_STAFF_MASTER);
+            let raw = window.localStorage.getItem(STORAGE_KEY_STAFF_MASTER);
             if (!raw && !isST) {
                 // 旧キーからのフォールバック救済（※ STは他病棟キーと混同しないようフォールバック禁止）
-                raw = localStorage.getItem('shift_schedule_staff_master');
+                raw = window.localStorage.getItem('shift_schedule_staff_master');
             }
-            if (!raw) {
-                if (isST) {
-                    ensureSTMasterIntegrity();
-                    saveStaffMaster();
-                    return true;
-                }
-                return false;
-            }
+            if (!raw) return false;
             const masterList = JSON.parse(raw);
-            const res = applyMasterArrayToStaffList(masterList);
-            if (isST && ensureSTMasterIntegrity()) {
-                saveStaffMaster();
-            }
-            return res;
+            return applyMasterArrayToStaffList(masterList);
         } catch (e) {
             console.error('スタッフマスターの読込に失敗:', e);
-            if (isST) {
-                ensureSTMasterIntegrity();
-                saveStaffMaster();
-            }
             return false;
         }
     }
@@ -527,29 +471,6 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     }
 
-    // ★ PCブラウザの window.localStorage には一切データを残さず、メモリキャッシュ（_cloudMem）＋クラウドのみで管理
-    const _cloudMem = new Map();
-    try {
-        // 既存のブラウザ内 localStorage に残っている過去データがあれば、初回クラウド未同期時の保険としてメモリに移した上でブラウザから完全消去する
-        const keysToClean = [];
-        for (let i = 0; i < window.localStorage.length; i++) {
-            const k = window.localStorage.key(i);
-            if (k && k.startsWith('shift_schedule_')) {
-                _cloudMem.set(k, window.localStorage.getItem(k));
-                keysToClean.push(k);
-            }
-        }
-        keysToClean.forEach(k => window.localStorage.removeItem(k));
-    } catch (e) {}
-
-    // このスコープ内の localStorage 操作はすべてインメモリ（_cloudMem）に向け、ブラウザには一切保存しない
-    const localStorage = {
-        getItem(k) { return _cloudMem.has(String(k)) ? _cloudMem.get(String(k)) : null; },
-        setItem(k, v) { _cloudMem.set(String(k), String(v)); },
-        removeItem(k) { _cloudMem.delete(String(k)); },
-        key(i) { return Array.from(_cloudMem.keys())[i] ?? null; },
-        get length() { return _cloudMem.size; }
-    };
 
     // ==========================================
     // ★ クラウド自動保存 ＆ 別PC間リアルタイム同期エンジン
@@ -703,34 +624,32 @@ document.addEventListener('DOMContentLoaded', () => {
 
             isRestoringFromCloud = true;
             try {
-                // クラウドのみを正とするため、メモリキャッシュを一度クリアしてクラウドデータで完全同期
-                _cloudMem.clear();
-
                 // 1. スタッフマスター（全トグル・役職・所属・氏名・備考）のクラウド復元
-                let stRepaired = false;
-                if (Array.isArray(cloud.staffMaster) && cloud.staffMaster.length > 0) {
-                    localStorage.setItem(STORAGE_KEY_STAFF_MASTER, JSON.stringify(cloud.staffMaster));
-                    applyMasterArrayToStaffList(cloud.staffMaster);
-                    if (isST) {
-                        stRepaired = ensureSTMasterIntegrity();
+                // ※ ローカルにすでにマスターが存在する場合、勝手にクラウドのデータで上書きせずローカルを優先
+                const localMasterRaw = window.localStorage.getItem(STORAGE_KEY_STAFF_MASTER);
+                if (!localMasterRaw || showToastMsg) {
+                    if (Array.isArray(cloud.staffMaster) && cloud.staffMaster.length > 0) {
+                        window.localStorage.setItem(STORAGE_KEY_STAFF_MASTER, JSON.stringify(cloud.staffMaster));
+                        applyMasterArrayToStaffList(cloud.staffMaster);
                     }
-                } else if (isST) {
-                    stRepaired = ensureSTMasterIntegrity();
                 }
 
                 // 2. 全保存タームデータのクラウド復元
                 if (cloud.terms && typeof cloud.terms === 'object') {
                     Object.keys(cloud.terms).forEach(tDate => {
                         if (cloud.terms[tDate]) {
-                            localStorage.setItem(`${STORAGE_KEY_PREFIX}${tDate}`, JSON.stringify(cloud.terms[tDate]));
+                            const curLocal = window.localStorage.getItem(`${STORAGE_KEY_PREFIX}${tDate}`);
+                            if (!curLocal || showToastMsg) {
+                                window.localStorage.setItem(`${STORAGE_KEY_PREFIX}${tDate}`, JSON.stringify(cloud.terms[tDate]));
+                            }
                         }
                     });
                 }
 
-                // 3. 保存済みターム一覧の同期（クラウド上のターム一覧を正とする）
+                // 3. 保存済みターム一覧の同期
                 if (Array.isArray(cloud.savedTerms)) {
                     const sortedTerms = Array.from(new Set(cloud.savedTerms)).sort();
-                    localStorage.setItem(STORAGE_KEY_SAVED_TERMS, JSON.stringify(sortedTerms));
+                    window.localStorage.setItem(STORAGE_KEY_SAVED_TERMS, JSON.stringify(sortedTerms));
                 }
 
                 // 4. 表示中タームの再読込＆画面反映
@@ -742,13 +661,13 @@ document.addEventListener('DOMContentLoaded', () => {
                 const finalDate = matchedTerm ? matchedTerm.startDate : targetTermDate;
 
                 currentWorkingStartDate = finalDate;
-                localStorage.setItem(STORAGE_KEY_LAST_ACTIVE, finalDate);
+                window.localStorage.setItem(STORAGE_KEY_LAST_ACTIVE, finalDate);
                 const dateInput = document.getElementById('termStartDate');
                 if (dateInput) dateInput.value = finalDate;
                 const termSelect = document.getElementById('termSelect');
                 if (termSelect) termSelect.value = finalDate;
 
-                if (localStorage.getItem(`${STORAGE_KEY_PREFIX}${finalDate}`)) {
+                if (window.localStorage.getItem(`${STORAGE_KEY_PREFIX}${finalDate}`)) {
                     loadTermFromStorage(finalDate);
                 } else {
                     loadStaffMaster();
@@ -759,12 +678,6 @@ document.addEventListener('DOMContentLoaded', () => {
             } finally {
                 isRestoringFromCloud = false;
                 isCloudInitialSyncDone = true;
-            }
-
-            if (stRepaired) {
-                saveStaffMaster();
-                saveCurrentTermToStorage();
-                pushStateToCloud(false);
             }
 
             setCloudStatusBadge('synced');
@@ -7145,12 +7058,9 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     }
 
-    // ★ 別PCで変更された後、このPCのブラウザ画面に戻ってきた際にも自動でクラウド同期
+    // ★ タブが非表示になった瞬間に未送信のローカル変更があれば直ちにクラウドへフラッシュ同期
     document.addEventListener('visibilitychange', () => {
-        if (document.visibilityState === 'visible' && isCloudInitialSyncDone && !isCloudSyncInFlight && !cloudSyncTimer) {
-            pullStateFromCloud(false, false);
-        } else if (document.visibilityState === 'hidden') {
-            // タブが非表示になった瞬間に未送信のクラウド変更があれば直ちにフラッシュ同期
+        if (document.visibilityState === 'hidden') {
             if (cloudSyncTimer) {
                 clearTimeout(cloudSyncTimer);
                 cloudSyncTimer = null;

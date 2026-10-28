@@ -1,0 +1,66 @@
+<!DOCTYPE html>
+<html><head><meta charset="utf-8"></head>
+<body>
+<div id="res">PENDING</div>
+<iframe id="f" src="ST.html" style="width:1200px; height:800px;"></iframe>
+<script>
+window.onload = function() {
+    const f = document.getElementById('f');
+    let step = 1;
+
+    f.onload = function() {
+        if (step === 1) {
+            // Step 1: ST.html初回ロード
+            step = 2;
+            setTimeout(() => {
+                const doc = f.contentDocument;
+                // ST 04 (index 3) の専従を ON にする
+                const fullChk4 = doc.querySelector('input[data-flag="isFullTime"][data-s="3"]');
+                if (fullChk4) {
+                    fullChk4.checked = true;
+                    fullChk4.dispatchEvent(new Event('change', { bubbles: true }));
+                }
+
+                // ST 07 (index 6) の所属を 1F に変更してみる
+                const f1Chk7 = doc.querySelector('input[data-floor="1F"][data-s="6"]');
+                if (f1Chk7) {
+                    f1Chk7.checked = true;
+                    f1Chk7.dispatchEvent(new Event('change', { bubbles: true }));
+                }
+
+                setTimeout(() => {
+                    // PO (1f.html) に遷移！
+                    f.src = '1f.html';
+                }, 500);
+            }, 800);
+        } else if (step === 2) {
+            // Step 2: 1f.html ロード完了
+            step = 3;
+            setTimeout(() => {
+                // 再度 ST.html に戻る！
+                f.src = 'ST.html';
+            }, 500);
+        } else if (step === 3) {
+            // Step 3: ST.html に戻ってきた！
+            step = 4;
+            setTimeout(() => {
+                const doc = f.contentDocument;
+                const fullChk4 = doc.querySelector('input[data-flag="isFullTime"][data-s="3"]');
+                const f1Chk7 = doc.querySelector('input[data-floor="1F"][data-s="6"]');
+
+                const isFull4 = fullChk4 ? fullChk4.checked : false;
+                const isF1_7 = f1Chk7 ? f1Chk7.checked : false;
+
+                if (isFull4 && isF1_7) {
+                    document.getElementById('res').innerText = 'SUCCESS_PERSISTED: ST04_FullTime=' + isFull4 + ', ST07_Floor1F=' + isF1_7;
+                } else {
+                    document.getElementById('res').innerText = 'FAIL_RESET: ST04_FullTime=' + isFull4 + ', ST07_Floor1F=' + isF1_7;
+                }
+            }, 800);
+        }
+    };
+};
+</script>
+
+
+</body></html>
