@@ -242,6 +242,9 @@ document.addEventListener('DOMContentLoaded', () => {
                 enforceRoleExclusivity(staffList[idx]);
             }
         });
+        if (staffList.length > NUM_STAFF) {
+            staffList = staffList.slice(0, NUM_STAFF);
+        }
         return true;
     }
 
@@ -329,7 +332,7 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     checkDeptAuthentication();
-    const NUM_STAFF = 60;
+    const NUM_STAFF = (window.APP_CONFIG && (window.APP_CONFIG.isST || window.APP_CONFIG.deptId === 'st')) ? 36 : 60;
     let NUM_DAYS = 28;
     const WEEKDAYS = ['月', '火', '水', '木', '金', '土', '日'];
 
@@ -916,6 +919,9 @@ document.addEventListener('DOMContentLoaded', () => {
                     staffList[idx].days = loadedDays.slice(0, NUM_DAYS);
                 }
             });
+            if (staffList.length > NUM_STAFF) {
+                staffList = staffList.slice(0, NUM_STAFF);
+            }
 
             // ★ スタッフマスターが存在する場合は、トグル・役職・所属・氏名等のマスター設定を最優先で同期！
             // （※備考 remarks はターム固有情報のため、当該タームの remarks をそのまま維持しマスターからは引き継がない）
@@ -4179,7 +4185,7 @@ document.addEventListener('DOMContentLoaded', () => {
             html += `<tr style="background:${fc.bg}; border-bottom: 2px solid ${fc.border};">
                 <td class="sticky-col-2" style="background:${fc.bg}; border-right:2px solid #475569; padding:4px 6px;">
                     <button type="button" class="btn btn-outline toggle-master-floor-btn" data-floor="${fc.id}" style="width:100%; font-size:0.75rem; padding:2px 6px; font-weight:700; background:#ffffff; color:${fc.badgeColor}; border-color:${fc.border}; box-shadow: 0 1px 2px rgba(0,0,0,0.05); cursor:pointer;">
-                        ⚡ ！表示する
+                        ⚡表示する
                     </button>
                 </td>`;
             for (let d = 0; d < numDays; d++) {
@@ -4266,7 +4272,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 rows.forEach(r => {
                     r.style.display = isCurrentlyHidden ? 'table-row' : 'none';
                 });
-                btn.innerHTML = isCurrentlyHidden ? '▲ ！折りたたむ' : '⚡ ！表示する';
+                btn.innerHTML = isCurrentlyHidden ? '▲折りたたむ' : '⚡表示する';
                 btn.style.background = isCurrentlyHidden ? '#f1f5f9' : '#ffffff';
             });
         });

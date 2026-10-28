@@ -6,3 +6,7 @@ zone_test_*.xlsx
 
 test_st_*
 gen_pages.ps1
+
+_test_*
+comprehensive_test*
+
