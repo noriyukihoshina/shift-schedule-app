@@ -502,11 +502,14 @@ function validateInitialState(staffList, options = {}) {
         }
 
         const totalFullTime = staffList.filter(s => !s.isUnused && s.isFullTime).length;
-        if (!options.isST && totalFullTime >= 3 && fullTimeAvailable < 3) {
-            errors.push(`【${dayNum}日目】「専従」スタッフの出勤可能人数が${fullTimeAvailable}名しかおらず、必要数（3名以上）を満たせません（専従スタッフの希望休重複をご確認ください）。`);
-        } else if (options.isST && totalFullTime >= 2 && fullTimeAvailable < 2) {
-            errors.push(`【${dayNum}日目】ST「専従」スタッフの出勤可能人数が${fullTimeAvailable}名しかおらず、必要数（2名）を満たせません（専従スタッフの希望休重複をご確認ください）。`);
-        }
+        const reqFT = options.isST ? 2 : (totalFullTime >= 4 ? 3 : (totalFullTime >= 2 ? 2 : 1));
+        const isFullTimeDeficient = (totalFullTime >= reqFT && fullTimeAvailable < reqFT);
+        if (isFullTimeDeficient) {
+            if (!options.isST) {
+                errors.push(`【${dayNum}日目】「専従」スタッフの出勤可能人数が${fullTimeAvailable}名しかおらず、必要数（${reqFT}名以上）を満たせません（専従スタッフの希望休重複をご確認ください）。`);
+            } else {
+                errors.push(`【${dayNum}日目】ST「専従」スタッフの出勤可能人数が${fullTimeAvailable}名しかおらず、必要数（2名）を満たせません（専従スタッフの希望休重複をご確認ください）。`);
+            }
             staffList.forEach((st, sIdx) => {
                 if (st.isUnused || !st.isFullTime) return;
                 const sym = st.days[d];
@@ -514,11 +517,27 @@ function validateInitialState(staffList, options = {}) {
                     conflictCells.push({
                         staffIndex: sIdx,
                         dayIndex: d,
-                        reason: `⚠️ ${dayNum}日目: 専従スタッフの希望休（${sym}）が重なり、専従3名以上を満たせません`
+                        reason: `⚠️ ${dayNum}日目: 専従スタッフの希望休（${sym}）が重なり、専従必要数（${options.isST ? 2 : 3}名以上）を満たせません`
                     });
                 }
             });
         }
+    }
+
+    // ★ STテーブル専用: スケ可が各階（1階, 2階, 3階, 南）に1名以上配置されているか初期制約チェック
+    if (options.isST) {
+        const targetFloors = [
+            { id: '1F', label: '1階' },
+            { id: '2F', label: '2階' },
+            { id: '3F', label: '3階' },
+            { id: '南', label: '南' }
+        ];
+        targetFloors.forEach(fl => {
+            const floorSchedCount = staffList.filter(s => !s.isUnused && (s.floor === fl.id || (s.floor && s.floor.includes(fl.label)) || s.floor === fl.label) && s.canSched).length;
+            if (floorSchedCount < 1) {
+                errors.push(`【ST階別制約エラー】${fl.label}（${fl.id}）に「スケ可」スタッフが1名も配置されていません。各階に1名以上の「スケ可」スタッフを設定してください。`);
+            }
+        });
     }
 
     return { errors, conflictCells };
@@ -1013,6 +1032,18 @@ class ShiftScheduler {
     solveST(options = {}) {
         const force = options && options.force === true;
 
+        // 事前バリデーション（forceでない場合のみ厳格チェック）
+        if (!force) {
+            const validation = validateInitialState(this.staffList, this.options);
+            if (validation.errors.length > 0) {
+                return {
+                    success: false,
+                    errors: validation.errors,
+                    conflictCells: validation.conflictCells
+                };
+            }
+        }
+
         // ステップ1: 事前入力されている特殊勤務（早）の翌日を休日に設定
         this.ensureHolidaysAfterPreAssignedSpecials();
 
@@ -1237,7 +1268,7 @@ class ShiftScheduler {
                     schedStaff.push(s);
                 }
             }
-            if (schedStaff.length < 2) return; // スケ可スタッフがフロアに2名以上いる場合に保証
+            if (schedStaff.length < 1) return; // スケ可スタッフがフロアに1名以上いる場合に保証
 
             for (let d = 0; d < this.numDays; d++) {
                 let workingCount = 0;
@@ -4258,8 +4289,9 @@ class ShiftScheduler {
                 }
             }
             const totalFullTime = this.staffList.filter(s => !s.isUnused && s.isFullTime).length;
-            if (totalFullTime >= 3 && fullTimeWorkCount < 3) {
-                errors.push(`【${dayNum}日目】「専従」スタッフの出勤が${fullTimeWorkCount}名しかいません（要件: 3名以上、出張除く）。`);
+            const reqFT = this.isST ? 2 : (totalFullTime >= 4 ? 3 : (totalFullTime >= 2 ? 2 : 1));
+            if (totalFullTime >= reqFT && fullTimeWorkCount < reqFT) {
+                errors.push(`【${dayNum}日目】「専従」スタッフの出勤が${fullTimeWorkCount}名しかいません（要件: ${reqFT}名以上、出張除く）。`);
             }
         }
 

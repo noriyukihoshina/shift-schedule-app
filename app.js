@@ -1,4 +1,4 @@
-﻿/**
+/**
  * 勤務表作成システム - アプリケーションロジック (app.js)
  * 最新版:
  * - 8時可フラグ: 1〜9番目のスタッフのみON（現場の実態に完全一致）
@@ -507,28 +507,27 @@ document.addEventListener('DOMContentLoaded', () => {
         const dot = document.getElementById('autoSaveStatusDot');
         if (!badgeText) return;
 
-        const nowStr = new Date().toLocaleTimeString('ja-JP', { hour: '2-digit', minute: '2-digit' });
+        const nowStr = new Date().toLocaleTimeString('ja-JP', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
         if (mode === 'syncing') {
-            badgeText.textContent = customText || '☁️ クラウドへ自動保存中...';
+            badgeText.textContent = customText || `🔄 自動保存中... (${nowStr})`;
             if (badge) { badge.style.background = '#eff6ff'; badge.style.color = '#1d4ed8'; badge.style.borderColor = '#93c5fd'; }
             if (dot) dot.style.background = '#3b82f6';
         } else if (mode === 'synced') {
-            badgeText.textContent = customText || `☁️ クラウド自動保存済 (${nowStr}) [クラウド専用]`;
+            badgeText.textContent = customText || `🟢 自動保存済み (${nowStr})`;
             if (badge) { badge.style.background = '#ecfdf5'; badge.style.color = '#047857'; badge.style.borderColor = '#a7f3d0'; }
             if (dot) dot.style.background = '#10b981';
         } else {
-            badgeText.textContent = customText || `☁️ クラウド保存待機中 (${nowStr})`;
-            if (badge) { badge.style.background = '#fef3c7'; badge.style.color = '#b45309'; badge.style.borderColor = '#fcd34d'; }
-            if (dot) dot.style.background = '#f59e0b';
+            badgeText.textContent = customText || `🟢 自動保存済み (${nowStr})`;
+            if (badge) { badge.style.background = '#ecfdf5'; badge.style.color = '#047857'; badge.style.borderColor = '#a7f3d0'; }
+            if (dot) dot.style.background = '#10b981';
         }
     }
 
     function updateSaveStatusUI(savedDate) {
-        const timeStr = (savedDate || new Date()).toLocaleTimeString('ja-JP', { hour: '2-digit', minute: '2-digit' });
+        const timeStr = (savedDate || new Date()).toLocaleTimeString('ja-JP', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+        setCloudStatusBadge('synced', `🟢 自動保存済み (${timeStr})`);
         if (isCloudInitialSyncDone && !isRestoringFromCloud) {
             scheduleCloudSync();
-        } else {
-            setCloudStatusBadge('syncing', `☁️ クラウド同期中 (${timeStr})`);
         }
     }
 
@@ -2101,6 +2100,7 @@ document.addEventListener('DOMContentLoaded', () => {
                             cell.classList.add('fixed-cell');
                             showToast(`🛡️ No.${staffList[s].id} を事前固定「○」（赤字保護）に設定しました`);
                         }
+                        saveCurrentTermToStorage(); // ★ Pトグル変更時も即時自動保存！
                     }
                     return;
                 }
@@ -2111,6 +2111,7 @@ document.addEventListener('DOMContentLoaded', () => {
                         pushHistory();
                         staffList[s].prevDays[p] = newSym;
                         cell.textContent = newSym;
+                        saveCurrentTermToStorage(); // ★ 前月実績変更時も即時自動保存！
                     }
                 } else if (type === 'day') {
                     const d = parseInt(cell.dataset.d, 10);
@@ -2134,6 +2135,7 @@ document.addEventListener('DOMContentLoaded', () => {
                             if (hasHighlights || hasBanner) {
                                 checkInputConstraints(false);
                             }
+                            saveCurrentTermToStorage(); // ★ セル編集時も即時自動保存！
                         };
 
                         if (oldSym && oldSym !== '') {
@@ -3595,10 +3597,15 @@ document.addEventListener('DOMContentLoaded', () => {
                 { key: '南', label: '南', bg: '#faf5ff', color: '#7e22ce' }
             ];
 
+            const matchedStaffSet = new Set();
             stFloors.forEach((fl) => {
                 const flStaffIndices = validStaffIndices.filter(s => {
                     const st = staffList[s];
-                    return st.floor === fl.key || (st.floor && st.floor.includes(fl.key));
+                    if (!st) return false;
+                    const flVal = (st.floor || '').trim();
+                    const isMatch = (flVal === fl.key || flVal === fl.label || flVal.includes(fl.key) || flVal.includes(fl.label));
+                    if (isMatch) matchedStaffSet.add(s);
+                    return isMatch;
                 });
 
                 // 並び順: 係長 → 主任 → 副主任 → 希望入力ページの記載順
@@ -3618,7 +3625,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
                 flStaffIndices.forEach((s, idxInFl) => {
                     const staff = staffList[s];
-                    const staffStat = stats.staffStats[s] || { workDays:0, offDays:0, paidDays:0, refDays:0, early:0, late:0, eve:0, h8:0 };
+                    const staffStat = (stats && stats.staffStats && stats.staffStats[s]) || { workDays:0, offDays:0, paidDays:0, refDays:0, early:0, late:0, eve:0, h8:0 };
                     const isLastInFloor = (idxInFl === flStaffIndices.length - 1);
                     // 添付3の太い黒境界線！
                     const rowBorderB = isLastInFloor ? 'border-bottom: 3px solid #1e293b !important;' : '';
@@ -3630,7 +3637,7 @@ document.addEventListener('DOMContentLoaded', () => {
                     bodyHtml += `<td class="sticky-col-2 border-thick-right" style="text-align:left; padding-left:8px; font-weight:700; ${rowBorderB}">${escapeHtmlText(staff.name)}</td>`;
 
                     for (let d = 0; d < NUM_DAYS; d++) {
-                        const cell = grid[s][d] || { symbol: '' };
+                        const cell = (grid && grid[s] && grid[s][d]) ? grid[s][d] : { symbol: '' };
                         const displaySym = cell.symbol ? cell.symbol.replace(/[◦•･◯〇●]/g, '○') : '';
                         const cls = cell.isFixed ? 'day-cell fixed-cell' : 'day-cell auto-cell';
                         const thickCls = ((d + 1) % 7 === 0) ? 'border-thick-right' : '';
@@ -3651,6 +3658,38 @@ document.addEventListener('DOMContentLoaded', () => {
                     </tr>`;
                 });
             });
+
+            // ★ 万が一どのフロアにも属していないスタッフがいた場合のフォールバック表示（行消滅を物理防止）
+            const unassignedStaffIndices = validStaffIndices.filter(s => !matchedStaffSet.has(s));
+            if (unassignedStaffIndices.length > 0) {
+                unassignedStaffIndices.forEach((s, idxInFl) => {
+                    const staff = staffList[s];
+                    const staffStat = (stats && stats.staffStats && stats.staffStats[s]) || { workDays:0, offDays:0, paidDays:0, refDays:0, early:0, late:0, eve:0, h8:0 };
+                    bodyHtml += `<tr>`;
+                    if (idxInFl === 0) {
+                        bodyHtml += `<td class="sticky-col-1 border-thick-right" rowspan="${unassignedStaffIndices.length}" style="background:#fef2f2; color:#b91c1c; font-weight:800; font-size:0.95rem; text-align:center; vertical-align:middle;">未設定</td>`;
+                    }
+                    bodyHtml += `<td class="sticky-col-2 border-thick-right" style="text-align:left; padding-left:8px; font-weight:700;">${escapeHtmlText(staff.name)}</td>`;
+                    for (let d = 0; d < NUM_DAYS; d++) {
+                        const cell = (grid && grid[s] && grid[s][d]) ? grid[s][d] : { symbol: '' };
+                        const displaySym = cell.symbol ? cell.symbol.replace(/[◦•･◯〇●]/g, '○') : '';
+                        const cls = cell.isFixed ? 'day-cell fixed-cell' : 'day-cell auto-cell';
+                        const thickCls = ((d + 1) % 7 === 0) ? 'border-thick-right' : '';
+                        bodyHtml += `<td class="${cls} ${thickCls}" data-s="${s}" data-d="${d}">${displaySym}</td>`;
+                    }
+                    bodyHtml += `
+                        <td class="stat-cell" data-s="${s}" data-stat="work">${staffStat.workDays}</td>
+                        <td class="stat-cell" data-s="${s}" data-stat="off">${staffStat.offDays}</td>
+                        <td class="stat-cell" data-s="${s}" data-stat="paid">${staffStat.paidDays}</td>
+                        <td class="stat-cell" data-s="${s}" data-stat="ref">${staffStat.refDays}</td>
+                        <td class="stat-cell" data-s="${s}" data-stat="early">${staffStat.early}</td>
+                        <td class="stat-cell" data-s="${s}" data-stat="late">-</td>
+                        <td class="stat-cell" data-s="${s}" data-stat="eve">-</td>
+                        <td class="stat-cell" data-s="${s}" data-stat="h8">-</td>
+                        <td class="remarks-cell" style="min-width:220px; max-width:320px; text-align:left; font-size:0.8rem; color:#475569; padding:2px 8px;">${escapeHtmlText(staff.remarks || '')}</td>
+                    </tr>`;
+                });
+            }
         } else {
             validStaffIndices.forEach((s, outIdx) => {
                 const staff = staffList[s];
@@ -4353,6 +4392,7 @@ document.addEventListener('DOMContentLoaded', () => {
                     showToast(cellData.isFixed
                         ? `🛡️ 【No.${staff.id} ${staff.name}】${dateInfo.label} をプロテクト（固定希望・赤字）に設定しました`
                         : `🔓 【No.${staff.id} ${staff.name}】${dateInfo.label} のプロテクトを解除しました`);
+                    saveCurrentTermToStorage(); // ★ 修正作業エリアでのプロテクト操作を即時自動保存！
                     return;
                 }
 
@@ -4388,6 +4428,7 @@ document.addEventListener('DOMContentLoaded', () => {
                     } else {
                         checkFinalConstraints(false);
                     }
+                    saveCurrentTermToStorage(); // ★ 修正作業エリアでのセル編集を即時自動保存！
                 };
 
                 // ★ 事前固定希望枠（赤字）を修正する場合はポップアップで確認
