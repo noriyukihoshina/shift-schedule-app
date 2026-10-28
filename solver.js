@@ -1272,21 +1272,82 @@ class ShiftScheduler {
                     const prevRemainsHoliday = isHolidaySymbol(prevSym) && (swapDay !== d - 1);
                     if (prevRemainsHoliday) continue;
 
-                    // ★ 要件: 「8時が複数回ある人は早・遅など特殊をやや少なめにして」
-                    // 8時(counts.h8[s])が2回以上あるスタッフには、特殊勤務(早・遅・E)がやや少なめ（他スタッフより1〜2回程度少なめ）になるよう調整
-                    let h8Penalty = 0;
-                    if (counts.h8[s] >= 2) {
-                        h8Penalty = 150 + (counts.h8[s] - 2) * 75;
-                        if (counts.total[s] >= 3) h8Penalty += 120;
-                        if (counts.total[s] >= 4) h8Penalty += 300;
-                    } else if (counts.h8[s] === 1) {
-                        h8Penalty = 25;
+                    // ★ 要件①: 「早と遅とEをもっと平均化して欲しい。1ターム早84回、遅28回、E56回、計168個。人数で平均化。その際8時の人は早・遅・Eは合わせて3つ程度にして」
+                    const is8ClockStaff = !!this.staffList[s].can8;
+
+                    // 1. 合計回数ペナルティ（早+遅+E）
+                    let totalCountPenalty = 0;
+                    if (is8ClockStaff) {
+                        // 8時担当スタッフ: 早・遅・Eの合計は「3つ程度」
+                        if (counts.total[s] >= 3) {
+                            totalCountPenalty = 100000 + (counts.total[s] - 3) * 50000; // 3回に達したら原則割当終了
+                        } else if (counts.total[s] === 2) {
+                            totalCountPenalty = 4000;
+                        } else if (counts.total[s] === 1) {
+                            totalCountPenalty = 500;
+                        } else {
+                            totalCountPenalty = -2000; // 0回のスタッフを優先
+                        }
+                    } else {
+                        // 8時以外の一般スタッフ: 合計平均は約4回（144回 / 36名 = 4.0回）
+                        if (counts.total[s] >= 5) {
+                            totalCountPenalty = 100000 + (counts.total[s] - 5) * 50000; // 5回以上は超厳格に抑える
+                        } else if (counts.total[s] === 4) {
+                            totalCountPenalty = 25000; // 目標4回に達したスタッフは強い抑制
+                        } else if (counts.total[s] === 3) {
+                            totalCountPenalty = 3000;
+                        } else if (counts.total[s] === 2) {
+                            totalCountPenalty = 500;
+                        } else if (counts.total[s] === 1) {
+                            totalCountPenalty = -1000;
+                        } else {
+                            totalCountPenalty = -4000; // まだ0回のスタッフを最優先！
+                        }
                     }
-                    // 全体でも特定スタッフに特殊勤務が6回以上偏らないようソフトキャップを付与
-                    const highCountPenalty = counts.total[s] >= 6 ? (counts.total[s] - 5) * 280 : (counts.total[s] === 5 ? 90 : 0);
+
+                    // 2. 勤務種別（早・遅・E）ごとの平均化ペナルティ
+                    let dutyTypePenalty = 0;
+                    if (req.key === 'late') {
+                        // 遅番: 1ターム28回＝スタッフ44名に対し28回のため「1人あたり最大1回」！
+                        if (counts.late[s] >= 1) {
+                            dutyTypePenalty = 150000 + counts.late[s] * 30000; // 2回目は原則絶対禁止！
+                        } else {
+                            dutyTypePenalty = 0; // 0回の人から選ぶ
+                        }
+                    } else if (req.key === 'eve') {
+                        // E: 1ターム56回＝スタッフ44名に対し56回（1人あたり1.27回＝1〜2回）
+                        if (counts.eve[s] >= 2) {
+                            dutyTypePenalty = 80000 + (counts.eve[s] - 2) * 30000; // 3回目は極力禁止
+                        } else if (counts.eve[s] === 1) {
+                            dutyTypePenalty = 5000; // 1回ある人は抑えめ
+                        } else {
+                            dutyTypePenalty = -2500; // 0回の人を優先
+                        }
+                    } else if (req.key === 'early') {
+                        // 早番: 1ターム84回＝一般スタッフは1人あたり約2.0回、8時スタッフは1〜2回
+                        if (is8ClockStaff) {
+                            if (counts.early[s] >= 2) {
+                                dutyTypePenalty = 60000 + (counts.early[s] - 2) * 20000;
+                            } else if (counts.early[s] === 1) {
+                                dutyTypePenalty = 2000;
+                            } else {
+                                dutyTypePenalty = -1000;
+                            }
+                        } else {
+                            if (counts.early[s] >= 3) {
+                                dutyTypePenalty = 80000 + (counts.early[s] - 3) * 30000; // 3回以上は強く禁止
+                            } else if (counts.early[s] === 2) {
+                                dutyTypePenalty = 12000; // 目標2回に達した人は抑制
+                            } else if (counts.early[s] === 1) {
+                                dutyTypePenalty = 800;
+                            } else {
+                                dutyTypePenalty = -3500; // まだ早番0回のスタッフを最優先！
+                            }
+                        }
+                    }
 
                     // スコア計算:
-                    let score = counts.total[s] * 100 + counts[req.key][s] * 15 + h8Penalty + highCountPenalty;
+                    let score = totalCountPenalty + dutyTypePenalty;
                     if (swapDay >= 0) {
                         // スワップが必要な場合は優先度を下げ、さらにスワップによる実数合計の偏り影響を加味
                         const d1Load = this.getDailyEffectiveRealLoad(d + 1);
@@ -1365,8 +1426,31 @@ class ShiftScheduler {
                         const nextSym = (d + 1 < this.numDays) ? this.getSymbol(s, d + 1) : '';
                         if (isHolidaySymbol(prevSym) && (d + 1 < this.numDays && isHolidaySymbol(nextSym))) continue;
 
-                        let h8Penalty = counts.h8[s] >= 2 ? (150 + (counts.h8[s] - 2) * 75) : (counts.h8[s] === 1 ? 25 : 0);
-                        let score = 50000 + counts.total[s] * 100 + counts[req.key][s] * 15 + h8Penalty;
+                        const is8ClockStaff = !!this.staffList[s].can8;
+                        let totalCountPenalty = 0;
+                        if (is8ClockStaff) {
+                            if (counts.total[s] >= 3) totalCountPenalty = 100000 + (counts.total[s] - 3) * 50000;
+                            else if (counts.total[s] === 2) totalCountPenalty = 4000;
+                            else if (counts.total[s] === 1) totalCountPenalty = 500;
+                            else totalCountPenalty = -2000;
+                        } else {
+                            if (counts.total[s] >= 5) totalCountPenalty = 100000 + (counts.total[s] - 5) * 50000;
+                            else if (counts.total[s] === 4) totalCountPenalty = 25000;
+                            else if (counts.total[s] === 3) totalCountPenalty = 3000;
+                            else if (counts.total[s] === 2) totalCountPenalty = 500;
+                            else if (counts.total[s] === 1) totalCountPenalty = -1000;
+                            else totalCountPenalty = -4000;
+                        }
+                        let dutyTypePenalty = 0;
+                        if (req.key === 'late') {
+                            dutyTypePenalty = counts.late[s] >= 1 ? 150000 : 0;
+                        } else if (req.key === 'eve') {
+                            dutyTypePenalty = counts.eve[s] >= 2 ? 80000 : (counts.eve[s] === 1 ? 5000 : -2500);
+                        } else if (req.key === 'early') {
+                            if (is8ClockStaff) dutyTypePenalty = counts.early[s] >= 2 ? 60000 : (counts.early[s] === 1 ? 2000 : -1000);
+                            else dutyTypePenalty = counts.early[s] >= 3 ? 80000 : (counts.early[s] === 2 ? 12000 : (counts.early[s] === 1 ? 800 : -3500));
+                        }
+                        let score = 500000 + totalCountPenalty + dutyTypePenalty;
                         if (this.staffList[s].canSched) score += 300;
                         if (d - lastDay[s] < 3) score += 200;
 
@@ -1410,8 +1494,160 @@ class ShiftScheduler {
             }
         }
 
+        // ★ 特殊勤務（早・遅・E）の回数平準化スワップ（8時スタッフ合計3回上限 ＆ 早・遅・Eの均等平均化）
+        this.balanceSpecialDuties();
+
         return { success: true };
     }
+
+    /**
+     * 特殊勤務（早・遅・E）の回数平準化スワップ
+     * - 8時スタッフの早・遅・E合計が3回以下（3回程度）になるよう最優先調整
+     * - 一般スタッフの合計を4回前後に平準化
+     * - 遅番を最大1回、Eを最大2回、早番を2回前後に平準化
+     */
+    balanceSpecialDuties() {
+        const is8 = (s) => !!this.staffList[s].can8;
+        const reqTypes = [
+            { type: SYMBOLS.LATE, key: 'late', noFlag: 'noLate', maxNormal: 1, matchSyms: [SYMBOLS.LATE, SYMBOLS.NO_ALLOW_LATE] },
+            { type: SYMBOLS.EVE, key: 'eve', noFlag: 'noEve', maxNormal: 2, matchSyms: [SYMBOLS.EVE, SYMBOLS.NO_ALLOW_EVE] },
+            { type: SYMBOLS.EARLY, key: 'early', noFlag: 'noEarly', maxNormal: 2, matchSyms: [SYMBOLS.EARLY, SYMBOLS.NO_ALLOW_EARLY] }
+        ];
+
+        for (let iter = 0; iter < 120; iter++) {
+            let improved = false;
+
+            // 各スタッフの現在回数を集計
+            const counts = {
+                early: new Array(this.numStaff).fill(0),
+                late: new Array(this.numStaff).fill(0),
+                eve: new Array(this.numStaff).fill(0),
+                total: new Array(this.numStaff).fill(0)
+            };
+            for (let s = 0; s < this.numStaff; s++) {
+                if (this.staffList[s].isUnused || this.staffList[s].isSectionChief) continue;
+                for (let d = 0; d < this.numDays; d++) {
+                    const sym = this.grid[s][d].symbol;
+                    if (sym === SYMBOLS.EARLY || sym === SYMBOLS.NO_ALLOW_EARLY) { counts.early[s]++; counts.total[s]++; }
+                    if (sym === SYMBOLS.LATE || sym === SYMBOLS.NO_ALLOW_LATE) { counts.late[s]++; counts.total[s]++; }
+                    if (sym === SYMBOLS.EVE || sym === SYMBOLS.NO_ALLOW_EVE) { counts.eve[s]++; counts.total[s]++; }
+                }
+            }
+
+            // 1. 8時スタッフで合計が4回以上になっている人を最優先で減らす
+            // 2. または一般スタッフで合計が5回以上になっている人を減らす
+            // 3. または特定勤務種別で上限を超えている人（遅>=2、E>=3、早>=3）を減らす
+            const overStaffList = [];
+            for (let s = 0; s < this.numStaff; s++) {
+                if (this.staffList[s].isUnused || this.staffList[s].isSectionChief) continue;
+                const limitTotal = is8(s) ? 3 : 4;
+                let overScore = 0;
+                if (counts.total[s] > limitTotal) overScore += (counts.total[s] - limitTotal) * 100;
+                if (counts.late[s] > 1) overScore += (counts.late[s] - 1) * 80;
+                if (counts.eve[s] > 2) overScore += (counts.eve[s] - 2) * 50;
+                if (!is8(s) && counts.early[s] > 2) overScore += (counts.early[s] - 2) * 30;
+                if (is8(s) && counts.early[s] > 2) overScore += (counts.early[s] - 1) * 40;
+
+                if (overScore > 0) {
+                    overStaffList.push({ staff: s, overScore, is8: is8(s) });
+                }
+            }
+            overStaffList.sort((a, b) => b.overScore - a.overScore);
+
+            outerLoop:
+            for (const overObj of overStaffList) {
+                const sHigh = overObj.staff;
+
+                // sHigh が特殊勤務を担当している日 d を探す
+                for (let d = 0; d < this.numDays; d++) {
+                    if (this.grid[sHigh][d].isFixed) continue; // 事前希望固定は動かさない
+                    const currentSym = this.grid[sHigh][d].symbol;
+                    let currentReq = null;
+                    if (currentSym === SYMBOLS.EARLY) currentReq = reqTypes[2];
+                    else if (currentSym === SYMBOLS.LATE) currentReq = reqTypes[0];
+                    else if (currentSym === SYMBOLS.EVE) currentReq = reqTypes[1];
+                    if (!currentReq) continue;
+
+                    // 交代候補 sLow を探す:
+                    for (let sLow = 0; sLow < this.numStaff; sLow++) {
+                        if (sLow === sHigh || this.staffList[sLow].isUnused || this.staffList[sLow].isSectionChief) continue;
+                        if (this.staffList[sLow][currentReq.noFlag]) continue;
+
+                        const sLowLimit = is8(sLow) ? 3 : 4;
+                        // 合計回数が上限未満のスタッフにのみ譲渡
+                        if (counts.total[sLow] >= sLowLimit) continue;
+                        if (counts[currentReq.key][sLow] >= currentReq.maxNormal) continue;
+
+                        // sLow の日 d が ○（未固定勤務）であること
+                        if (this.grid[sLow][d].isFixed || this.grid[sLow][d].symbol !== SYMBOLS.WORK) continue;
+
+                        // スケ可保護：sLow を特殊勤務に変更しても、日 d のスケ可かつ○が2名以上残るか
+                        if (this.staffList[sLow].canSched) {
+                            let remSched = 0;
+                            for (let oS = 0; oS < this.numStaff; oS++) {
+                                if (oS === sLow || this.staffList[oS].isUnused) continue;
+                                const oSym = (oS === sHigh) ? SYMBOLS.WORK : this.grid[oS][d].symbol;
+                                if (this.staffList[oS].canSched && oSym === SYMBOLS.WORK) remSched++;
+                            }
+                            if (remSched < 2) continue;
+                        }
+
+                        // 単発勤務防止: sLowが日dに特殊勤務を入れると1勤にならないか
+                        const prevSymLow = this.getSymbol(sLow, d - 1);
+                        const nextSymLow = (d + 1 < this.numDays) ? this.getSymbol(sLow, d + 1) : '';
+                        if (isHolidaySymbol(prevSymLow) && isHolidaySymbol(nextSymLow)) continue;
+
+                        // パターンA: sLow の翌日 d+1 が元々休日（または最終日）の場合
+                        if (d + 1 >= this.numDays || isHolidaySymbol(nextSymLow)) {
+                            this.setSymbol(sHigh, d, SYMBOLS.WORK, false);
+                            this.setSymbol(sLow, d, currentReq.type, false);
+
+                            const validHigh = this.isStaffHardValid(sHigh);
+                            const validLow = this.isStaffHardValid(sLow);
+                            const validGlobal = this.isGlobalAttributesValid();
+
+                            if (validHigh && validLow && validGlobal) {
+                                improved = true;
+                                break outerLoop;
+                            } else {
+                                // ロールバック
+                                this.setSymbol(sHigh, d, currentReq.type, false);
+                                this.setSymbol(sLow, d, SYMBOLS.WORK, false);
+                            }
+                        }
+                        // パターンB: sHighの翌日d+1が休日で、sLowの翌日d+1が○の場合（翌日休日もスワップ）
+                        else if (d + 1 < this.numDays &&
+                                 !this.grid[sHigh][d + 1].isFixed && isHolidaySymbol(this.grid[sHigh][d + 1].symbol) &&
+                                 !this.grid[sLow][d + 1].isFixed && this.grid[sLow][d + 1].symbol === SYMBOLS.WORK) {
+                            
+                            this.setSymbol(sHigh, d, SYMBOLS.WORK, false);
+                            this.setSymbol(sHigh, d + 1, SYMBOLS.WORK, false);
+                            this.setSymbol(sLow, d, currentReq.type, false);
+                            this.setSymbol(sLow, d + 1, SYMBOLS.OFF, false);
+
+                            const validHigh = this.isStaffHardValid(sHigh);
+                            const validLow = this.isStaffHardValid(sLow);
+                            const validGlobal = this.isGlobalAttributesValid();
+
+                            if (validHigh && validLow && validGlobal) {
+                                improved = true;
+                                break outerLoop;
+                            } else {
+                                // ロールバック
+                                this.setSymbol(sHigh, d, currentReq.type, false);
+                                this.setSymbol(sHigh, d + 1, SYMBOLS.OFF, false);
+                                this.setSymbol(sLow, d, SYMBOLS.WORK, false);
+                                this.setSymbol(sLow, d + 1, SYMBOLS.WORK, false);
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        if (!improved) break;
+    }
+}
 
     /**
      * ステップ4: 各スタッフの公休枠（28日間で8.0日、3月は8.5日）を厳密に充足し、残りを「○（日勤）」で確定

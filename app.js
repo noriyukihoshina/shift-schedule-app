@@ -3614,14 +3614,28 @@ document.addEventListener('DOMContentLoaded', () => {
             specEl.textContent = `早: ${totalEarly}回 / 遅: ${totalLate}回 / E: ${totalEve}回 / 8時: ${totalH8}回`;
         }
 
-        // --- 日別実数合計グラフ（平日・土曜・祝日で色分け） ---
+        // --- 日別実数合計グラフ（平日・土曜・祝日で色分け、MAX 40名 / MIN 25名 スケール） ---
         const chartEl = document.getElementById('dailyWorkChart');
         if (chartEl) {
             let chartHtml = '';
+            const minScale = 25;
+            const maxScale = 40;
+            const range = maxScale - minScale; // 15名
+
             stats.daily.forEach((d, idx) => {
                 const di = dates[idx];
                 const dispReal = d.realWork !== undefined ? d.realWork : d.totalWork;
-                const pct = Math.min(100, Math.max(10, (dispReal / 60) * 100));
+                // MAX 40名, MIN 25名 スケール。25名で下限5%、40名で100%
+                let pct = 5;
+                if (dispReal >= maxScale) {
+                    pct = 100;
+                } else if (dispReal >= minScale) {
+                    pct = 5 + ((dispReal - minScale) / range) * 95;
+                } else {
+                    // 25名未満の場合は消えないよう最小限のバー（3%〜4%）
+                    pct = Math.max(3, (dispReal / minScale) * 5);
+                }
+                pct = Math.min(100, Math.max(3, pct));
 
                 let barColor = '#3b82f6'; // 平日: 青
                 let dayLabelColor = '#64748b';
@@ -3635,9 +3649,9 @@ document.addEventListener('DOMContentLoaded', () => {
 
                 const dayBadge = di.isHoliday ? '祝' : di.weekday;
                 chartHtml += `
-                    <div style="flex:1; display:flex; flex-direction:column; align-items:center; gap:3px;" title="${di.label} (${di.weekday})${di.isHoliday ? ' 祝日' : ''}: 実数合計 ${dispReal}名 (出勤人数合計 ${d.totalWork}名)">
+                    <div style="flex:1; display:flex; flex-direction:column; align-items:center; gap:3px;" title="${di.label} (${di.weekday})${di.isHoliday ? ' 祝日' : ''}: 実数合計 ${dispReal}名 (出勤人数合計 ${d.totalWork}名 / スケール: 25〜40名)">
                         <span style="font-size:0.65rem; font-weight:700; color:#1e293b; white-space:nowrap;"><span style="font-size:0.55rem; color:#475569; font-weight:600;">実数</span>${dispReal}</span>
-                        <div style="width:100%; background:#f1f5f9; height:110px; border-radius:4px; display:flex; align-items:flex-end;">
+                        <div style="width:100%; background:#f1f5f9; height:110px; border-radius:4px; display:flex; align-items:flex-end; position:relative;">
                             <div style="width:100%; background:${barColor}; height:${pct}%; border-radius:4px; transition:height 0.3s;"></div>
                         </div>
                         <span style="font-size:0.68rem; font-weight:600; color:${dayLabelColor};">${d.day}</span>
