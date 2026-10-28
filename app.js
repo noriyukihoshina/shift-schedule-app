@@ -332,6 +332,18 @@ document.addEventListener('DOMContentLoaded', () => {
     let NUM_DAYS = 28;
     const WEEKDAYS = ['月', '火', '水', '木', '金', '土', '日'];
 
+    // ==========================================
+    // ★ 部署別設定 (APP_CONFIG) に対応したストレージキー動的生成 & STモード判定
+    // ==========================================
+    const appConfig = window.APP_CONFIG || { deptId: 'master', deptName: 'マスター統括', password: '' };
+    const isST = !!appConfig.isST || (appConfig.deptId === 'st');
+    const currentFloor = appConfig.floor || (appConfig.deptId === '1f' ? '1F' : (appConfig.deptId === '2f' ? '2F' : (appConfig.deptId === '3f' ? '3F' : (appConfig.deptId === 'south' ? '南' : ''))));
+    const deptPrefix = appConfig.deptId ? `${appConfig.deptId}_` : '';
+    const STORAGE_KEY_PREFIX = `shift_schedule_${deptPrefix}term_`;
+    const STORAGE_KEY_LAST_ACTIVE = `shift_schedule_${deptPrefix}last_active_start_date`;
+    const STORAGE_KEY_SAVED_TERMS = `shift_schedule_${deptPrefix}saved_terms`;
+    const STORAGE_KEY_STAFF_MASTER = `shift_schedule_${deptPrefix}staff_master`;
+
     let staffList = [];
     let currentSelectedSymbol = '休';
     let lastSolveResult = null;
@@ -340,8 +352,11 @@ document.addEventListener('DOMContentLoaded', () => {
     let autoAssignedRefKeys = new Set(); // "s,d" 自動配分されたリフセル（通常文字・編集自由扱い）
     let autoAssignedStaffIds = new Set(); // 自動配分対象となったスタッフID（誤消去検知用）
 
-    // ★ 日別出勤増減枠のデフォルト生成（ユーザー要望: 土日祝日はデフォルトで -2、平日は 0）
+    // ★ 日別出勤増減枠のデフォルト生成（STテーブルは常に全日0、通常POは土日祝日-2・平日0）
     function createDefaultDayOffsets(dates) {
+        if (isST) {
+            return new Array(NUM_DAYS).fill(0);
+        }
         const curDates = dates || (typeof getTermInfo === 'function' ? getTermInfo().dates : null);
         const arr = new Array(NUM_DAYS).fill(0);
         if (!curDates || !Array.isArray(curDates)) return arr;
@@ -360,7 +375,7 @@ document.addEventListener('DOMContentLoaded', () => {
         return arr;
     }
 
-    let dayOffsets = new Array(NUM_DAYS).fill(0); // 日別出勤増減枠（初期化時に土日祝日-2を適用）
+    let dayOffsets = new Array(NUM_DAYS).fill(0); // 日別出勤増減枠（STは全日0、通常POは初期化時に土日祝日-2を適用）
 
     // ★ Web Audio API による心地よい短い「ポン♪」通知音の再生
     function playNotificationSound() {
@@ -389,18 +404,6 @@ document.addEventListener('DOMContentLoaded', () => {
             // 音声非対応環境では静かにスキップ
         }
     }
-
-    // ==========================================
-    // ★ 部署別設定 (APP_CONFIG) に対応したストレージキー動的生成 & STモード判定
-    // ==========================================
-    const appConfig = window.APP_CONFIG || { deptId: 'master', deptName: 'マスター統括', password: '77777' };
-    const isST = !!appConfig.isST || (appConfig.deptId === 'st');
-    const currentFloor = appConfig.floor || (appConfig.deptId === '1f' ? '1F' : (appConfig.deptId === '2f' ? '2F' : (appConfig.deptId === '3f' ? '3F' : (appConfig.deptId === 'south' ? '南' : ''))));
-    const deptPrefix = appConfig.deptId ? `${appConfig.deptId}_` : '';
-    const STORAGE_KEY_PREFIX = `shift_schedule_${deptPrefix}term_`;
-    const STORAGE_KEY_LAST_ACTIVE = `shift_schedule_${deptPrefix}last_active_start_date`;
-    const STORAGE_KEY_SAVED_TERMS = `shift_schedule_${deptPrefix}saved_terms`;
-    const STORAGE_KEY_STAFF_MASTER = `shift_schedule_${deptPrefix}staff_master`;
 
     // スタッフデータの初期化（60名枠、ST時は初期16名、通常は48名運用）
     function initStaffData() {
@@ -925,7 +928,10 @@ document.addEventListener('DOMContentLoaded', () => {
 
             // 2.5 日別出勤増減枠（dayOffsets）の復元
             const defaultOffsets = createDefaultDayOffsets(term.dates);
-            if (Array.isArray(data.dayOffsets) && data.dayOffsets.length >= 28) {
+            if (isST) {
+                // ★ STテーブルはユーザー要望により日付の上下矢印（dayOffsets）は全日デフォルト0に固定
+                dayOffsets = new Array(NUM_DAYS).fill(0);
+            } else if (Array.isArray(data.dayOffsets) && data.dayOffsets.length >= 28) {
                 const hasAnyNonZero = data.dayOffsets.some(v => v !== 0);
                 // 古い月曜始まりダミー(d=5,6が土日)のまま水曜始まりタームに保存されてしまった古いデータの自動補正判定:
                 // 実際の土日祝(defaultOffsets === -2)の日のうち半分以上が0で、かつ実際の平日に-2が混入している場合はカレンダー整合補正
@@ -4843,6 +4849,10 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     function downloadBlankXlsx() {
+        if (isST) {
+            downloadBlankXlsxForST();
+            return;
+        }
         const term = getTermInfo();
         const numDays = term.dates.length;
         const title = `${term.first.m}月${term.first.day}日～${term.last.m}月${term.last.day}日 スタッフ希望勤務入力シート（希望勤務はプルダウンから選択してください）`;
@@ -5026,6 +5036,222 @@ document.addEventListener('DOMContentLoaded', () => {
             URL.revokeObjectURL(url);
         }, 2000);
         showToast('📄 スタッフ配布用の空白勤務表（.xlsx）をダウンロードしました！');
+    }
+
+    // ★ ST専用スタッフ希望勤務入力シート (.xlsx) のダウンロード実行
+    function downloadBlankXlsxForST() {
+        const term = getTermInfo();
+        const numDays = term.dates.length;
+        const title = `${term.first.m}月${term.first.day}日～${term.last.m}月${term.last.day}日 スタッフ希望勤務入力シート（希望勤務はプルダウンから選択してください）`;
+
+        const lastColLetter = toColLetter(1 + numDays); // 28日ならAC(列29), 29日ならAD(列30)
+
+        const contentTypes = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">
+  <Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/>
+  <Default Extension="xml" ContentType="application/xml"/>
+  <Override PartName="/xl/workbook.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml"/>
+  <Override PartName="/xl/worksheets/sheet1.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/>
+  <Override PartName="/xl/styles.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.styles+xml"/>
+</Types>`;
+
+        const rels = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">
+  <Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="xl/workbook.xml"/>
+</Relationships>`;
+
+        const workbook = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships">
+  <sheets>
+    <sheet name="希望入力シート" sheetId="1" r:id="rId1"/>
+  </sheets>
+</workbook>`;
+
+        const wbRels = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">
+  <Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet1.xml"/>
+  <Relationship Id="rId2" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles" Target="styles.xml"/>
+</Relationships>`;
+
+        const styles = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<styleSheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">
+  <fonts count="5">
+    <font><sz val="11"/><name val="游ゴシック"/></font>
+    <font><b/><sz val="11"/><name val="游ゴシック"/></font>
+    <font><b/><sz val="12"/><name val="游ゴシック"/><color rgb="1E293B"/></font>
+    <font><b/><sz val="11"/><name val="游ゴシック"/><color rgb="2563EB"/></font>
+    <font><b/><sz val="11"/><name val="游ゴシック"/><color rgb="DC2626"/></font>
+  </fonts>
+  <fills count="5">
+    <fill><patternFill patternType="none"/></fill>
+    <fill><patternFill patternType="gray125"/></fill>
+    <fill><patternFill patternType="solid"><fgColor rgb="F1F5F9"/></patternFill></fill>
+    <fill><patternFill patternType="solid"><fgColor rgb="EFF6FF"/></patternFill></fill>
+    <fill><patternFill patternType="solid"><fgColor rgb="FEF2F2"/></patternFill></fill>
+  </fills>
+  <borders count="2">
+    <border><left/><right/><top/><bottom/></border>
+    <border>
+      <left style="thin"><color rgb="CBD5E1"/></left>
+      <right style="thin"><color rgb="CBD5E1"/></right>
+      <top style="thin"><color rgb="CBD5E1"/></top>
+      <bottom style="thin"><color rgb="CBD5E1"/></bottom>
+    </border>
+  </borders>
+  <cellStyleXfs count="1">
+    <xf numFmtId="0" fontId="0" fillId="0" borderId="0"/>
+  </cellStyleXfs>
+  <cellXfs count="7">
+    <xf numFmtId="0" fontId="0" fillId="0" borderId="0" xfId="0"/>
+    <xf numFmtId="0" fontId="2" fillId="0" borderId="0" xfId="0"><alignment horizontal="left" vertical="center"/></xf>
+    <xf numFmtId="0" fontId="1" fillId="2" borderId="1" xfId="0"><alignment horizontal="center" vertical="center"/></xf>
+    <xf numFmtId="0" fontId="3" fillId="3" borderId="1" xfId="0"><alignment horizontal="center" vertical="center"/></xf>
+    <xf numFmtId="0" fontId="4" fillId="4" borderId="1" xfId="0"><alignment horizontal="center" vertical="center"/></xf>
+    <xf numFmtId="0" fontId="0" fillId="0" borderId="1" xfId="0"><alignment horizontal="center" vertical="center"/></xf>
+    <xf numFmtId="0" fontId="0" fillId="0" borderId="1" xfId="0"><alignment horizontal="left" vertical="center"/></xf>
+  </cellXfs>
+</styleSheet>`;
+
+        // ★ 各階への振り分けと役職ソート（係長→主任→副主任→希望入力ページの記載順）
+        const floors = [
+            { key: '1F', label: '1階' },
+            { key: '2F', label: '2階' },
+            { key: '3F', label: '3階' },
+            { key: '南', label: '南' }
+        ];
+
+        function getRoleRank(s) {
+            if (s.isSectionChief) return 1;
+            if (s.isChief) return 2;
+            if (s.isSubChief) return 3;
+            return 4;
+        }
+
+        const validStaff = staffList.filter(s => !s.isUnused);
+        const floorStaffMap = {
+            '1F': [],
+            '2F': [],
+            '3F': [],
+            '南': []
+        };
+
+        validStaff.forEach(s => {
+            let matchedKey = floors.find(f => f.key === s.floor || (s.floor && s.floor.includes(f.key)))?.key;
+            if (!matchedKey) matchedKey = '1F';
+            floorStaffMap[matchedKey].push(s);
+        });
+
+        floors.forEach(f => {
+            floorStaffMap[f.key].sort((a, b) => {
+                const rankA = getRoleRank(a);
+                const rankB = getRoleRank(b);
+                if (rankA !== rankB) return rankA - rankB;
+                return a.id - b.id; // 希望入力ページの記載順（id順）
+            });
+        });
+
+        let sheet1 = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">
+  <sheetViews><sheetView tabSelected="1" workbookViewId="0"/></sheetViews>
+  <sheetFormatPr defaultRowHeight="18"/>
+  <cols>
+    <col min="1" max="1" width="16" customWidth="1"/>
+    <col min="2" max="${1 + numDays}" width="6" customWidth="1"/>
+  </cols>
+  <sheetData>
+    <row r="1" ht="24" customHeight="1">
+      <c r="A1" s="1" t="inlineStr"><is><t>${title}</t></is></c>
+    </row>`;
+
+        let currentRow = 2;
+        const validationRanges = [];
+
+        floors.forEach((f, fIdx) => {
+            const list = floorStaffMap[f.key];
+
+            // 1. 日付ヘッダー行
+            const rHeaderDate = currentRow++;
+            sheet1 += `\n    <row r="${rHeaderDate}" ht="22" customHeight="1">
+      <c r="A${rHeaderDate}" s="2" t="inlineStr"><is><t>氏名</t></is></c>`;
+            for (let d = 0; d < numDays; d++) {
+                const di = term.dates[d];
+                const colLetter = toColLetter(2 + d);
+                sheet1 += `\n      <c r="${colLetter}${rHeaderDate}" s="2" t="inlineStr"><is><t>${di.m}/${di.day}</t></is></c>`;
+            }
+            sheet1 += `\n    </row>`;
+
+            // 2. 曜日ヘッダー行
+            const rHeaderDay = currentRow++;
+            sheet1 += `\n    <row r="${rHeaderDay}" ht="20" customHeight="1">
+      <c r="A${rHeaderDay}" s="2"/>`;
+            for (let d = 0; d < numDays; d++) {
+                const di = term.dates[d];
+                const colLetter = toColLetter(2 + d);
+                let sIdx = 2;
+                if (di.weekday === '土' || di.wIdx === 5) sIdx = 3;
+                else if (di.weekday === '日' || di.wIdx === 6 || di.isHoliday) sIdx = 4;
+                sheet1 += `\n      <c r="${colLetter}${rHeaderDay}" s="${sIdx}" t="inlineStr"><is><t>${di.weekday || di.w}</t></is></c>`;
+            }
+            sheet1 += `\n    </row>`;
+
+            // 3. スタッフ行（トグルで選ばれた人数分に柔軟に対応）
+            if (list.length > 0) {
+                const startStaffRow = currentRow;
+                list.forEach(staff => {
+                    const rStaff = currentRow++;
+                    sheet1 += `\n    <row r="${rStaff}" ht="20" customHeight="1">
+      <c r="A${rStaff}" s="6" t="inlineStr"><is><t>${escapeXmlText(staff.name)}</t></is></c>`;
+                    for (let d = 0; d < numDays; d++) {
+                        const colLetter = toColLetter(2 + d);
+                        sheet1 += `\n      <c r="${colLetter}${rStaff}" s="5"/>`;
+                    }
+                    sheet1 += `\n    </row>`;
+                });
+                const endStaffRow = currentRow - 1;
+                validationRanges.push(`B${startStaffRow}:${lastColLetter}${endStaffRow}`);
+            }
+
+            // 4. 各フロア間の空行（1行）
+            sheet1 += `\n    <row r="${currentRow}" ht="18"/>`;
+            currentRow++;
+        });
+
+        sheet1 += `\n  </sheetData>`;
+
+        // ドロップダウンリスト（プルダウンデータ入力規則）を全フロアの希望枠に適用
+        if (validationRanges.length > 0) {
+            sheet1 += `\n  <dataValidations count="1">
+    <dataValidation type="list" allowBlank="1" showInputMessage="1" showErrorMessage="1" sqref="${validationRanges.join(' ')}" promptTitle="希望勤務の選択" prompt="プルダウンから希望勤務記号を選択してください。" errorTitle="入力値エラー" error="一覧（プルダウン）にある記号のみ入力できます。">
+      <formula1>&quot;休,有,○,出,早,遅,E,8時,ハヤ,オソ,イブ,○/休,休/○,○/有,有/○,上1,上2,上3,上4,上5,下1,下2,下3,ー&quot;</formula1>
+    </dataValidation>
+  </dataValidations>`;
+        }
+
+        sheet1 += `\n  <pageMargins left="0.7" right="0.7" top="0.75" bottom="0.75" header="0.3" footer="0.3"/>\n</worksheet>`;
+
+        const files = [
+            { name: '[Content_Types].xml', data: contentTypes },
+            { name: '_rels/.rels', data: rels },
+            { name: 'xl/workbook.xml', data: workbook },
+            { name: 'xl/_rels/workbook.xml.rels', data: wbRels },
+            { name: 'xl/styles.xml', data: styles },
+            { name: 'xl/worksheets/sheet1.xml', data: sheet1 }
+        ];
+
+        const zipBuf = createZipUint8Array(files);
+        const blob = new Blob([zipBuf], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+        const url = URL.createObjectURL(blob);
+        const link = document.createElement('a');
+        link.setAttribute('href', url);
+        const termLabel = term.badgeText || `${term.first.m}月${term.first.day}日～${term.last.m}月${term.last.day}日`;
+        link.setAttribute('download', `【${termLabel}】ST希望勤務入力シート.xlsx`);
+        document.body.appendChild(link);
+        link.click();
+        setTimeout(() => {
+            if (document.body.contains(link)) document.body.removeChild(link);
+            URL.revokeObjectURL(url);
+        }, 2000);
+        showToast('📄 ST用スタッフ希望勤務入力シート (.xlsx) をダウンロードしました！');
     }
     const ALLOWED_SYMBOLS = new Set([
         '○', '休', '有', '出', '早', '遅', 'E', '8時',
