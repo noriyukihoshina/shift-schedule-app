@@ -190,6 +190,9 @@ document.addEventListener('DOMContentLoaded', () => {
     // ※ 備考（remarks）はターム固有情報のためマスターには含めず、ターム間での混入・引き継ぎを防止する
     function saveStaffMaster() {
         try {
+            if (isST) {
+                ensureSTMasterIntegrity();
+            }
             const masterList = staffList.map(s => {
                 enforceRoleExclusivity(s);
                 return {
@@ -216,6 +219,41 @@ document.addEventListener('DOMContentLoaded', () => {
         } catch (e) {
             console.error('スタッフマスターの保存に失敗:', e);
         }
+    }
+
+    // ★ STテーブル専用：添付1の公認標準配置（4フロア各4名、専従4名、役職4名、スケ可8名）を永続保証する完全性修復
+    function ensureSTMasterIntegrity() {
+        if (!isST) return false;
+        const hasChiefs = staffList.some(s => s.isSectionChief) && staffList.filter(s => s.isSubChief).length >= 3;
+        const fullTimeCount = staffList.filter(s => s.isFullTime).length;
+        const f1Count = staffList.filter(s => s.floor === '1F').length;
+        const f2Count = staffList.filter(s => s.floor === '2F').length;
+        const f3Count = staffList.filter(s => s.floor === '3F').length;
+        const fSouthCount = staffList.filter(s => s.floor === '南').length;
+
+        // 専従が4名未満、または副主任が3名未満、または各階所属が崩れている場合は公認標準配置を強制修復・適用
+        if (!hasChiefs || fullTimeCount < 4 || f1Count < 4 || f2Count < 4 || f3Count < 4 || fSouthCount < 4) {
+            console.log('STテーブルの不完全なトグルマスターを検知しました。添付1の公認標準配置に自動修復・固定します。');
+            for (let i = 1; i <= NUM_STAFF; i++) {
+                const s = staffList[i - 1];
+                if (!s) continue;
+                s.floor = (i <= 4) ? '1F' : ((i <= 8) ? '2F' : ((i <= 12) ? '3F' : ((i <= 16) ? '南' : '')));
+                s.isUnused = (i > 16);
+                s.canSched = (i === 1 || i === 2 || i === 5 || i === 6 || i === 9 || i === 10 || i === 13 || i === 14);
+                s.isSectionChief = (i === 1);
+                s.isChief = false;
+                s.isSubChief = (i === 5 || i === 9 || i === 13);
+                s.isFullTime = (i === 3 || i === 8 || i === 12 || i === 16);
+                s.isHalf = false;
+                s.allow6Consec = false;
+                s.noEarly = false;
+                s.noLate = true;
+                s.noEve = true;
+                enforceRoleExclusivity(s);
+            }
+            return true;
+        }
+        return false;
     }
 
     function applyMasterArrayToStaffList(masterList) {
@@ -245,21 +283,39 @@ document.addEventListener('DOMContentLoaded', () => {
         if (staffList.length > NUM_STAFF) {
             staffList = staffList.slice(0, NUM_STAFF);
         }
+        if (isST) {
+            ensureSTMasterIntegrity();
+        }
         return true;
     }
 
     function loadStaffMaster() {
         try {
             let raw = localStorage.getItem(STORAGE_KEY_STAFF_MASTER);
-            if (!raw) {
-                // 旧キーからのフォールバック救済
+            if (!raw && !isST) {
+                // 旧キーからのフォールバック救済（※ STは他病棟キーと混同しないようフォールバック禁止）
                 raw = localStorage.getItem('shift_schedule_staff_master');
             }
-            if (!raw) return false;
+            if (!raw) {
+                if (isST) {
+                    ensureSTMasterIntegrity();
+                    saveStaffMaster();
+                    return true;
+                }
+                return false;
+            }
             const masterList = JSON.parse(raw);
-            return applyMasterArrayToStaffList(masterList);
+            const res = applyMasterArrayToStaffList(masterList);
+            if (isST && ensureSTMasterIntegrity()) {
+                saveStaffMaster();
+            }
+            return res;
         } catch (e) {
             console.error('スタッフマスターの読込に失敗:', e);
+            if (isST) {
+                ensureSTMasterIntegrity();
+                saveStaffMaster();
+            }
             return false;
         }
     }
@@ -415,24 +471,28 @@ document.addEventListener('DOMContentLoaded', () => {
         staffList = [];
         for (let i = 1; i <= NUM_STAFF; i++) {
             if (isST) {
-                // ★ ST専用初期データ（各階3〜4名所属、計16名。1F/2F/3F/南は択一）
+                // ★ ST専用初期データ（添付1の公認標準配置：各階4名、計16名。17〜36番は不使用）
                 const floor = (i <= 4) ? '1F' : ((i <= 8) ? '2F' : ((i <= 12) ? '3F' : ((i <= 16) ? '南' : '')));
+                const canSched = (i === 1 || i === 2 || i === 5 || i === 6 || i === 9 || i === 10 || i === 13 || i === 14);
+                const isSectionChief = (i === 1);
+                const isSubChief = (i === 5 || i === 9 || i === 13);
+                const isFullTime = (i === 3 || i === 8 || i === 12 || i === 16);
                 staffList.push({
                     id: i,
                     name: `ST ${String(i).padStart(2, '0')}`,
-                    isUnused: (i > 16),      // 17〜60番目は初期状態で不使用
+                    isUnused: (i > 16),      // 17〜36番目は初期状態で不使用
                     floor: floor,           // '1F', '2F', '3F', '南' (択一)
                     section: '',
                     can8: false,
                     noEarly: false,         // 早番不可
                     noLate: true,           // STは遅番なし
                     noEve: true,            // STはEなし
-                    canSched: (i % 4 === 1 || i % 4 === 2), // 各階平均2名のスケ可
-                    isSectionChief: (i === 1),  // 係長・主任・副主任は択一
+                    canSched: canSched,     // スケ可（各階2名ずつ計8名）
+                    isSectionChief: isSectionChief,  // 1F: ST01が係長
                     isChief: false,
-                    isSubChief: false,
+                    isSubChief: isSubChief,          // 2F: ST05, 3F: ST09, 南: ST13が副主任
                     isHalf: false,          // 0.5
-                    isFullTime: false,      // 専従
+                    isFullTime: isFullTime, // 専従（1F: ST03, 2F: ST08, 3F: ST12, 南: ST16）
                     allow6Consec: false,    // 6連勤可
                     prevName: '',           // 旧姓
                     remarks: '',            // 備考メモ
@@ -647,9 +707,15 @@ document.addEventListener('DOMContentLoaded', () => {
                 _cloudMem.clear();
 
                 // 1. スタッフマスター（全トグル・役職・所属・氏名・備考）のクラウド復元
+                let stRepaired = false;
                 if (Array.isArray(cloud.staffMaster) && cloud.staffMaster.length > 0) {
                     localStorage.setItem(STORAGE_KEY_STAFF_MASTER, JSON.stringify(cloud.staffMaster));
                     applyMasterArrayToStaffList(cloud.staffMaster);
+                    if (isST) {
+                        stRepaired = ensureSTMasterIntegrity();
+                    }
+                } else if (isST) {
+                    stRepaired = ensureSTMasterIntegrity();
                 }
 
                 // 2. 全保存タームデータのクラウド復元
@@ -693,6 +759,12 @@ document.addEventListener('DOMContentLoaded', () => {
             } finally {
                 isRestoringFromCloud = false;
                 isCloudInitialSyncDone = true;
+            }
+
+            if (stRepaired) {
+                saveStaffMaster();
+                saveCurrentTermToStorage();
+                pushStateToCloud(false);
             }
 
             setCloudStatusBadge('synced');
@@ -3478,22 +3550,24 @@ document.addEventListener('DOMContentLoaded', () => {
         const targetDate = startDate || currentWorkingStartDate || '2026-04-01';
         const stKey = `shift_schedule_st_term_${targetDate}`;
         let raw = localStorage.getItem(stKey);
+        if (!window._cloudMem) window._cloudMem = new Map();
         if (!raw) {
             if (window._cloudMem && window._cloudMem.has(stKey)) {
                 raw = window._cloudMem.get(stKey);
             }
         }
         if (!raw) {
-            // クラウドからSTの最新データをバックグラウンド取得して再読込
+            // クラウドからSTの最新データをバックグラウンド取得して再読込（※PO側からSTのローカルストレージは一切汚染せずメモリキャッシュのみに保持）
             if (!window._stFetchInFlight) {
                 window._stFetchInFlight = true;
                 fetch(`/api/cloud_sync?deptId=st&t=${Date.now()}`, { cache: 'no-store' })
                     .then(r => r.ok ? r.json() : null)
                     .then(res => {
                         window._stFetchInFlight = false;
-                        if (res && res.data && res.data.terms && res.data.terms[targetDate]) {
-                            const termObj = res.data.terms[targetDate];
-                            localStorage.setItem(stKey, JSON.stringify(termObj));
+                        const cloudState = res && (res.cloudState || res.data);
+                        if (cloudState && cloudState.terms && cloudState.terms[targetDate]) {
+                            const termObj = cloudState.terms[targetDate];
+                            window._cloudMem.set(stKey, JSON.stringify(termObj));
                             loadLinkedSTData(targetDate);
                             // 画面更新
                             if (lastSolveResult && lastSolveResult.grid) {
@@ -7075,6 +7149,24 @@ document.addEventListener('DOMContentLoaded', () => {
     document.addEventListener('visibilitychange', () => {
         if (document.visibilityState === 'visible' && isCloudInitialSyncDone && !isCloudSyncInFlight && !cloudSyncTimer) {
             pullStateFromCloud(false, false);
+        } else if (document.visibilityState === 'hidden') {
+            // タブが非表示になった瞬間に未送信のクラウド変更があれば直ちにフラッシュ同期
+            if (cloudSyncTimer) {
+                clearTimeout(cloudSyncTimer);
+                cloudSyncTimer = null;
+                pushStateToCloud(false);
+            }
         }
     });
+
+    // ★ タブを離れる直前や別ページ（PO病棟等）へ移動する直前に、未送信のクラウド同期があれば即座に送信
+    const flushCloudSync = () => {
+        if (cloudSyncTimer) {
+            clearTimeout(cloudSyncTimer);
+            cloudSyncTimer = null;
+            pushStateToCloud(false);
+        }
+    };
+    window.addEventListener('pagehide', flushCloudSync);
+    window.addEventListener('beforeunload', flushCloudSync);
 });
