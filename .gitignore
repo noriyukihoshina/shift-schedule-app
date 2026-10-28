@@ -3,3 +3,6 @@ setup_cloud_storage.ps1
 pv_*.xlsx
 zone_test_*.xlsx
 *_test_*.xlsx
+
+test_st_*
+gen_pages.ps1

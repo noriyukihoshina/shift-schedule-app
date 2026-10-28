@@ -1,4 +1,4 @@
-<!DOCTYPE html>
+﻿<!DOCTYPE html>
 <html lang="ja">
 <head>
     <meta charset="UTF-8">
@@ -24,7 +24,16 @@
             </button>
         </div>
     </header>
-
+    <!-- Table Navigation -->
+    <nav class="dept-nav-container">
+        <span style="font-size:0.8rem; font-weight:700; color:#475569;">テーブル切替:</span>
+        <a href="1階病棟.html" class="dept-nav-btn active">1階病棟</a>
+        <a href="2階病棟.html" class="dept-nav-btn ">2階病棟</a>
+        <a href="3階病棟.html" class="dept-nav-btn ">3階病棟</a>
+        <a href="南病棟.html" class="dept-nav-btn ">南病棟</a>
+        <a href="ST.html" class="dept-nav-btn dept-nav-st ">諺 ST</a>
+    </nav>
+    <!-- Table Navigation -->
     <!-- ナビゲーションタブ -->
     <nav class="tab-container">
         <button class="tab-btn active" data-tab="inputTab">
@@ -632,6 +641,17 @@
     </div>
 
     <!-- スクリプト読み込み -->
+        <!-- Dept Config -->
+        <!-- Dept Config -->
+    <script>
+        window.APP_CONFIG = {
+            deptId: '1f',
+            deptName: '1階病棟',
+            floor: '1F',
+            
+            password: '11111'
+        };
+    </script>
     <script src="solver.js?v=20261028_rev48"></script>
     <script src="app.js?v=20261028_rev48"></script>
 </body>

@@ -195,6 +195,7 @@ document.addEventListener('DOMContentLoaded', () => {
                     id: s.id,
                     name: cleanTextValue(s.name),
                     isUnused: !!s.isUnused,
+                    floor: s.floor || '',
                     section: s.section || '',
                     can8: !!s.can8,
                     noEarly: !!s.noEarly,
@@ -222,6 +223,7 @@ document.addEventListener('DOMContentLoaded', () => {
             if (staffList[idx] && ms) {
                 staffList[idx].name = cleanTextValue(ms.name) || staffList[idx].name;
                 staffList[idx].isUnused = ms.isUnused !== undefined ? !!ms.isUnused : staffList[idx].isUnused;
+                staffList[idx].floor = ms.floor || staffList[idx].floor || '';
                 staffList[idx].section = ms.section || '';
                 staffList[idx].can8 = ms.can8 !== undefined ? !!ms.can8 : staffList[idx].can8;
                 staffList[idx].noEarly = !!ms.noEarly;
@@ -388,44 +390,74 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     }
 
-    // スタッフデータの初期化（60名枠、51〜60番目は初期状態で不使用）
-    function initStaffData() {
-        staffList = [];
-        for (let i = 1; i <= NUM_STAFF; i++) {
-            staffList.push({
-                id: i,
-                name: `スタッフ ${String(i).padStart(2, '0')}`,
-                isUnused: (i > 48),  // 49〜60番目は初期状態で不使用（48名運用）
-                section: '',         // 'PT A', 'PT B', 'OT A', 'OT B', または ''
-                can8: (i <= 9),      // 1〜9番目のみ8時可能（現場の運用に完全一致）
-                noEarly: false,     // 早番不可
-                noLate: false,      // 遅番不可
-                noEve: false,       // E不可
-                canSched: (i <= 8), // ★ スケ可（毎日2名以上必要・○のみ）
-                isSectionChief: (i === 1),  // ★ 係長（平日5連勤、不在時主任出勤）
-                isChief: (i === 2 || i === 3),       // ★ 主任（係長不在時に1名以上出勤）
-                isSubChief: (i === 4 || i === 5),    // ★ 副主任（係長主任不在時A1名B1名出勤）
-                isHalf: false,                       // ★ 0.5（出勤実数を0.5人換算）
-                isFullTime: (i <= 10),               // ★ 専従
-                allow6Consec: false,                 // ★ 6連勤可
-                prevName: '',                        // ★ 旧姓（改姓時の引き継ぎ用）
-                remarks: '',                         // ★ 備考メモ（AG列）
-                prevDays: ['', '', '', '', ''],
-                days: new Array(NUM_DAYS).fill('')
-            });
-        }
-    }
-
     // ==========================================
-    // ★ クラウド専用自動保存＆復元管理（PCブラウザ内 localStorage 非保存化）
+    // ★ 部署別設定 (APP_CONFIG) に対応したストレージキー動的生成 & STモード判定
     // ==========================================
-    // ★ 部署別設定 (APP_CONFIG) に対応したストレージキー動的生成
     const appConfig = window.APP_CONFIG || { deptId: 'master', deptName: 'マスター統括', password: '77777' };
+    const isST = !!appConfig.isST || (appConfig.deptId === 'st');
+    const currentFloor = appConfig.floor || (appConfig.deptId === '1f' ? '1F' : (appConfig.deptId === '2f' ? '2F' : (appConfig.deptId === '3f' ? '3F' : (appConfig.deptId === 'south' ? '南' : ''))));
     const deptPrefix = appConfig.deptId ? `${appConfig.deptId}_` : '';
     const STORAGE_KEY_PREFIX = `shift_schedule_${deptPrefix}term_`;
     const STORAGE_KEY_LAST_ACTIVE = `shift_schedule_${deptPrefix}last_active_start_date`;
     const STORAGE_KEY_SAVED_TERMS = `shift_schedule_${deptPrefix}saved_terms`;
     const STORAGE_KEY_STAFF_MASTER = `shift_schedule_${deptPrefix}staff_master`;
+
+    // スタッフデータの初期化（60名枠、ST時は初期16名、通常は48名運用）
+    function initStaffData() {
+        staffList = [];
+        for (let i = 1; i <= NUM_STAFF; i++) {
+            if (isST) {
+                // ★ ST専用初期データ（各階3〜4名所属、計16名。1F/2F/3F/南は択一）
+                const floor = (i <= 4) ? '1F' : ((i <= 8) ? '2F' : ((i <= 12) ? '3F' : ((i <= 16) ? '南' : '')));
+                staffList.push({
+                    id: i,
+                    name: `ST ${String(i).padStart(2, '0')}`,
+                    isUnused: (i > 16),      // 17〜60番目は初期状態で不使用
+                    floor: floor,           // '1F', '2F', '3F', '南' (択一)
+                    section: '',
+                    can8: false,
+                    noEarly: false,         // 早番不可
+                    noLate: true,           // STは遅番なし
+                    noEve: true,            // STはEなし
+                    canSched: (i % 4 === 1 || i % 4 === 2), // 各階平均2名のスケ可
+                    isSectionChief: (i === 1),  // 係長・主任・副主任は択一
+                    isChief: false,
+                    isSubChief: false,
+                    isHalf: false,          // 0.5
+                    isFullTime: false,      // 専従
+                    allow6Consec: false,    // 6連勤可
+                    prevName: '',           // 旧姓
+                    remarks: '',            // 備考メモ
+                    prevDays: ['', '', '', '', ''],
+                    days: new Array(NUM_DAYS).fill('')
+                });
+            } else {
+                // 通常のPT/OTスタッフ初期化
+                staffList.push({
+                    id: i,
+                    name: `スタッフ ${String(i).padStart(2, '0')}`,
+                    isUnused: (i > 48),  // 49〜60番目は初期状態で不使用（48名運用）
+                    floor: currentFloor || '',
+                    section: '',         // 'PT A', 'PT B', 'OT A', 'OT B', または ''
+                    can8: (i <= 9),      // 1〜9番目のみ8時可能（現場の運用に完全一致）
+                    noEarly: false,     // 早番不可
+                    noLate: false,      // 遅番不可
+                    noEve: false,       // E不可
+                    canSched: (i <= 8), // ★ スケ可（毎日2名以上必要・○のみ）
+                    isSectionChief: (i === 1),  // ★ 係長（平日5連勤、不在時主任出勤）
+                    isChief: (i === 2 || i === 3),       // ★ 主任（係長不在時に1名以上出勤）
+                    isSubChief: (i === 4 || i === 5),    // ★ 副主任（係長主任不在時A1名B1名出勤）
+                    isHalf: false,                       // ★ 0.5（出勤実数を0.5人換算）
+                    isFullTime: (i <= 10),               // ★ 専従
+                    allow6Consec: false,                 // ★ 6連勤可
+                    prevName: '',                        // ★ 旧姓（改姓時の引き継ぎ用）
+                    remarks: '',                         // ★ 備考メモ（AG列）
+                    prevDays: ['', '', '', '', ''],
+                    days: new Array(NUM_DAYS).fill('')
+                });
+            }
+        }
+    }
 
     // ★ PCブラウザの window.localStorage には一切データを残さず、メモリキャッシュ（_cloudMem）＋クラウドのみで管理
     const _cloudMem = new Map();
@@ -833,6 +865,9 @@ document.addEventListener('DOMContentLoaded', () => {
             currentWorkingStartDate = targetStart;
             const term = getTermInfo();
 
+            // ★ ST所属スタッフ連携データの読み込み（病棟テーブル時）
+            loadLinkedSTData(targetStart);
+
             // ★ 別ターム読み込み時に前タームの自動配分リフ追跡メモリを必ずクリア（他タームへの誤警告防止）
             autoAssignedRefKeys.clear();
             autoAssignedStaffIds.clear();
@@ -852,6 +887,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 if (staffList[idx]) {
                     staffList[idx].name = cleanTextValue(s.name) || staffList[idx].name;
                     staffList[idx].isUnused = s.isUnused !== undefined ? !!s.isUnused : (idx >= 48);
+                    staffList[idx].floor = s.floor || staffList[idx].floor || '';
                     staffList[idx].section = s.section || '';
                     staffList[idx].can8 = s.can8 !== undefined ? !!s.can8 : staffList[idx].can8;
                     staffList[idx].noEarly = !!s.noEarly;
@@ -1169,6 +1205,9 @@ document.addEventListener('DOMContentLoaded', () => {
         // 先に getTermInfo() を呼んで NUM_DAYS (28 or 29) を確定させる
         const term = getTermInfo();
 
+        // ★ ST所属スタッフ連携データの読み込み（病棟テーブル時）
+        loadLinkedSTData(newStartDate);
+
         // スタッフ基本設定マスターを引き継ぎ復元！（※備考 remarks はターム固有のため白紙リセット）
         loadStaffMaster();
         staffList.forEach(s => {
@@ -1302,6 +1341,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 if (staffList[idx]) {
                     staffList[idx].name = cleanTextValue(s.name) || staffList[idx].name;
                     staffList[idx].isUnused = s.isUnused !== undefined ? !!s.isUnused : (idx >= 48);
+                    staffList[idx].floor = s.floor || staffList[idx].floor || '';
                     staffList[idx].section = s.section || '';
                     staffList[idx].can8 = !!s.can8;
                     staffList[idx].noEarly = !!s.noEarly;
@@ -1550,6 +1590,29 @@ document.addEventListener('DOMContentLoaded', () => {
                 <th class="sticky-col-2" rowspan="2">氏名</th>
                 <th class="prev-col-header" colspan="5">前ターム最終5日間実績</th>
                 <th colspan="${NUM_DAYS}">当ターム（${term.title}）希望休・事前固定枠（🔒手動以外は変更不可）</th>
+        `;
+
+        if (isST) {
+            // ★ ST専用ヘッダー列（所属階 1F/2F/3F/南 択一、早不可、スケ可、係長/主任/副主任 択一、0.5、専従、6連勤可、旧姓、備考）
+            headHtml += `
+                <th class="flag-col" rowspan="2" title="1階病棟所属（択一）" style="background:#e0f2fe; color:#0369a1; font-weight:700;">1F</th>
+                <th class="flag-col" rowspan="2" title="2階病棟所属（択一）" style="background:#dcfce7; color:#15803d; font-weight:700;">2F</th>
+                <th class="flag-col" rowspan="2" title="3階病棟所属（択一）" style="background:#fef3c7; color:#a16207; font-weight:700;">3F</th>
+                <th class="flag-col" rowspan="2" title="南病棟所属（択一）" style="background:#fce7f3; color:#be185d; font-weight:700;">南</th>
+                <th class="flag-col" rowspan="2" title="早番不可">早<br>不可</th>
+                <th class="flag-col" rowspan="2" title="スケ可（各階毎日どちらか1名以上出勤）" style="background:#e0f2fe; color:#0369a1;">スケ<br>可</th>
+                <th class="flag-col" rowspan="2" title="係長（役職は択一）" style="background:#fef3c7; color:#92400e;">係長</th>
+                <th class="flag-col" rowspan="2" title="主任（役職は択一）" style="background:#fef9c3; color:#854d0e;">主任</th>
+                <th class="flag-col" rowspan="2" title="副主任（役職は択一）" style="background:#e0f2fe; color:#0369a1;">副主任</th>
+                <th class="flag-col" rowspan="2" title="0.5（実数合計計算時に0.5人で計算）" style="background:#f3e8ff; color:#6b21a8; font-weight:800;">0.5</th>
+                <th class="flag-col" rowspan="2" title="専従" style="background:#dcfce7; color:#166534;">専従</th>
+                <th class="flag-col" rowspan="2" title="6連勤例外許可" style="background:#fee2e2; color:#991b1b;">6連勤<br>可</th>
+                <th class="flag-col" rowspan="2" title="改姓・旧姓（前タームの氏名）" style="background:#f1f5f9; color:#475569; min-width:80px;">旧姓</th>
+                <th class="remarks-col" rowspan="2" title="委員会等のメモ（ExcelのAG列と自動連携）" style="background:#f8fafc; color:#1e293b; min-width:220px; max-width:320px;">備考（メモ）</th>
+            `;
+        } else {
+            // 通常PT/OTテーブルヘッダー
+            headHtml += `
                 <th class="flag-col" rowspan="2" title="8時開始可能か（1〜9番のみON）">8時<br>可</th>
                 <th class="flag-col" rowspan="2" title="早番不可">早<br>不可</th>
                 <th class="flag-col" rowspan="2" title="遅番不可">遅<br>不可</th>
@@ -1567,6 +1630,8 @@ document.addEventListener('DOMContentLoaded', () => {
                 <th class="flag-col" rowspan="2" title="6連勤例外許可（週6勤務＆6連勤を許容）" style="background:#fee2e2; color:#991b1b;">6連勤<br>可</th>
                 <th class="flag-col" rowspan="2" title="改姓・旧姓（前タームの氏名）" style="background:#f1f5f9; color:#475569; min-width:80px;">旧姓</th>
                 <th class="remarks-col" rowspan="2" title="委員会等のメモ（ExcelのAG列と自動連携）" style="background:#f8fafc; color:#1e293b; min-width:220px; max-width:320px;">備考（メモ）</th>
+            `;
+        }
             </tr>
             <tr>
                 <th class="prev-col-header">前5</th>
@@ -1619,107 +1684,246 @@ document.addEventListener('DOMContentLoaded', () => {
             }
 
             // 28日の右側: 属性フラグトグルスイッチ群
-            bodyHtml += `
-                <td class="flag-col">
-                    <label class="toggle-switch">
-                        <input type="checkbox" ${staff.can8 ? 'checked' : ''} data-flag="can8" data-s="${sIdx}">
-                        <span class="toggle-slider"></span>
-                    </label>
-                </td>
-                <td class="flag-col">
-                    <label class="toggle-switch">
-                        <input type="checkbox" ${staff.noEarly ? 'checked' : ''} data-flag="noEarly" data-s="${sIdx}">
-                        <span class="toggle-slider danger-slider"></span>
-                    </label>
-                </td>
-                <td class="flag-col">
-                    <label class="toggle-switch">
-                        <input type="checkbox" ${staff.noLate ? 'checked' : ''} data-flag="noLate" data-s="${sIdx}">
-                        <span class="toggle-slider danger-slider"></span>
-                    </label>
-                </td>
-                <td class="flag-col">
-                    <label class="toggle-switch">
-                        <input type="checkbox" ${staff.noEve ? 'checked' : ''} data-flag="noEve" data-s="${sIdx}">
-                        <span class="toggle-slider danger-slider"></span>
-                    </label>
-                </td>
-                <td class="flag-col" style="background:#eef2ff;">
-                    <label class="toggle-switch" title="PT A セクション">
-                        <input type="checkbox" ${staff.section === 'PT A' ? 'checked' : ''} data-section="PT A" data-s="${sIdx}">
-                        <span class="toggle-slider"></span>
-                    </label>
-                </td>
-                <td class="flag-col" style="background:#f5f3ff;">
-                    <label class="toggle-switch" title="PT B セクション">
-                        <input type="checkbox" ${staff.section === 'PT B' ? 'checked' : ''} data-section="PT B" data-s="${sIdx}">
-                        <span class="toggle-slider"></span>
-                    </label>
-                </td>
-                <td class="flag-col" style="background:#faf5ff;">
-                    <label class="toggle-switch" title="OT A セクション">
-                        <input type="checkbox" ${staff.section === 'OT A' ? 'checked' : ''} data-section="OT A" data-s="${sIdx}">
-                        <span class="toggle-slider"></span>
-                    </label>
-                </td>
-                <td class="flag-col" style="background:#fdf2f8;">
-                    <label class="toggle-switch" title="OT B セクション">
-                        <input type="checkbox" ${staff.section === 'OT B' ? 'checked' : ''} data-section="OT B" data-s="${sIdx}">
-                        <span class="toggle-slider"></span>
-                    </label>
-                </td>
-                <td class="flag-col" style="background:#f0f9ff;">
-                    <label class="toggle-switch">
-                        <input type="checkbox" ${staff.canSched ? 'checked' : ''} data-flag="canSched" data-s="${sIdx}">
-                        <span class="toggle-slider"></span>
-                    </label>
-                </td>
-                <td class="flag-col" style="background:#fefce8;">
-                    <label class="toggle-switch" title="係長">
-                        <input type="checkbox" ${staff.isSectionChief ? 'checked' : ''} data-flag="isSectionChief" data-s="${sIdx}">
-                        <span class="toggle-slider"></span>
-                    </label>
-                </td>
-                <td class="flag-col" style="background:#fef9c3;">
-                    <label class="toggle-switch" title="主任">
-                        <input type="checkbox" ${staff.isChief ? 'checked' : ''} data-flag="isChief" data-s="${sIdx}">
-                        <span class="toggle-slider"></span>
-                    </label>
-                </td>
-                <td class="flag-col" style="background:#e0f2fe;">
-                    <label class="toggle-switch" title="副主任">
-                        <input type="checkbox" ${staff.isSubChief ? 'checked' : ''} data-flag="isSubChief" data-s="${sIdx}">
-                        <span class="toggle-slider"></span>
-                    </label>
-                </td>
-                <td class="flag-col" style="background:#f3e8ff;">
-                    <label class="toggle-switch" title="0.5（実数計算で0.5人換算）">
-                        <input type="checkbox" ${staff.isHalf ? 'checked' : ''} data-flag="isHalf" data-s="${sIdx}">
-                        <span class="toggle-slider"></span>
-                    </label>
-                </td>
-                <td class="flag-col" style="background:#f0fdf4;">
-                    <label class="toggle-switch" title="専従">
-                        <input type="checkbox" ${staff.isFullTime ? 'checked' : ''} data-flag="isFullTime" data-s="${sIdx}">
-                        <span class="toggle-slider"></span>
-                    </label>
-                </td>
-                <td class="flag-col" style="background:#fef2e2;">
-                    <label class="toggle-switch" title="6連勤可">
-                        <input type="checkbox" ${staff.allow6Consec ? 'checked' : ''} data-flag="allow6Consec" data-s="${sIdx}">
-                        <span class="toggle-slider danger-slider"></span>
-                    </label>
-                </td>
-                <td class="flag-col" style="background:#f8fafc; padding:2px;">
-                    <input type="text" class="staff-prevname-input" data-s="${sIdx}" value="${escapeHtmlText(staff.prevName || '')}" placeholder="旧姓" title="改姓前の前ターム氏名を入力すると過去履歴が引き継がれます" style="width:100%; border:1px solid #cbd5e1; border-radius:3px; padding:2px 4px; font-size:0.75rem; text-align:center;">
-                </td>
-                <td class="remarks-col" style="padding:2px 4px;">
-                    <input type="text" class="staff-remarks-input" data-s="${sIdx}" value="${escapeHtmlText(staff.remarks || '')}" placeholder="委員会・用事等のメモ" style="width:100%; border:1px solid #cbd5e1; border-radius:3px; padding:2px 6px; font-size:0.78rem; background:white;">
-                </td>
-            `;
+            if (isST) {
+                // ★ ST専用フラグ列
+                bodyHtml += `
+                    <td class="flag-col" style="background:#f0f9ff;">
+                        <label class="toggle-switch" title="1F所属（択一）">
+                            <input type="checkbox" ${staff.floor === '1F' ? 'checked' : ''} data-floor="1F" data-s="${sIdx}">
+                            <span class="toggle-slider"></span>
+                        </label>
+                    </td>
+                    <td class="flag-col" style="background:#f0fdf4;">
+                        <label class="toggle-switch" title="2F所属（択一）">
+                            <input type="checkbox" ${staff.floor === '2F' ? 'checked' : ''} data-floor="2F" data-s="${sIdx}">
+                            <span class="toggle-slider"></span>
+                        </label>
+                    </td>
+                    <td class="flag-col" style="background:#fefce8;">
+                        <label class="toggle-switch" title="3F所属（択一）">
+                            <input type="checkbox" ${staff.floor === '3F' ? 'checked' : ''} data-floor="3F" data-s="${sIdx}">
+                            <span class="toggle-slider"></span>
+                        </label>
+                    </td>
+                    <td class="flag-col" style="background:#fdf2f8;">
+                        <label class="toggle-switch" title="南所属（択一）">
+                            <input type="checkbox" ${staff.floor === '南' ? 'checked' : ''} data-floor="南" data-s="${sIdx}">
+                            <span class="toggle-slider"></span>
+                        </label>
+                    </td>
+                    <td class="flag-col">
+                        <label class="toggle-switch" title="早番不可">
+                            <input type="checkbox" ${staff.noEarly ? 'checked' : ''} data-flag="noEarly" data-s="${sIdx}">
+                            <span class="toggle-slider danger-slider"></span>
+                        </label>
+                    </td>
+                    <td class="flag-col" style="background:#f0f9ff;">
+                        <label class="toggle-switch" title="スケ可">
+                            <input type="checkbox" ${staff.canSched ? 'checked' : ''} data-flag="canSched" data-s="${sIdx}">
+                            <span class="toggle-slider"></span>
+                        </label>
+                    </td>
+                    <td class="flag-col" style="background:#fefce8;">
+                        <label class="toggle-switch" title="係長（択一）">
+                            <input type="checkbox" ${staff.isSectionChief ? 'checked' : ''} data-flag="isSectionChief" data-s="${sIdx}">
+                            <span class="toggle-slider"></span>
+                        </label>
+                    </td>
+                    <td class="flag-col" style="background:#fef9c3;">
+                        <label class="toggle-switch" title="主任（択一）">
+                            <input type="checkbox" ${staff.isChief ? 'checked' : ''} data-flag="isChief" data-s="${sIdx}">
+                            <span class="toggle-slider"></span>
+                        </label>
+                    </td>
+                    <td class="flag-col" style="background:#e0f2fe;">
+                        <label class="toggle-switch" title="副主任（択一）">
+                            <input type="checkbox" ${staff.isSubChief ? 'checked' : ''} data-flag="isSubChief" data-s="${sIdx}">
+                            <span class="toggle-slider"></span>
+                        </label>
+                    </td>
+                    <td class="flag-col" style="background:#f3e8ff;">
+                        <label class="toggle-switch" title="0.5（実数計算で0.5人換算）">
+                            <input type="checkbox" ${staff.isHalf ? 'checked' : ''} data-flag="isHalf" data-s="${sIdx}">
+                            <span class="toggle-slider"></span>
+                        </label>
+                    </td>
+                    <td class="flag-col" style="background:#f0fdf4;">
+                        <label class="toggle-switch" title="専従">
+                            <input type="checkbox" ${staff.isFullTime ? 'checked' : ''} data-flag="isFullTime" data-s="${sIdx}">
+                            <span class="toggle-slider"></span>
+                        </label>
+                    </td>
+                    <td class="flag-col" style="background:#fef2e2;">
+                        <label class="toggle-switch" title="6連勤可">
+                            <input type="checkbox" ${staff.allow6Consec ? 'checked' : ''} data-flag="allow6Consec" data-s="${sIdx}">
+                            <span class="toggle-slider danger-slider"></span>
+                        </label>
+                    </td>
+                    <td class="flag-col" style="background:#f8fafc; padding:2px;">
+                        <input type="text" class="staff-prevname-input" data-s="${sIdx}" value="${escapeHtmlText(staff.prevName || '')}" placeholder="旧姓" title="改姓前の前ターム氏名を入力すると過去履歴が引き継がれます" style="width:100%; border:1px solid #cbd5e1; border-radius:3px; padding:2px 4px; font-size:0.75rem; text-align:center;">
+                    </td>
+                    <td class="remarks-col" style="padding:2px 4px;">
+                        <input type="text" class="staff-remarks-input" data-s="${sIdx}" value="${escapeHtmlText(staff.remarks || '')}" placeholder="委員会・用事等のメモ" style="width:100%; border:1px solid #cbd5e1; border-radius:3px; padding:2px 6px; font-size:0.78rem; background:white;">
+                    </td>
+                `;
+            } else {
+                bodyHtml += `
+                    <td class="flag-col">
+                        <label class="toggle-switch">
+                            <input type="checkbox" ${staff.can8 ? 'checked' : ''} data-flag="can8" data-s="${sIdx}">
+                            <span class="toggle-slider"></span>
+                        </label>
+                    </td>
+                    <td class="flag-col">
+                        <label class="toggle-switch">
+                            <input type="checkbox" ${staff.noEarly ? 'checked' : ''} data-flag="noEarly" data-s="${sIdx}">
+                            <span class="toggle-slider danger-slider"></span>
+                        </label>
+                    </td>
+                    <td class="flag-col">
+                        <label class="toggle-switch">
+                            <input type="checkbox" ${staff.noLate ? 'checked' : ''} data-flag="noLate" data-s="${sIdx}">
+                            <span class="toggle-slider danger-slider"></span>
+                        </label>
+                    </td>
+                    <td class="flag-col">
+                        <label class="toggle-switch">
+                            <input type="checkbox" ${staff.noEve ? 'checked' : ''} data-flag="noEve" data-s="${sIdx}">
+                            <span class="toggle-slider danger-slider"></span>
+                        </label>
+                    </td>
+                    <td class="flag-col" style="background:#eef2ff;">
+                        <label class="toggle-switch" title="PT A セクション">
+                            <input type="checkbox" ${staff.section === 'PT A' ? 'checked' : ''} data-section="PT A" data-s="${sIdx}">
+                            <span class="toggle-slider"></span>
+                        </label>
+                    </td>
+                    <td class="flag-col" style="background:#f5f3ff;">
+                        <label class="toggle-switch" title="PT B セクション">
+                            <input type="checkbox" ${staff.section === 'PT B' ? 'checked' : ''} data-section="PT B" data-s="${sIdx}">
+                            <span class="toggle-slider"></span>
+                        </label>
+                    </td>
+                    <td class="flag-col" style="background:#faf5ff;">
+                        <label class="toggle-switch" title="OT A セクション">
+                            <input type="checkbox" ${staff.section === 'OT A' ? 'checked' : ''} data-section="OT A" data-s="${sIdx}">
+                            <span class="toggle-slider"></span>
+                        </label>
+                    </td>
+                    <td class="flag-col" style="background:#fdf2f8;">
+                        <label class="toggle-switch" title="OT B セクション">
+                            <input type="checkbox" ${staff.section === 'OT B' ? 'checked' : ''} data-section="OT B" data-s="${sIdx}">
+                            <span class="toggle-slider"></span>
+                        </label>
+                    </td>
+                    <td class="flag-col" style="background:#f0f9ff;">
+                        <label class="toggle-switch">
+                            <input type="checkbox" ${staff.canSched ? 'checked' : ''} data-flag="canSched" data-s="${sIdx}">
+                            <span class="toggle-slider"></span>
+                        </label>
+                    </td>
+                    <td class="flag-col" style="background:#fefce8;">
+                        <label class="toggle-switch" title="係長">
+                            <input type="checkbox" ${staff.isSectionChief ? 'checked' : ''} data-flag="isSectionChief" data-s="${sIdx}">
+                            <span class="toggle-slider"></span>
+                        </label>
+                    </td>
+                    <td class="flag-col" style="background:#fef9c3;">
+                        <label class="toggle-switch" title="主任">
+                            <input type="checkbox" ${staff.isChief ? 'checked' : ''} data-flag="isChief" data-s="${sIdx}">
+                            <span class="toggle-slider"></span>
+                        </label>
+                    </td>
+                    <td class="flag-col" style="background:#e0f2fe;">
+                        <label class="toggle-switch" title="副主任">
+                            <input type="checkbox" ${staff.isSubChief ? 'checked' : ''} data-flag="isSubChief" data-s="${sIdx}">
+                            <span class="toggle-slider"></span>
+                        </label>
+                    </td>
+                    <td class="flag-col" style="background:#f3e8ff;">
+                        <label class="toggle-switch" title="0.5（実数計算で0.5人換算）">
+                            <input type="checkbox" ${staff.isHalf ? 'checked' : ''} data-flag="isHalf" data-s="${sIdx}">
+                            <span class="toggle-slider"></span>
+                        </label>
+                    </td>
+                    <td class="flag-col" style="background:#f0fdf4;">
+                        <label class="toggle-switch" title="専従">
+                            <input type="checkbox" ${staff.isFullTime ? 'checked' : ''} data-flag="isFullTime" data-s="${sIdx}">
+                            <span class="toggle-slider"></span>
+                        </label>
+                    </td>
+                    <td class="flag-col" style="background:#fef2e2;">
+                        <label class="toggle-switch" title="6連勤可">
+                            <input type="checkbox" ${staff.allow6Consec ? 'checked' : ''} data-flag="allow6Consec" data-s="${sIdx}">
+                            <span class="toggle-slider danger-slider"></span>
+                        </label>
+                    </td>
+                    <td class="flag-col" style="background:#f8fafc; padding:2px;">
+                        <input type="text" class="staff-prevname-input" data-s="${sIdx}" value="${escapeHtmlText(staff.prevName || '')}" placeholder="旧姓" title="改姓前の前ターム氏名を入力すると過去履歴が引き継がれます" style="width:100%; border:1px solid #cbd5e1; border-radius:3px; padding:2px 4px; font-size:0.75rem; text-align:center;">
+                    </td>
+                    <td class="remarks-col" style="padding:2px 4px;">
+                        <input type="text" class="staff-remarks-input" data-s="${sIdx}" value="${escapeHtmlText(staff.remarks || '')}" placeholder="委員会・用事等のメモ" style="width:100%; border:1px solid #cbd5e1; border-radius:3px; padding:2px 6px; font-size:0.78rem; background:white;">
+                    </td>
+                `;
+            }
 
             bodyHtml += `</tr>`;
         });
+
+        // ★「1階」「2階」「3階」「南」のテーブルの最下部にSTのスタッフ名と勤務を確認できるように表示
+        if (!isST && currentFloor && linkedStStaffData && linkedStStaffData.staffList && linkedStStaffData.staffList.length > 0) {
+            bodyHtml += `
+                <tr style="background:#f0fdf4; border-top: 3px solid #10b981;">
+                    <th colspan="${NUM_DAYS + 11}" style="text-align:left; padding:8px 12px; font-size:0.85rem; font-weight:800; color:#065f46; letter-spacing:0.03em;">
+                        🌿 【${currentFloor} 所属 STスタッフ（参照表示・ST専用テーブルで作成済み）】
+                    </th>
+                </tr>
+            `;
+
+            linkedStStaffData.staffList.forEach((st, stIdx) => {
+                const rowData = linkedStStaffData.grid[stIdx] || [];
+                let stWorkCount = 0;
+                let stOffCount = 0;
+                let stPaidCount = 0;
+                let stRefCount = 0;
+                let stEarlyCount = 0;
+
+                bodyHtml += `<tr style="background:#f8fafc; color:#334155; opacity:0.95;">`;
+                bodyHtml += `<td class="sticky-col-1 font-mono" style="background:#f0fdf4; color:#047857; font-weight:800;">ST-${stIdx + 1}</td>`;
+                bodyHtml += `<td class="sticky-col-2 border-thick-right" style="background:#f0fdf4; font-weight:700; text-align:left; padding-left:8px;">
+                    ${escapeHtmlText(st.name)}
+                    ${st.prevName ? `<span style="font-size:0.7rem; color:#64748b;">(${escapeHtmlText(st.prevName)})</span>` : ''}
+                    <span style="font-size:0.65rem; background:#dcfce7; color:#15803d; padding:1px 5px; border-radius:3px; margin-left:4px; font-weight:700;">${st.floor}</span>
+                </td>`;
+
+                for (let d = 0; d < NUM_DAYS; d++) {
+                    const c = rowData[d] || { symbol: '' };
+                    const sym = c.symbol ? c.symbol.replace(/[◦•･◯〇●]/g, '○') : '';
+                    const thickCls = ((d + 1) % 7 === 0) ? 'border-thick-right' : '';
+                    let symStyle = '';
+                    if (sym === '休') { symStyle = 'color:#ef4444; font-weight:700;'; stOffCount++; }
+                    else if (sym === '有') { symStyle = 'color:#15803d; font-weight:800;'; stPaidCount++; }
+                    else if (sym && sym.includes('リフ')) { symStyle = 'color:#059669; font-weight:800;'; stRefCount++; }
+                    else if (sym === '早') { symStyle = 'color:#d97706; font-weight:800;'; stEarlyCount++; stWorkCount += (st.isHalf ? 0.5 : 1); }
+                    else if (isWorkSymbol(sym)) { symStyle = 'color:#1e293b; font-weight:700;'; stWorkCount += (st.isHalf ? 0.5 : 1); }
+
+                    bodyHtml += `<td class="${thickCls}" style="text-align:center; font-size:0.85rem; background:#f0fdf4; ${symStyle}" title="STスタッフ（STテーブルで確定済み）: ${escapeHtmlText(st.name)} / ${sym}">${sym}</td>`;
+                }
+
+                bodyHtml += `
+                    <td style="text-align:center; font-weight:700; background:#f0fdf4; color:#1e293b;">${stWorkCount}</td>
+                    <td style="text-align:center; font-weight:700; background:#f0fdf4; color:#1e293b;">${stOffCount}</td>
+                    <td style="text-align:center; font-weight:800; background:#f0fdf4; color:#1e293b;">${stPaidCount}</td>
+                    <td style="text-align:center; font-weight:600; background:#f0fdf4; color:#1e293b;">${stRefCount}</td>
+                    <td style="text-align:center; font-weight:600; background:#f0fdf4; color:#d97706;">${stEarlyCount}</td>
+                    <td style="text-align:center; color:#94a3b8; background:#f0fdf4;">-</td>
+                    <td style="text-align:center; color:#94a3b8; background:#f0fdf4;">-</td>
+                    <td style="text-align:center; color:#94a3b8; background:#f0fdf4;">-</td>
+                    <td style="font-size:0.78rem; color:#64748b; background:#f0fdf4; text-align:left; padding:2px 8px;">ST専用テーブル連携（参照のみ）</td>
+                </tr>`;
+            });
+        }
+
         tbody.innerHTML = bodyHtml;
 
         attachInputTableEvents();
@@ -1779,6 +1983,27 @@ document.addEventListener('DOMContentLoaded', () => {
                 if (tr) {
                     if (e.target.checked) tr.classList.add('row-unused');
                     else tr.classList.remove('row-unused');
+                }
+                saveStaffMaster();
+                saveCurrentTermToStorage();
+            });
+        });
+
+        // 所属フロア排他トグルのイベント（1F/2F/3F/南は択一排他制御＋変更後に必ずマスター＆ターム保存！）
+        document.querySelectorAll('input[type="checkbox"][data-floor]').forEach(chk => {
+            chk.addEventListener('change', (e) => {
+                const s = parseInt(e.target.dataset.s, 10);
+                const floor = e.target.dataset.floor;
+                pushHistory();
+                if (e.target.checked) {
+                    staffList[s].floor = floor;
+                    document.querySelectorAll(`input[type="checkbox"][data-floor][data-s="${s}"]`).forEach(other => {
+                        if (other !== e.target) other.checked = false;
+                    });
+                } else {
+                    if (staffList[s].floor === floor) {
+                        staffList[s].floor = '';
+                    }
                 }
                 saveStaffMaster();
                 saveCurrentTermToStorage();
@@ -2610,6 +2835,14 @@ document.addEventListener('DOMContentLoaded', () => {
             futureHistory[i] = new Set();
         }
 
+        // 現在のスタッフ一覧から、氏名および旧姓（prevName）によるスタッフID逆引きマップを構築
+        const nameToCurrentId = new Map();
+        staffList.forEach((st, sIdx) => {
+            const cId = st.id || (sIdx + 1);
+            if (st.name && st.name.trim()) nameToCurrentId.set(st.name.trim(), cId);
+            if (st.prevName && st.prevName.trim()) nameToCurrentId.set(st.prevName.trim(), cId);
+        });
+
         try {
             const terms = getSavedTerms();
             terms.forEach(termDate => {
@@ -2623,7 +2856,13 @@ document.addEventListener('DOMContentLoaded', () => {
 
                 if (data.outputGrid && Array.isArray(data.outputGrid)) {
                     data.outputGrid.forEach((row, sIdx) => {
-                        const staffId = sIdx + 1;
+                        const savedSt = (data.staffList && data.staffList[sIdx]);
+                        const sName = savedSt ? (savedSt.name || '').trim() : '';
+                        const sPrevName = savedSt ? (savedSt.prevName || '').trim() : '';
+                        let staffId = (sName && nameToCurrentId.has(sName)) ? nameToCurrentId.get(sName) :
+                                      (sPrevName && nameToCurrentId.has(sPrevName)) ? nameToCurrentId.get(sPrevName) :
+                                      (sIdx + 1);
+
                         if (!pastHistory[staffId]) pastHistory[staffId] = new Set();
                         if (!futureHistory[staffId]) futureHistory[staffId] = new Set();
 
@@ -2637,7 +2876,7 @@ document.addEventListener('DOMContentLoaded', () => {
                                 }
                                 allHistoryDetails.push({
                                     staffId,
-                                    staffName: (data.staffList && data.staffList[sIdx]) ? data.staffList[sIdx].name : `スタッフ ${staffId}`,
+                                    staffName: savedSt ? savedSt.name : `スタッフ ${staffId}`,
                                     termDate,
                                     symbol: sym,
                                     dayIndex: dIdx,
@@ -2648,7 +2887,12 @@ document.addEventListener('DOMContentLoaded', () => {
                     });
                 } else if (data.staffList && Array.isArray(data.staffList)) {
                     data.staffList.forEach((st, sIdx) => {
-                        const staffId = st.id || (sIdx + 1);
+                        const sName = (st.name || '').trim();
+                        const sPrevName = (st.prevName || '').trim();
+                        let staffId = (sName && nameToCurrentId.has(sName)) ? nameToCurrentId.get(sName) :
+                                      (sPrevName && nameToCurrentId.has(sPrevName)) ? nameToCurrentId.get(sPrevName) :
+                                      (st.id || (sIdx + 1));
+
                         if (!pastHistory[staffId]) pastHistory[staffId] = new Set();
                         if (!futureHistory[staffId]) futureHistory[staffId] = new Set();
 
@@ -3135,6 +3379,83 @@ document.addEventListener('DOMContentLoaded', () => {
     const outputAssignSpecialBtn = document.getElementById('outputAssignSpecialBtn');
     if (outputAssignSpecialBtn) outputAssignSpecialBtn.addEventListener('click', handleAssignSpecialDuties);
 
+    // ==========================================
+    // ★ ST所属スタッフ連携データ管理（各病棟テーブルへの参照表示 & 実数合算用）
+    // ==========================================
+    let linkedStStaffData = null; // { staffList: [...], grid: [...] }
+
+    function loadLinkedSTData(startDate) {
+        if (isST || !currentFloor) {
+            linkedStStaffData = null;
+            return;
+        }
+        const targetDate = startDate || currentWorkingStartDate || '2026-04-01';
+        const stKey = `shift_schedule_st_term_${targetDate}`;
+        let raw = localStorage.getItem(stKey);
+        if (!raw) {
+            if (window._cloudMem && window._cloudMem.has(stKey)) {
+                raw = window._cloudMem.get(stKey);
+            }
+        }
+        if (!raw) {
+            // クラウドからSTの最新データをバックグラウンド取得して再読込
+            if (!window._stFetchInFlight) {
+                window._stFetchInFlight = true;
+                fetch(`/api/cloud_sync?deptId=st&t=${Date.now()}`, { cache: 'no-store' })
+                    .then(r => r.ok ? r.json() : null)
+                    .then(res => {
+                        window._stFetchInFlight = false;
+                        if (res && res.data && res.data.terms && res.data.terms[targetDate]) {
+                            const termObj = res.data.terms[targetDate];
+                            localStorage.setItem(stKey, JSON.stringify(termObj));
+                            loadLinkedSTData(targetDate);
+                            // 画面更新
+                            if (lastSolveResult && lastSolveResult.grid) {
+                                renderOutputTable(lastSolveResult.grid, lastSolveResult.stats);
+                                renderStatsDashboard(lastSolveResult.stats);
+                            }
+                        }
+                    })
+                    .catch(() => { window._stFetchInFlight = false; });
+            }
+            linkedStStaffData = null;
+            return;
+        }
+
+        try {
+            const data = JSON.parse(raw);
+            if (!data || !Array.isArray(data.staffList)) {
+                linkedStStaffData = null;
+                return;
+            }
+
+            const matchingStaff = [];
+            const matchingGrid = [];
+
+            data.staffList.forEach((st, idx) => {
+                // 不使用でなく、かつ当病棟フロア（1F, 2F, 3F, 南）に所属するST
+                if (!st.isUnused && st.floor === currentFloor) {
+                    matchingStaff.push(st);
+                    if (data.outputGrid && Array.isArray(data.outputGrid[idx])) {
+                        matchingGrid.push(data.outputGrid[idx]);
+                    } else if (Array.isArray(st.days)) {
+                        matchingGrid.push(st.days.map(sym => ({ symbol: sym, isFixed: false })));
+                    } else {
+                        matchingGrid.push(new Array(NUM_DAYS).fill({ symbol: '' }));
+                    }
+                }
+            });
+
+            linkedStStaffData = {
+                staffList: matchingStaff,
+                grid: matchingGrid
+            };
+        } catch (e) {
+            console.warn('ST連携データ読み込み警告:', e);
+            linkedStStaffData = null;
+        }
+    }
+
     // 出力テーブル描画（画像3のメリハリある罫線と「※/※※～※/※※勤務表」タイトルを反映）
     function renderOutputTable(grid, stats) {
         const thead = document.getElementById('outputTableHead');
@@ -3217,6 +3538,61 @@ document.addEventListener('DOMContentLoaded', () => {
             `;
             bodyHtml += `</tr>`;
         });
+
+        // ★「1階」「2階」「3階」「南」のテーブルの最下部にSTのスタッフ名と勤務を確認できるように表示
+        if (!isST && currentFloor && linkedStStaffData && linkedStStaffData.staffList && linkedStStaffData.staffList.length > 0) {
+            bodyHtml += `
+                <tr style="background:#f0fdf4; border-top: 3px solid #10b981;">
+                    <th colspan="${NUM_DAYS + 11}" style="text-align:left; padding:8px 12px; font-size:0.85rem; font-weight:800; color:#065f46; letter-spacing:0.03em;">
+                        🌿 【${currentFloor} 所属 STスタッフ（参照表示・ST専用テーブルで作成済み）】
+                    </th>
+                </tr>
+            `;
+
+            linkedStStaffData.staffList.forEach((st, stIdx) => {
+                const rowData = linkedStStaffData.grid[stIdx] || [];
+                let stWorkCount = 0;
+                let stOffCount = 0;
+                let stPaidCount = 0;
+                let stRefCount = 0;
+                let stEarlyCount = 0;
+
+                bodyHtml += `<tr style="background:#f8fafc; color:#334155; opacity:0.95;">`;
+                bodyHtml += `<td class="sticky-col-1 font-mono" style="background:#f0fdf4; color:#047857; font-weight:800;">ST-${stIdx + 1}</td>`;
+                bodyHtml += `<td class="sticky-col-2 border-thick-right" style="background:#f0fdf4; font-weight:700; text-align:left; padding-left:8px;">
+                    ${escapeHtmlText(st.name)}
+                    ${st.prevName ? `<span style="font-size:0.7rem; color:#64748b;">(${escapeHtmlText(st.prevName)})</span>` : ''}
+                    <span style="font-size:0.65rem; background:#dcfce7; color:#15803d; padding:1px 5px; border-radius:3px; margin-left:4px; font-weight:700;">${st.floor}</span>
+                </td>`;
+
+                for (let d = 0; d < NUM_DAYS; d++) {
+                    const c = rowData[d] || { symbol: '' };
+                    const sym = c.symbol ? c.symbol.replace(/[◦•･◯〇●]/g, '○') : '';
+                    const thickCls = ((d + 1) % 7 === 0) ? 'border-thick-right' : '';
+                    let symStyle = '';
+                    if (sym === '休') { symStyle = 'color:#ef4444; font-weight:700;'; stOffCount++; }
+                    else if (sym === '有') { symStyle = 'color:#15803d; font-weight:800;'; stPaidCount++; }
+                    else if (sym && sym.includes('リフ')) { symStyle = 'color:#059669; font-weight:800;'; stRefCount++; }
+                    else if (sym === '早') { symStyle = 'color:#d97706; font-weight:800;'; stEarlyCount++; stWorkCount += (st.isHalf ? 0.5 : 1); }
+                    else if (isWorkSymbol(sym)) { symStyle = 'color:#1e293b; font-weight:700;'; stWorkCount += (st.isHalf ? 0.5 : 1); }
+
+                    bodyHtml += `<td class="${thickCls}" style="text-align:center; font-size:0.85rem; background:#f0fdf4; ${symStyle}" title="STスタッフ（STテーブルで確定済み）: ${escapeHtmlText(st.name)} / ${sym}">${sym}</td>`;
+                }
+
+                bodyHtml += `
+                    <td style="text-align:center; font-weight:700; background:#f0fdf4; color:#1e293b;">${stWorkCount}</td>
+                    <td style="text-align:center; font-weight:700; background:#f0fdf4; color:#1e293b;">${stOffCount}</td>
+                    <td style="text-align:center; font-weight:800; background:#f0fdf4; color:#1e293b;">${stPaidCount}</td>
+                    <td style="text-align:center; font-weight:600; background:#f0fdf4; color:#1e293b;">${stRefCount}</td>
+                    <td style="text-align:center; font-weight:600; background:#f0fdf4; color:#d97706;">${stEarlyCount}</td>
+                    <td style="text-align:center; color:#94a3b8; background:#f0fdf4;">-</td>
+                    <td style="text-align:center; color:#94a3b8; background:#f0fdf4;">-</td>
+                    <td style="text-align:center; color:#94a3b8; background:#f0fdf4;">-</td>
+                    <td style="font-size:0.78rem; color:#64748b; background:#f0fdf4; text-align:left; padding:2px 8px;">ST専用テーブル連携（参照のみ）</td>
+                </tr>`;
+            });
+        }
+
         tbody.innerHTML = bodyHtml;
 
         const validStaffStats = stats.staffStats.filter(s => !s.isUnused);
@@ -3486,8 +3862,29 @@ document.addEventListener('DOMContentLoaded', () => {
 
         for (let d = 0; d < NUM_DAYS; d++) {
             const di = dates[d];
-            const totalWork = stats.daily[d].totalWork;
-            const realWork = stats.daily[d].realWork !== undefined ? stats.daily[d].realWork : totalWork;
+            let totalWork = stats.daily[d].totalWork;
+            let realWork = stats.daily[d].realWork !== undefined ? stats.daily[d].realWork : totalWork;
+
+            // ★ 所属階STスタッフの実数を合算！
+            let stReal = 0;
+            let stTotal = 0;
+            if (!isST && currentFloor && linkedStStaffData && linkedStStaffData.staffList) {
+                linkedStStaffData.staffList.forEach((st, stIdx) => {
+                    const row = linkedStStaffData.grid[stIdx] || [];
+                    const c = row[d] || { symbol: '' };
+                    const sym = c.symbol || '';
+                    if (isWorkSymbol(sym)) {
+                        stTotal++;
+                        stReal += (st.isHalf ? 0.5 : 1.0);
+                    }
+                });
+            }
+
+            totalWork += stTotal;
+            realWork = Number((realWork + stReal).toFixed(2));
+            stats.daily[d].stReal = stReal;
+            stats.daily[d].combinedReal = realWork;
+
             const item = { d, totalWork, realWork, label: di.label, weekday: di.weekday, isHoliday: di.isHoliday };
 
             // 土曜(wIdx=5), 日曜(wIdx=6), 国民の祝日(isHoliday)
@@ -3601,8 +3998,12 @@ document.addEventListener('DOMContentLoaded', () => {
 
         const workRangeEl = document.getElementById('statWorkRange');
         const avgWorkEl = document.getElementById('statAvgWork');
-        if (workRangeEl) workRangeEl.textContent = `実数 ${allMin} 〜 ${allMax} 名 (ブレ幅: 実数 ${Number((allMax - allMin).toFixed(2))} 名)`;
-        if (avgWorkEl) avgWorkEl.textContent = `実数 ${allAvg} 名`;
+        let stNote = '';
+        if (!isST && currentFloor && linkedStStaffData && linkedStStaffData.staffList && linkedStStaffData.staffList.length > 0) {
+            stNote = ` <span style="font-size:0.75rem; color:#047857; font-weight:700;">(ST所属 ${linkedStStaffData.staffList.length}名 合算中)</span>`;
+        }
+        if (workRangeEl) workRangeEl.innerHTML = `実数 ${allMin} 〜 ${allMax} 名 (ブレ幅: 実数 ${Number((allMax - allMin).toFixed(2))} 名)${stNote}`;
+        if (avgWorkEl) avgWorkEl.innerHTML = `実数 ${allAvg} 名${stNote}`;
 
         // --- 特殊勤務（早・遅・E・8時）の配置累計 ---
         const totalEarly = validStaffStats.reduce((sum, s) => sum + s.early, 0);
@@ -3611,28 +4012,30 @@ document.addEventListener('DOMContentLoaded', () => {
         const totalH8 = validStaffStats.reduce((sum, s) => sum + s.h8, 0);
         const specEl = document.getElementById('statSpecialCounts');
         if (specEl) {
-            specEl.textContent = `早: ${totalEarly}回 / 遅: ${totalLate}回 / E: ${totalEve}回 / 8時: ${totalH8}回`;
+            if (isST) {
+                specEl.textContent = `早: ${totalEarly}回（各人3回割当・遅/E/8時はST対象外）`;
+            } else {
+                specEl.textContent = `早: ${totalEarly}回 / 遅: ${totalLate}回 / E: ${totalEve}回 / 8時: ${totalH8}回`;
+            }
         }
 
-        // --- 日別実数合計グラフ（平日・土曜・祝日で色分け、MAX 40名 / MIN 25名 スケール） ---
+        // --- 日別実数合計グラフ（平日・土曜・祝日で色分け、ST時は0〜16名、通常はMAX 40名 / MIN 25名 スケール） ---
         const chartEl = document.getElementById('dailyWorkChart');
         if (chartEl) {
             let chartHtml = '';
-            const minScale = 25;
-            const maxScale = 40;
-            const range = maxScale - minScale; // 15名
+            const minScale = isST ? 5 : 25;
+            const maxScale = isST ? 16 : 40;
+            const range = maxScale - minScale;
 
             stats.daily.forEach((d, idx) => {
                 const di = dates[idx];
                 const dispReal = d.realWork !== undefined ? d.realWork : d.totalWork;
-                // MAX 40名, MIN 25名 スケール。25名で下限5%、40名で100%
                 let pct = 5;
                 if (dispReal >= maxScale) {
                     pct = 100;
                 } else if (dispReal >= minScale) {
                     pct = 5 + ((dispReal - minScale) / range) * 95;
                 } else {
-                    // 25名未満の場合は消えないよう最小限のバー（3%〜4%）
                     pct = Math.max(3, (dispReal / minScale) * 5);
                 }
                 pct = Math.min(100, Math.max(3, pct));

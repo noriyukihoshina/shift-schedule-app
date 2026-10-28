@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>勤務予定表 自動作成システム - 3階病棟</title>
+    <title>勤務予定表 自動作成システム (28日サイクル・60名規模)</title>
     <link rel="stylesheet" href="style.css">
 </head>
 <body>
@@ -24,7 +24,16 @@
             </button>
         </div>
     </header>
-
+    <!-- Table Navigation -->
+    <nav class="dept-nav-container">
+        <span style="font-size:0.8rem; font-weight:700; color:#475569;">テーブル切替:</span>
+        <a href="1階病棟.html" class="dept-nav-btn ">1階病棟</a>
+        <a href="2階病棟.html" class="dept-nav-btn ">2階病棟</a>
+        <a href="3階病棟.html" class="dept-nav-btn active">3階病棟</a>
+        <a href="南病棟.html" class="dept-nav-btn ">南病棟</a>
+        <a href="ST.html" class="dept-nav-btn dept-nav-st ">諺 ST</a>
+    </nav>
+    <!-- Table Navigation -->
     <!-- ナビゲーションタブ -->
     <nav class="tab-container">
         <button class="tab-btn active" data-tab="inputTab">
@@ -502,7 +511,10 @@
 
             <!-- 日別出勤人数グラフ -->
             <div class="toolbar-card" style="flex-direction: column; align-items: stretch;">
-                <div style="font-weight: 700; color: #1e293b; margin-bottom: 0.75rem;">日別出勤人数（実数合計）グラフ（28日間）</div>
+                <div style="display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 0.75rem; flex-wrap: wrap; gap: 8px;">
+                    <div style="font-weight: 700; color: #1e293b;">日別出勤人数（実数合計）グラフ（28日間）</div>
+                    <div style="font-size: 0.75rem; color: #475569; font-weight: 600; background: #f1f5f9; padding: 2px 10px; border-radius: 4px; border: 1px solid #e2e8f0;">縦目盛り: MAX 40名 〜 MIN 25名</div>
+                </div>
                 <div id="dailyWorkChart" style="display: flex; gap: 6px; align-items: flex-end; padding: 1rem 0; height: 160px;">
                     <div style="color: #94a3b8; font-size: 0.85rem; margin: auto;">勤務表を自動生成するとグラフが表示されます</div>
                 </div>
@@ -629,17 +641,19 @@
     </div>
 
     <!-- スクリプト読み込み -->
-    
-    <!-- 部署・病棟固有設定 (パスワード・データ分離) -->
+        <!-- Dept Config -->
+        <!-- Dept Config -->
     <script>
         window.APP_CONFIG = {
             deptId: '3f',
             deptName: '3階病棟',
+            floor: '3F',
+            
             password: '33333'
         };
     </script>
-    <script src="solver.js?v=20261027_rev47"></script>
-    <script src="app.js?v=20261027_rev47"></script>
+    <script src="solver.js?v=20261028_rev48"></script>
+    <script src="app.js?v=20261028_rev48"></script>
 </body>
 </html>
 

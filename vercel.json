@@ -1,4 +1,14 @@
 {
+  "cleanUrls": true,
+  "rewrites": [
+    { "source": "/1f", "destination": "/1f.html" },
+    { "source": "/2f", "destination": "/2f.html" },
+    { "source": "/3f", "destination": "/3f.html" },
+    { "source": "/south", "destination": "/south.html" },
+    { "source": "/st", "destination": "/ST.html" },
+    { "source": "/ST", "destination": "/ST.html" },
+    { "source": "/st.html", "destination": "/ST.html" }
+  ],
   "headers": [
     {
       "source": "/(.*)",
