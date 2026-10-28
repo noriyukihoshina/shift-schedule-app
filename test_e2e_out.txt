@@ -1,0 +1,178 @@
+<!DOCTYPE html>
+<html><head>
+    <meta charset="utf-8">
+    <title>E2E Comprehensive Verification</title>
+</head>
+<body>
+    <div id="results" style="font-family:monospace; white-space:pre;"></div>
+    <script src="solver.js?v=20261029_rev59"></script>
+    <script>
+    const resEl = document.getElementById('results');
+    function log(msg) {
+        resEl.innerText += msg + '\n';
+        console.log(msg);
+    }
+
+    let allPassed = true;
+    function assert(cond, name) {
+        if (cond) {
+            log('  [PASS] ' + name);
+        } else {
+            log('  [FAIL] ' + name);
+            allPassed = false;
+        }
+    }
+
+    try {
+        log('=== TEST 1: ShiftScheduler Definition Check ===');
+        assert(typeof ShiftScheduler === 'function', 'ShiftScheduler is defined as a class/function');
+
+        log('\n=== TEST 2: ST Floor Sched Coverage Constraint Check ===');
+        // ST蛻晄悄繧ｹ繧ｿ繝・ヵ36蜷搾ｼ・縲・6逡ｪ縺悟ｮ溘せ繧ｿ繝・ヵ縲∝推髫・蜷搾ｼ・        const createSTStaff = () => {
+            const list = [];
+            const floors = ['1F', '2F', '3F', '蜊・];
+            for (let i = 1; i <= 36; i++) {
+                const fIdx = Math.floor((i - 1) / 4);
+                list.push({
+                    id: i,
+                    name: `ST ${String(i).padStart(2, '0')}`,
+                    floor: (i <= 16) ? floors[fIdx] : '',
+                    isUnused: (i > 16),
+                    canSched: (i <= 16 && (i % 4 === 1 || i % 4 === 2)), // 1F: 1,2 / 2F: 5,6 / 3F: 9,10 / 蜊・ 13,14
+                    isSectionChief: (i === 1),
+                    isChief: (i === 2),
+                    isSubChief: false,
+                    isHalf: false,
+                    isFullTime: (i === 3 || i === 7),
+                    noEarly: false,
+                    allow6Consec: false,
+                    prevName: '',
+                    prevDays: ['', '', '', '', ''],
+                    days: new Array(28).fill('')
+                });
+            }
+            return list;
+        };
+
+        const dates = [];
+        const bDate = new Date('2026-04-01T00:00:00');
+        for (let d = 0; d < 28; d++) {
+            const dt = new Date(bDate);
+            dt.setDate(dt.getDate() + d);
+            dates.push({
+                date: dt,
+                label: `${dt.getMonth() + 1}/${dt.getDate()}`,
+                weekday: ['譌･', '譛・, '轣ｫ', '豌ｴ', '譛ｨ', '驥・, '蝨・][dt.getDay()],
+                wIdx: (dt.getDay() + 6) % 7,
+                isHoliday: false
+            });
+        }
+
+        // 2-1: 2髫趣ｼ・o.5, No.6・峨・繧ｹ繧ｱ蜿ｯ繧丹FF縺ｫ縺励◆蝣ｴ蜷医↓繧ｨ繝ｩ繝ｼ縺ｫ縺ｪ繧九°讀懆ｨｼ
+        const stStaffNo2FSched = createSTStaff();
+        stStaffNo2FSched[4].canSched = false; // No.5
+        stStaffNo2FSched[5].canSched = false; // No.6
+
+        const sched2FMissing = new ShiftScheduler(stStaffNo2FSched, {
+            standardHolidays: 8.0,
+            dates: dates,
+            isST: true
+        });
+        const resMissing = sched2FMissing.solveBaseSchedule();
+        assert(resMissing.success === false, 'Scheduler detects missing canSched staff on floor');
+        const has2FError = resMissing.errors && resMissing.errors.some(e => e.includes('2髫・) && e.includes('繧ｹ繧ｱ蜿ｯ'));
+        assert(has2FError === true, 'Error message explicitly mentions 2髫・and 繧ｹ繧ｱ蜿ｯ: ' + (resMissing.errors ? resMissing.errors.join(' | ') : 'none'));
+
+        // 2-2: 蜷・嚴縺ｫ繧ｹ繧ｱ蜿ｯ縺・蜷堺ｻ･荳翫＞繧句ｴ蜷医∵ｭ｣蟶ｸ縺ｫ謌仙粥縺吶ｋ縺区､懆ｨｼ
+        const stStaffValid = createSTStaff();
+        const schedValid = new ShiftScheduler(stStaffValid, {
+            standardHolidays: 8.0,
+            dates: dates,
+            isST: true
+        });
+        const resValid = schedValid.solveBaseSchedule();
+        assert(resValid.success === true, 'ST Schedule succeeds when all 4 floors have canSched staff');
+        assert(resValid.grid && resValid.grid.length === 36, 'Grid has 36 staff rows');
+
+        log('\n=== TEST 3: ST Output Table Rendering Check ===');
+        // ST蜃ｺ蜉帙ユ繝ｼ繝悶Ν縺ｮ髫主挨謠冗判繝・せ繝・        const stFloors = [
+            { key: '1F', label: '1髫・ },
+            { key: '2F', label: '2髫・ },
+            { key: '3F', label: '3髫・ },
+            { key: '蜊・, label: '蜊・ }
+        ];
+        let totalRenderedStaff = 0;
+        stFloors.forEach(fl => {
+            const floorStaff = stStaffValid.filter(s => !s.isUnused && (s.floor === fl.key || s.floor === fl.label));
+            totalRenderedStaff += floorStaff.length;
+        });
+        assert(totalRenderedStaff === 16, 'All 16 active ST staff belong to one of 4 floors');
+
+        // 蜷・ヵ繝ｭ繧｢縺ｧ豈取律繧ｹ繧ｱ蜿ｯ繧ｹ繧ｿ繝・ヵ縺・蜷堺ｻ･荳雁・蜍､縺励※縺・ｋ縺・        let floorCoverageOk = true;
+        stFloors.forEach(fl => {
+            const flStaffIndices = [];
+            stStaffValid.forEach((s, idx) => {
+                if (!s.isUnused && s.floor === fl.key && s.canSched) flStaffIndices.push(idx);
+            });
+            for (let d = 0; d < 28; d++) {
+                let workCount = 0;
+                flStaffIndices.forEach(sIdx => {
+                    const sym = resValid.grid[sIdx][d].symbol;
+                    if (sym === '笳・ || sym === '譌ｩ') workCount++;
+                });
+                if (workCount < 1) {
+                    floorCoverageOk = false;
+                    log(`    Warning: Floor ${fl.key} has 0 canSched on day ${d+1}`);
+                }
+            }
+        });
+        assert(floorCoverageOk === true, 'Each of the 4 floors has at least 1 canSched staff working every day');
+
+        log('\n=== TEST 4: PO Wards Schedule Check (ShiftScheduler is defined & solver works) ===');
+        // PO繝・・繝悶Ν・・8蜷埼°逕ｨ縲・0蜷肴棧・峨・繝・せ繝・        const poStaffList = [];
+        for (let i = 1; i <= 60; i++) {
+            poStaffList.push({
+                id: i,
+                name: `繧ｹ繧ｿ繝・ヵ ${String(i).padStart(2, '0')}`,
+                floor: '1F',
+                isUnused: (i > 48),
+                canSched: (i % 5 === 1 || i % 5 === 2),
+                can8: (i % 6 === 3),
+                isSectionChief: (i === 1),
+                isChief: (i === 2),
+                isSubChief: (i === 3 || i === 4),
+                section: (i <= 24 ? 'PT A' : 'OT A'),
+                isHalf: false,
+                isFullTime: (i === 5 || i === 6 || i === 7),
+                noEarly: false,
+                noLate: false,
+                noEve: false,
+                allow6Consec: false,
+                prevName: '',
+                prevDays: ['', '', '', '', ''],
+                days: new Array(28).fill('')
+            });
+        }
+        const poScheduler = new ShiftScheduler(poStaffList, {
+            standardHolidays: 8.0,
+            dates: dates,
+            isST: false
+        });
+        const poRes = poScheduler.solveBaseSchedule();
+        assert(poRes.success === true, 'PO solveBaseSchedule succeeded without errors');
+        assert(poRes.grid && poRes.grid.length === 60, 'PO grid has 60 staff rows');
+
+        log('\n=== SUMMARY ===');
+        if (allPassed) {
+            log('ALL TESTS PASSED! 100% SUCCESS');
+        } else {
+            log('SOME TESTS FAILED');
+        }
+
+    } catch (err) {
+        log('EXCEPTION: ' + err.stack);
+        allPassed = false;
+    }
+    </script>
+
+</body></html>

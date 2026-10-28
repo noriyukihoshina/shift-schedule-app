@@ -1,0 +1,164 @@
+$dir = Split-Path -Parent $MyInvocation.MyCommand.Path
+
+$testHtml = @'
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8">
+    <title>BROWSER_INTEGRATION_TEST</title>
+</head>
+<body>
+    <div id="log" style="font-family:monospace; white-space:pre;">START</div>
+    <iframe id="testFrame" style="width:1200px; height:800px;"></iframe>
+    <script>
+    const logEl = document.getElementById('log');
+    function log(msg) {
+        logEl.textContent += '\n' + msg;
+        console.log(msg);
+    }
+
+    let allOk = true;
+    function assert(cond, name) {
+        if (cond) {
+            log('  [PASS] ' + name);
+        } else {
+            log('  [FAIL] ' + name);
+            allOk = false;
+        }
+    }
+
+    const frame = document.getElementById('testFrame');
+
+    async function wait(ms) {
+        return new Promise(r => setTimeout(r, ms));
+    }
+
+    async function runTests() {
+        try {
+            // STEP 1: ST.html のテスト
+            log('=== STEP 1: Testing ST.html ===');
+            await new Promise((resolve) => {
+                frame.onload = resolve;
+                frame.src = 'ST.html';
+            });
+            await wait(1000);
+
+            const fDoc = frame.contentDocument;
+            const fWin = frame.contentWindow;
+
+            assert(fDoc !== null, 'ST.html loaded inside iframe');
+            assert(typeof fWin.ShiftScheduler === 'function', 'ShiftScheduler is loaded in ST.html');
+
+            const badge = fDoc.getElementById('autoSaveStatusBadge');
+            assert(badge !== null && badge.textContent.includes('自動保存'), 'AutoSave badge is present on ST.html: ' + badge?.textContent?.trim());
+
+            const solveBtn = fDoc.getElementById('solveBtn') || fDoc.getElementById('inputSolveBtn');
+            assert(solveBtn !== null, 'solveBtn exists on ST.html');
+
+            log('Clicking solveBtn on ST.html...');
+            solveBtn.click();
+            await wait(1500);
+
+            const tbody = fDoc.getElementById('outputTableBody');
+            assert(tbody !== null, 'outputTableBody exists on ST.html');
+            const rows = tbody.querySelectorAll('tr');
+            log('ST outputTableBody tr count: ' + rows.length);
+            assert(rows.length >= 16, 'ST output table rendered with >= 16 rows (rendered: ' + rows.length + ')');
+
+            // セルクリックによる自動保存テスト
+            log('Testing cell click auto-save on ST.html...');
+            const firstCell = fDoc.querySelector('#outputTableBody .day-cell');
+            if (firstCell) {
+                const prevBadgeText = badge.textContent;
+                firstCell.click();
+                await wait(500);
+                const newBadgeText = badge.textContent;
+                log('Badge before: ' + prevBadgeText + ' -> after: ' + newBadgeText);
+                assert(newBadgeText.includes('自動保存済み'), 'Badge updated to 自動保存済み on cell click');
+            }
+
+            // STEP 2: 1f.html のテスト
+            log('\n=== STEP 2: Testing 1f.html ===');
+            await new Promise((resolve) => {
+                frame.onload = resolve;
+                frame.src = '1f.html';
+            });
+            await wait(1000);
+
+            const fDoc1 = frame.contentDocument;
+            const fWin1 = frame.contentWindow;
+
+            assert(typeof fWin1.ShiftScheduler === 'function', 'ShiftScheduler is loaded in 1f.html');
+            const solveBtn1 = fDoc1.getElementById('solveBtn') || fDoc1.getElementById('inputSolveBtn');
+            assert(solveBtn1 !== null, 'solveBtn exists on 1f.html');
+
+            log('Clicking solveBtn on 1f.html...');
+            solveBtn1.click();
+            await wait(1500);
+
+            const tbody1 = fDoc1.getElementById('outputTableBody');
+            const rows1 = tbody1.querySelectorAll('tr');
+            log('1f outputTableBody tr count: ' + rows1.length);
+            assert(rows1.length >= 40, '1f output table rendered with >= 40 rows (rendered: ' + rows1.length + ')');
+
+            // STEP 3: master.html のテスト
+            log('\n=== STEP 3: Testing master.html ===');
+            await new Promise((resolve) => {
+                frame.onload = resolve;
+                frame.src = 'master.html';
+            });
+            await wait(1000);
+
+            const fDocM = frame.contentDocument;
+            const fWinM = frame.contentWindow;
+            assert(typeof fWinM.ShiftScheduler === 'function', 'ShiftScheduler is loaded in master.html');
+            const mBadge = fDocM.getElementById('autoSaveStatusBadge');
+            assert(mBadge !== null && mBadge.textContent.includes('自動保存'), 'Master table has AutoSave badge: ' + mBadge?.textContent?.trim());
+
+            if (allOk) {
+                document.title = 'BROWSER_INTEGRATION_SUCCESS';
+                log('\n>>> ALL BROWSER INTEGRATION TESTS PASSED (100%)');
+            } else {
+                document.title = 'BROWSER_INTEGRATION_FAILED';
+                log('\n>>> SOME BROWSER INTEGRATION TESTS FAILED');
+            }
+        } catch (err) {
+            document.title = 'BROWSER_INTEGRATION_EXCEPTION';
+            log('EXCEPTION: ' + err.stack);
+        }
+    }
+
+    window.addEventListener('load', () => {
+        setTimeout(runTests, 300);
+    });
+    </script>
+</body>
+</html>
+'@
+
+$testPath = Join-Path $dir "test_browser_integration.html"
+[System.IO.File]::WriteAllText($testPath, $testHtml, [System.Text.Encoding]::UTF8)
+
+$edge = "C:\Program Files (x86)\Microsoft\Edge\Application\msedge.exe"
+if (-not (Test-Path $edge)) { $edge = "C:\Program Files\Microsoft\Edge\Application\msedge.exe" }
+
+$guid = [Guid]::NewGuid().ToString("N")
+$outPath = Join-Path $dir ("test_browser_res_" + $guid + ".txt")
+
+$urlArg = "file:///" + $testPath + "?v=" + $guid
+
+$proc = Start-Process -FilePath $edge -ArgumentList "--headless", "--disable-gpu", "--allow-file-access-from-files", "--disk-cache-size=0", "--virtual-time-budget=15000", "--dump-dom", "`"$urlArg`"" -NoNewWindow -PassThru -RedirectStandardOutput $outPath
+$proc.WaitForExit(18000)
+
+$content = [System.IO.File]::ReadAllText($outPath, [System.Text.Encoding]::UTF8)
+
+Write-Output "--- TITLE ---"
+[System.Text.RegularExpressions.Regex]::Matches($content, '<title>(.*?)</title>') | ForEach-Object { $_.Value }
+
+Write-Output "`n--- LOGS ---"
+$m = [System.Text.RegularExpressions.Regex]::Match($content, '(?s)<div id="log"[^>]*>(.*?)</div>')
+if ($m.Success) {
+    Write-Output $m.Groups[1].Value
+} else {
+    Write-Output "Failed to find log div"
+}
