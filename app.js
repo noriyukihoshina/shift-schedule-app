@@ -815,20 +815,21 @@ document.addEventListener('DOMContentLoaded', () => {
                     id: s.id,
                     name: s.name,
                     isUnused: !!s.isUnused,
+                    floor: s.floor || '',
                     section: s.section || '',
-                    can8: s.can8,
-                    noEarly: s.noEarly,
-                    noLate: s.noLate,
-                    noEve: s.noEve,
-                    canSched: s.canSched,
+                    can8: !!s.can8,
+                    noEarly: !!s.noEarly,
+                    noLate: !!s.noLate,
+                    noEve: !!s.noEve,
+                    canSched: !!s.canSched,
                     isSectionChief: !!s.isSectionChief,
-                    isChief: !!s.chief || !!s.isChief,
+                    isChief: !!(s.chief || s.isChief),
                     isSubChief: !!s.isSubChief,
                     isHalf: !!s.isHalf,
-                    isFullTime: s.isFullTime,
+                    isFullTime: !!s.isFullTime,
                     prevName: s.prevName || '',
                     remarks: s.remarks || '',
-                    allow6Consec: s.allow6Consec,
+                    allow6Consec: !!s.allow6Consec,
                     prevDays: [...s.prevDays],
                     days: [...s.days]
                 })),
@@ -2393,7 +2394,9 @@ document.addEventListener('DOMContentLoaded', () => {
         const res = validateScheduleGrid(lastSolveResult.grid, staffList, {
             dates: term.dates,
             standardHolidays: stdHolidayVal,
-            isFinal: false // ★ 特殊勤務なしはエラー外
+            isFinal: false, // ★ 特殊勤務なしはエラー外
+            isST: isST,
+            linkedStStaffData: linkedStStaffData
         });
 
         // 自動配分リフの誤消去チェック
@@ -2449,7 +2452,9 @@ document.addEventListener('DOMContentLoaded', () => {
         const res = validateScheduleGrid(lastSolveResult.grid, staffList, {
             dates: term.dates,
             standardHolidays: stdHolidayVal,
-            isFinal: true // ★ 特殊勤務の過不足も含めてチェック
+            isFinal: true, // ★ 特殊勤務の過不足も含めてチェック
+            isST: isST,
+            linkedStStaffData: linkedStStaffData
         });
 
         // 自動配分リフの誤消去チェック
@@ -3166,6 +3171,16 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     }
 
+    // 💾 手動保存ボタン（全テーブル・全タブ対応）
+    document.querySelectorAll('.manual-save-btn, #manualSaveBtn').forEach(btn => {
+        btn.addEventListener('click', () => {
+            saveCurrentTermToStorage();
+            if (typeof showToast === 'function') {
+                showToast('💾 勤務表データをブラウザに保存しました！');
+            }
+        });
+    });
+
     // 第1段階: 基本勤務表 自動生成ボタン（特殊勤務の自動割当は行わず、すべて○で保持）
     const solveBtn = document.getElementById('solveBtn') || document.getElementById('inputSolveBtn');
     function setSolveLoading(loading) {
@@ -3484,7 +3499,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
         let headHtml = `
             <tr>
-                <th class="sticky-col-1 border-thick-bottom" rowspan="2">No</th>
+                <th class="sticky-col-1 border-thick-bottom" rowspan="2">${isST ? '階' : 'No'}</th>
                 <th class="sticky-col-2 border-thick-right border-thick-bottom" rowspan="2">氏名</th>
                 <th colspan="${NUM_DAYS}" class="border-thick-right border-thick-bottom" style="font-size:0.95rem; font-weight:800; background:#f8fafc; color:#1e293b;">${term.title}</th>
                 <th colspan="9" class="border-thick-bottom" style="background:#e0f2fe; color:#0369a1; font-weight:800;">勤務・休暇 集計 ＆ 備考</th>
@@ -3522,39 +3537,105 @@ document.addEventListener('DOMContentLoaded', () => {
             if (!staffList[s].isUnused) validStaffIndices.push(s);
         }
 
-        validStaffIndices.forEach((s, outIdx) => {
-            const staff = staffList[s];
-            const staffStat = stats.staffStats[s];
-            const isLastStaff = (outIdx === validStaffIndices.length - 1);
-            const rowBottomCls = isLastStaff ? 'border-thick-bottom' : '';
+        if (isST) {
+            // ★ 添付3準拠デザイン: ST専用テーブルは階別（1階, 2階, 3階, 南）にグルーピング＆太線境界
+            const stFloors = [
+                { key: '1F', label: '1階', bg: '#f0f8ff', color: '#0369a1' },
+                { key: '2F', label: '2階', bg: '#fff8f0', color: '#c2410c' },
+                { key: '3F', label: '3階', bg: '#f2fcf5', color: '#15803d' },
+                { key: '南', label: '南', bg: '#faf5ff', color: '#7e22ce' }
+            ];
 
-            bodyHtml += `<tr>`;
-            bodyHtml += `<td class="sticky-col-1 font-mono ${rowBottomCls}">${outIdx + 1}</td>`;
-            bodyHtml += `<td class="sticky-col-2 border-thick-right ${rowBottomCls}">${staff.name}</td>`;
+            stFloors.forEach((fl) => {
+                const flStaffIndices = validStaffIndices.filter(s => {
+                    const st = staffList[s];
+                    return st.floor === fl.key || (st.floor && st.floor.includes(fl.key));
+                });
 
-            for (let d = 0; d < NUM_DAYS; d++) {
-                const cell = grid[s][d];
-                const displaySym = cell.symbol ? cell.symbol.replace(/[◦•･◯〇●]/g, '○') : '';
-                // 事前入力希望枠は赤字・太字（網掛けなし！）
-                const cls = cell.isFixed ? 'day-cell fixed-cell' : 'day-cell auto-cell';
-                const thickCls = ((d + 1) % 7 === 0) ? 'border-thick-right' : '';
-                const titleText = cell.isFixed ? '🔒 事前固定希望枠（赤字・太字保持）' : 'システム自動配置';
-                bodyHtml += `<td class="${cls} ${thickCls} ${rowBottomCls}" data-s="${s}" data-d="${d}" title="${titleText}">${displaySym}</td>`;
-            }
+                // 並び順: 係長 → 主任 → 副主任 → 希望入力ページの記載順
+                flStaffIndices.sort((a, b) => {
+                    const getRoleRank = (s) => {
+                        const st = staffList[s];
+                        if (st.isSectionChief) return 1;
+                        if (st.isChief) return 2;
+                        if (st.isSubChief) return 3;
+                        return 4;
+                    };
+                    const rankA = getRoleRank(a);
+                    const rankB = getRoleRank(b);
+                    if (rankA !== rankB) return rankA - rankB;
+                    return a - b;
+                });
 
-            bodyHtml += `
-                <td class="stat-cell ${rowBottomCls}" data-s="${s}" data-stat="work" style="font-weight:700; color:#1e293b; background:transparent;">${staffStat.workDays}</td>
-                <td class="stat-cell ${rowBottomCls}" data-s="${s}" data-stat="off" style="font-weight:700; color:#1e293b; background:transparent;">${staffStat.offDays}</td>
-                <td class="stat-cell ${rowBottomCls}" data-s="${s}" data-stat="paid" style="font-weight:800; color:#1e293b; background:transparent;">${staffStat.paidDays}</td>
-                <td class="stat-cell ${rowBottomCls}" data-s="${s}" data-stat="ref" style="font-weight:600; color:#1e293b; background:transparent;">${staffStat.refDays}</td>
-                <td class="stat-cell ${rowBottomCls}" data-s="${s}" data-stat="early" style="font-weight:600; color:#334155; background:transparent;">${staffStat.early}</td>
-                <td class="stat-cell ${rowBottomCls}" data-s="${s}" data-stat="late" style="font-weight:600; color:#334155; background:transparent;">${staffStat.late}</td>
-                <td class="stat-cell ${rowBottomCls}" data-s="${s}" data-stat="eve" style="font-weight:600; color:#334155; background:transparent;">${staffStat.eve}</td>
-                <td class="stat-cell ${rowBottomCls}" data-s="${s}" data-stat="h8" style="font-weight:600; color:#334155; background:transparent;">${staffStat.h8}</td>
-                <td class="remarks-cell ${rowBottomCls}" style="min-width:220px; max-width:320px; text-align:left; font-size:0.8rem; color:#475569; padding:2px 8px; white-space:normal; word-break:break-all; background:transparent;">${escapeHtmlText(staff.remarks || '')}</td>
-            `;
-            bodyHtml += `</tr>`;
-        });
+                flStaffIndices.forEach((s, idxInFl) => {
+                    const staff = staffList[s];
+                    const staffStat = stats.staffStats[s] || { workDays:0, offDays:0, paidDays:0, refDays:0, early:0, late:0, eve:0, h8:0 };
+                    const isLastInFloor = (idxInFl === flStaffIndices.length - 1);
+                    // 添付3の太い黒境界線！
+                    const rowBorderB = isLastInFloor ? 'border-bottom: 3px solid #1e293b !important;' : '';
+
+                    bodyHtml += `<tr style="${rowBorderB}">`;
+                    if (idxInFl === 0) {
+                        bodyHtml += `<td class="sticky-col-1 border-thick-right" rowspan="${flStaffIndices.length}" style="background:${fl.bg}; color:${fl.color}; font-weight:800; font-size:0.95rem; text-align:center; vertical-align:middle; ${rowBorderB}">${fl.label}</td>`;
+                    }
+                    bodyHtml += `<td class="sticky-col-2 border-thick-right" style="text-align:left; padding-left:8px; font-weight:700; ${rowBorderB}">${escapeHtmlText(staff.name)}</td>`;
+
+                    for (let d = 0; d < NUM_DAYS; d++) {
+                        const cell = grid[s][d] || { symbol: '' };
+                        const displaySym = cell.symbol ? cell.symbol.replace(/[◦•･◯〇●]/g, '○') : '';
+                        const cls = cell.isFixed ? 'day-cell fixed-cell' : 'day-cell auto-cell';
+                        const thickCls = ((d + 1) % 7 === 0) ? 'border-thick-right' : '';
+                        const titleText = cell.isFixed ? '🔒 事前固定希望枠（赤字・太字保持）' : 'システム自動配置';
+                        bodyHtml += `<td class="${cls} ${thickCls}" data-s="${s}" data-d="${d}" title="${titleText}" style="${rowBorderB}">${displaySym}</td>`;
+                    }
+
+                    bodyHtml += `
+                        <td class="stat-cell" data-s="${s}" data-stat="work" style="font-weight:700; color:#1e293b; background:transparent; ${rowBorderB}">${staffStat.workDays}</td>
+                        <td class="stat-cell" data-s="${s}" data-stat="off" style="font-weight:700; color:#1e293b; background:transparent; ${rowBorderB}">${staffStat.offDays}</td>
+                        <td class="stat-cell" data-s="${s}" data-stat="paid" style="font-weight:800; color:#1e293b; background:transparent; ${rowBorderB}">${staffStat.paidDays}</td>
+                        <td class="stat-cell" data-s="${s}" data-stat="ref" style="font-weight:600; color:#1e293b; background:transparent; ${rowBorderB}">${staffStat.refDays}</td>
+                        <td class="stat-cell" data-s="${s}" data-stat="early" style="font-weight:600; color:#c2410c; background:transparent; ${rowBorderB}">${staffStat.early}</td>
+                        <td class="stat-cell" data-s="${s}" data-stat="late" style="color:#94a3b8; background:transparent; ${rowBorderB}">-</td>
+                        <td class="stat-cell" data-s="${s}" data-stat="eve" style="color:#94a3b8; background:transparent; ${rowBorderB}">-</td>
+                        <td class="stat-cell" data-s="${s}" data-stat="h8" style="color:#94a3b8; background:transparent; ${rowBorderB}">-</td>
+                        <td class="remarks-cell" style="min-width:220px; max-width:320px; text-align:left; font-size:0.8rem; color:#475569; padding:2px 8px; white-space:normal; word-break:break-all; background:transparent; ${rowBorderB}">${escapeHtmlText(staff.remarks || '')}</td>
+                    </tr>`;
+                });
+            });
+        } else {
+            validStaffIndices.forEach((s, outIdx) => {
+                const staff = staffList[s];
+                const staffStat = stats.staffStats[s];
+                const isLastStaff = (outIdx === validStaffIndices.length - 1);
+                const rowBottomCls = isLastStaff ? 'border-thick-bottom' : '';
+
+                bodyHtml += `<tr>`;
+                bodyHtml += `<td class="sticky-col-1 font-mono ${rowBottomCls}">${outIdx + 1}</td>`;
+                bodyHtml += `<td class="sticky-col-2 border-thick-right ${rowBottomCls}">${staff.name}</td>`;
+
+                for (let d = 0; d < NUM_DAYS; d++) {
+                    const cell = grid[s][d];
+                    const displaySym = cell.symbol ? cell.symbol.replace(/[◦•･◯〇●]/g, '○') : '';
+                    const cls = cell.isFixed ? 'day-cell fixed-cell' : 'day-cell auto-cell';
+                    const thickCls = ((d + 1) % 7 === 0) ? 'border-thick-right' : '';
+                    const titleText = cell.isFixed ? '🔒 事前固定希望枠（赤字・太字保持）' : 'システム自動配置';
+                    bodyHtml += `<td class="${cls} ${thickCls} ${rowBottomCls}" data-s="${s}" data-d="${d}" title="${titleText}">${displaySym}</td>`;
+                }
+
+                bodyHtml += `
+                    <td class="stat-cell ${rowBottomCls}" data-s="${s}" data-stat="work" style="font-weight:700; color:#1e293b; background:transparent;">${staffStat.workDays}</td>
+                    <td class="stat-cell ${rowBottomCls}" data-s="${s}" data-stat="off" style="font-weight:700; color:#1e293b; background:transparent;">${staffStat.offDays}</td>
+                    <td class="stat-cell ${rowBottomCls}" data-s="${s}" data-stat="paid" style="font-weight:800; color:#1e293b; background:transparent;">${staffStat.paidDays}</td>
+                    <td class="stat-cell ${rowBottomCls}" data-s="${s}" data-stat="ref" style="font-weight:600; color:#1e293b; background:transparent;">${staffStat.refDays}</td>
+                    <td class="stat-cell ${rowBottomCls}" data-s="${s}" data-stat="early" style="font-weight:600; color:#334155; background:transparent;">${staffStat.early}</td>
+                    <td class="stat-cell ${rowBottomCls}" data-s="${s}" data-stat="late" style="font-weight:600; color:#334155; background:transparent;">${staffStat.late}</td>
+                    <td class="stat-cell ${rowBottomCls}" data-s="${s}" data-stat="eve" style="font-weight:600; color:#334155; background:transparent;">${staffStat.eve}</td>
+                    <td class="stat-cell ${rowBottomCls}" data-s="${s}" data-stat="h8" style="font-weight:600; color:#334155; background:transparent;">${staffStat.h8}</td>
+                    <td class="remarks-cell ${rowBottomCls}" style="min-width:220px; max-width:320px; text-align:left; font-size:0.8rem; color:#475569; padding:2px 8px; white-space:normal; word-break:break-all; background:transparent;">${escapeHtmlText(staff.remarks || '')}</td>
+                `;
+                bodyHtml += `</tr>`;
+            });
+        }
 
         // ★「1階」「2階」「3階」「南」のテーブルの最下部にSTのスタッフ名と勤務を確認できるように表示
         if (!isST && currentFloor && linkedStStaffData && linkedStStaffData.staffList && linkedStStaffData.staffList.length > 0) {
@@ -3621,6 +3702,131 @@ document.addEventListener('DOMContentLoaded', () => {
         const totalLateSum = validStaffStats.reduce((acc, s) => acc + s.late, 0);
         const totalEveSum = validStaffStats.reduce((acc, s) => acc + s.eve, 0);
         const totalH8Sum = validStaffStats.reduce((acc, s) => acc + s.h8, 0);
+
+        // ★ STテーブル専用: 添付3準拠の階別集計フッター（1階, 2階, 3階, 南の出勤人数・実数・早）
+        if (isST) {
+            let footHtml = '';
+            const stFloors = [
+                { key: '1F', label: '1階', bg: '#f0f8ff', headerBg: '#e0f2fe', color: '#0369a1', border: '#bae6fd' },
+                { key: '2F', label: '2階', bg: '#fff8f0', headerBg: '#ffedd5', color: '#c2410c', border: '#fed7aa' },
+                { key: '3F', label: '3階', bg: '#f2fcf5', headerBg: '#dcfce7', color: '#15803d', border: '#bbf7d0' },
+                { key: '南', label: '南', bg: '#faf5ff', headerBg: '#f3e8ff', color: '#7e22ce', border: '#e9d5ff' }
+            ];
+
+            let allFloorsWork = new Array(NUM_DAYS).fill(0);
+            let allFloorsReal = new Array(NUM_DAYS).fill(0);
+            let allFloorsEarly = new Array(NUM_DAYS).fill(0);
+
+            stFloors.forEach((fl) => {
+                const flStaff = validStaffIndices.filter(s => {
+                    const st = staffList[s];
+                    return st.floor === fl.key || (st.floor && st.floor.includes(fl.key));
+                });
+
+                const dWork = new Array(NUM_DAYS).fill(0);
+                const dReal = new Array(NUM_DAYS).fill(0);
+                const dEarly = new Array(NUM_DAYS).fill(0);
+
+                flStaff.forEach(s => {
+                    const st = staffList[s];
+                    for (let d = 0; d < NUM_DAYS; d++) {
+                        const cell = grid[s] ? grid[s][d] : null;
+                        const sym = (cell && typeof cell === 'object') ? cell.symbol : (cell || '');
+                        if (isWorkSymbol(sym)) {
+                            dWork[d]++;
+                            dReal[d] += (st.isHalf ? 0.5 : 1.0);
+                        } else if (sym === '○/休' || sym === '休/○' || sym === '○/有' || sym === '有/○') {
+                            dReal[d] += 0.5;
+                        }
+                        if (sym === '早' || sym === 'ハヤ') {
+                            dEarly[d]++;
+                        }
+                    }
+                });
+
+                for (let d = 0; d < NUM_DAYS; d++) {
+                    allFloorsWork[d] += dWork[d];
+                    allFloorsReal[d] += dReal[d];
+                    allFloorsEarly[d] += dEarly[d];
+                }
+
+                const sumWork = dWork.reduce((a, b) => a + b, 0);
+                const sumReal = dReal.reduce((a, b) => a + b, 0);
+                const sumEarly = dEarly.reduce((a, b) => a + b, 0);
+
+                // 添付3: 階（結合）, 出勤人数
+                footHtml += `<tr style="background:${fl.bg}; font-weight:bold;">
+                    <th class="sticky-col-1" rowspan="3" style="background:${fl.headerBg}; color:${fl.color}; font-size:1.05rem; font-weight:800; vertical-align:middle; text-align:center; border-right:1px solid ${fl.border}; border-bottom:2px solid #1e293b;">${fl.label}</th>
+                    <th class="sticky-col-2" style="background:${fl.bg}; border-right:2px solid #475569; text-align:center; color:#1e293b; padding:4px 8px;">出勤人数</th>`;
+                for (let d = 0; d < NUM_DAYS; d++) {
+                    const thickCls = ((d + 1) % 7 === 0) ? 'border-thick-right' : '';
+                    footHtml += `<td class="${thickCls}" style="font-weight:800; color:#1e293b; text-align:center;">${dWork[d]}</td>`;
+                }
+                footHtml += `<td style="font-weight:700; color:#1e293b; text-align:center;">${sumWork}</td><td colspan="8"></td></tr>`;
+
+                // 添付3: 実数
+                footHtml += `<tr style="background:${fl.bg}; font-weight:bold;">
+                    <th class="sticky-col-2" style="background:${fl.bg}; border-right:2px solid #475569; text-align:center; color:#0369a1; padding:4px 8px;">実数</th>`;
+                for (let d = 0; d < NUM_DAYS; d++) {
+                    const thickCls = ((d + 1) % 7 === 0) ? 'border-thick-right' : '';
+                    footHtml += `<td class="${thickCls}" style="font-weight:800; color:#0369a1; text-align:center;">${dReal[d]}</td>`;
+                }
+                footHtml += `<td style="font-weight:700; color:#0369a1; text-align:center;">${sumReal}</td><td colspan="8"></td></tr>`;
+
+                // 添付3: 早
+                footHtml += `<tr style="background:${fl.bg}; font-weight:bold; border-bottom: 2px solid #1e293b;">
+                    <th class="sticky-col-2" style="background:${fl.bg}; border-right:2px solid #475569; text-align:center; color:#c2410c; padding:4px 8px;">早</th>`;
+                for (let d = 0; d < NUM_DAYS; d++) {
+                    const thickCls = ((d + 1) % 7 === 0) ? 'border-thick-right' : '';
+                    footHtml += `<td class="${thickCls}" style="font-weight:800; color:#c2410c; text-align:center;">${dEarly[d]}</td>`;
+                }
+                footHtml += `<td style="font-weight:700; color:#c2410c; text-align:center;">${sumEarly}</td><td colspan="8"></td></tr>`;
+            });
+
+            // 全体合計行
+            const totalWorkAll = allFloorsWork.reduce((a, b) => a + b, 0);
+            const totalRealAll = allFloorsReal.reduce((a, b) => a + b, 0);
+            const totalEarlyAll = allFloorsEarly.reduce((a, b) => a + b, 0);
+
+            footHtml += `<tr style="background:#f1f5f9; font-weight:800; border-top: 3px solid #475569;">
+                <th class="sticky-col-1" rowspan="3" style="background:#e2e8f0; color:#0f172a; font-size:1.05rem; font-weight:800; vertical-align:middle; text-align:center; border-right:1px solid #cbd5e1;">全階合計</th>
+                <th class="sticky-col-2" style="background:#f1f5f9; border-right:2px solid #475569; text-align:center; color:#0f172a; padding:4px 8px;">出勤合計</th>`;
+            for (let d = 0; d < NUM_DAYS; d++) {
+                const thickCls = ((d + 1) % 7 === 0) ? 'border-thick-right' : '';
+                footHtml += `<td class="${thickCls}" style="font-weight:900; color:#0f172a; text-align:center; font-size:0.95rem;">${allFloorsWork[d]}</td>`;
+            }
+            footHtml += `<td style="font-weight:900; color:#0f172a; text-align:center;">${totalWorkAll}</td><td colspan="8"></td></tr>`;
+
+            footHtml += `<tr style="background:#f1f5f9; font-weight:800;">
+                <th class="sticky-col-2" style="background:#f1f5f9; border-right:2px solid #475569; text-align:center; color:#0369a1; padding:4px 8px;">実数合計</th>`;
+            for (let d = 0; d < NUM_DAYS; d++) {
+                const thickCls = ((d + 1) % 7 === 0) ? 'border-thick-right' : '';
+                footHtml += `<td class="${thickCls}" style="font-weight:900; color:#0369a1; text-align:center; font-size:0.95rem;">${allFloorsReal[d]}</td>`;
+            }
+            footHtml += `<td style="font-weight:900; color:#0369a1; text-align:center;">${totalRealAll}</td><td colspan="8"></td></tr>`;
+
+            footHtml += `<tr style="background:#f1f5f9; font-weight:800; border-bottom: 3px solid #475569;">
+                <th class="sticky-col-2" style="background:#f1f5f9; border-right:2px solid #475569; text-align:center; color:#c2410c; padding:4px 8px;">早合計</th>`;
+            for (let d = 0; d < NUM_DAYS; d++) {
+                const thickCls = ((d + 1) % 7 === 0) ? 'border-thick-right' : '';
+                footHtml += `<td class="${thickCls}" style="font-weight:900; color:#c2410c; text-align:center; font-size:0.95rem;">${allFloorsEarly[d]}</td>`;
+            }
+            footHtml += `<td style="font-weight:900; color:#c2410c; text-align:center;">${totalEarlyAll}</td><td colspan="8"></td></tr>`;
+
+            tfoot.innerHTML = footHtml;
+
+            const checkThead = document.getElementById('checkTableHead');
+            const checkTbody = document.getElementById('checkTableBody');
+            const checkTfoot = document.getElementById('checkTableFoot');
+            if (checkThead && checkTbody && checkTfoot) {
+                checkThead.innerHTML = headHtml;
+                checkTbody.innerHTML = bodyHtml;
+                checkTfoot.innerHTML = footHtml;
+            }
+
+            attachOutputTableEvents();
+            return;
+        }
 
         // 1行目: 出勤人数合計（総出勤者数）
         let footHtml = `

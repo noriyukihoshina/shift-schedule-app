@@ -1011,6 +1011,9 @@ class ShiftScheduler {
         // ステップ4: スケ可スタッフの出勤保証（各階で毎日1名以上のスケ可スタッフを出勤維持）
         this.ensureSchedCoverageForST();
 
+        // ステップ4.5: 専従スタッフの出勤平準化（全階合計で毎日2名が出勤）
+        this.ensureFullTimeCoverageForST();
+
         // ステップ5: 平準化スワップ（希望休や固定枠による歪みがある場合のみ微調整）
         this.balanceWorkforceForST();
 
@@ -1265,6 +1268,79 @@ class ShiftScheduler {
                 }
             }
         });
+    }
+
+    /**
+     * ST専用: 専従（isFullTime）スタッフの出勤平準化
+     * 要望: 「専従は全ての階合計で2名が出勤するようにする」
+     */
+    ensureFullTimeCoverageForST() {
+        const fullTimeStaff = [];
+        for (let s = 0; s < this.numStaff; s++) {
+            if (!this.staffList[s].isUnused && this.staffList[s].isFullTime) {
+                fullTimeStaff.push(s);
+            }
+        }
+        if (fullTimeStaff.length === 0) return;
+
+        const TARGET_DAILY_FULLTIME = 2;
+        if (fullTimeStaff.length <= TARGET_DAILY_FULLTIME) {
+            return;
+        }
+
+        for (let d = 0; d < this.numDays; d++) {
+            const workingFt = fullTimeStaff.filter(s => isWorkSymbol(this.grid[s][d].symbol));
+            const offFt = fullTimeStaff.filter(s => isFullOffSymbol(this.grid[s][d].symbol) && !this.grid[s][d].isFixed);
+
+            if (workingFt.length < TARGET_DAILY_FULLTIME && offFt.length > 0) {
+                const need = TARGET_DAILY_FULLTIME - workingFt.length;
+                for (let k = 0; k < need && k < offFt.length; k++) {
+                    const s = offFt[k];
+                    let swapped = false;
+                    for (let otherD = 0; otherD < this.numDays; otherD++) {
+                        if (otherD === d) continue;
+                        if (!isWorkSymbol(this.grid[s][otherD].symbol) || this.grid[s][otherD].isFixed) continue;
+                        const otherFtWorkCount = fullTimeStaff.filter(otherS => isWorkSymbol(this.grid[otherS][otherD].symbol)).length;
+                        if (otherFtWorkCount > TARGET_DAILY_FULLTIME) {
+                            const symWork = this.grid[s][otherD].symbol === '早' ? '早' : '○';
+                            this.grid[s][d] = { symbol: symWork, isFixed: false };
+                            this.grid[s][otherD] = { symbol: '休', isFixed: false };
+                            swapped = true;
+                            break;
+                        }
+                    }
+                    if (!swapped) {
+                        for (let otherD = 0; otherD < this.numDays; otherD++) {
+                            if (otherD === d) continue;
+                            if (!isWorkSymbol(this.grid[s][otherD].symbol) || this.grid[s][otherD].isFixed) continue;
+                            const symWork = this.grid[s][otherD].symbol === '早' ? '早' : '○';
+                            this.grid[s][d] = { symbol: symWork, isFixed: false };
+                            this.grid[s][otherD] = { symbol: '休', isFixed: false };
+                            break;
+                        }
+                    }
+                }
+            } else if (workingFt.length > TARGET_DAILY_FULLTIME) {
+                const excess = workingFt.length - TARGET_DAILY_FULLTIME;
+                for (let k = 0; k < excess && k < workingFt.length; k++) {
+                    const s = workingFt[k];
+                    if (this.grid[s][d].isFixed) continue;
+
+                    for (let otherD = 0; otherD < this.numDays; otherD++) {
+                        if (otherD === d) continue;
+                        if (!isFullOffSymbol(this.grid[s][otherD].symbol) || this.grid[s][otherD].isFixed) continue;
+
+                        const otherFtWorkCount = fullTimeStaff.filter(otherS => isWorkSymbol(this.grid[otherS][otherD].symbol)).length;
+                        if (otherFtWorkCount < TARGET_DAILY_FULLTIME) {
+                            const origSym = this.grid[s][d].symbol;
+                            this.grid[s][d] = { symbol: '休', isFixed: false };
+                            this.grid[s][otherD] = { symbol: origSym, isFixed: false };
+                            break;
+                        }
+                    }
+                }
+            }
+        }
     }
 
     /**
@@ -4576,12 +4652,12 @@ function validateScheduleGrid(grid, staffList, options = {}) {
             }
         }
 
-        // 係長不在時における主任出勤 ➔ 副主任（Aチーム・Bチーム両方）出勤チェック
+        // 係長不在時における主任出勤 ➔ 副主任（Aチーム・Bチーム両方）出勤チェック（※STテーブルは対象外）
         const scStaffFinal = staffList.filter(s => !s.isUnused && s.isSectionChief);
         const chStaffFinal = staffList.filter(s => !s.isUnused && s.isChief);
         const subChStaffFinal = staffList.filter(s => !s.isUnused && s.isSubChief);
 
-        if (scStaffFinal.length > 0) {
+        if (!this.isST && scStaffFinal.length > 0) {
             let scWorking = false;
             scStaffFinal.forEach(sc => {
                 const sym = getSym(staffList.indexOf(sc), d);
@@ -4593,6 +4669,26 @@ function validateScheduleGrid(grid, staffList, options = {}) {
                     const sym = getSym(staffList.indexOf(ch), d);
                     if (!isHolidaySymbol(sym) && sym !== SYMBOLS.TRIP && !isExcludeSymbol(sym)) chWorking = true;
                 });
+
+                // ★ ST役職者の出勤補完判定:
+                // 「POのテーブルに役職者を必ず誰か出勤させる制約で難しい場合はSTの役職者を含めて数えてもらっていいです」
+                // 例: 1階の係長不在→PT・OTの主任不在だがST1階の主任が出勤ならOK。
+                let stChiefWorking = false;
+                let stSubChiefWorking = false;
+                if (this.options && this.options.linkedStStaffData && Array.isArray(this.options.linkedStStaffData.staffList)) {
+                    this.options.linkedStStaffData.staffList.forEach((st, stIdx) => {
+                        const stRow = this.options.linkedStStaffData.grid ? this.options.linkedStStaffData.grid[stIdx] : null;
+                        const stSym = (stRow && stRow[d]) ? (stRow[d].symbol || stRow[d]) : '';
+                        if (isWorkSymbol(stSym) && stSym !== SYMBOLS.TRIP) {
+                            if (st.isChief) stChiefWorking = true;
+                            if (st.isSubChief) stSubChiefWorking = true;
+                        }
+                    });
+                }
+                if (!chWorking && stChiefWorking) {
+                    chWorking = true; // ST主任の出勤によりクリア！
+                }
+
                 if (!chWorking) {
                     let subAWorking = false, subBWorking = false;
                     subChStaffFinal.forEach(sub => {
@@ -4602,8 +4698,15 @@ function validateScheduleGrid(grid, staffList, options = {}) {
                             else if (sub.section === 'PT B' || sub.section === 'OT B') subBWorking = true;
                         }
                     });
+
+                    // 「またSTの副主任はA・Bに分かれないが、PT・OTの副主任がAかBに1人いればSTの副主任を含めて条件クリアとしていい」
+                    if (stSubChiefWorking && (subAWorking || subBWorking)) {
+                        subAWorking = true;
+                        subBWorking = true;
+                    }
+
                     if (!(subAWorking && subBWorking)) {
-                        errors.push(`【${dayNum}日目】係長・主任ともに不在ですが、副主任（Aチーム・Bチーム両方）が出勤していません（主任を1名以上、または副主任をA・B両方配置してください）。`);
+                        errors.push(`【${dayNum}日目】係長・主任ともに不在ですが、副主任（Aチーム・Bチーム両方）が出勤していません（主任を1名以上、または副主任をA・B両方配置してください。同階ST役職者含む）。`);
                         scStaffFinal.forEach(sc => {
                             const scIdx = staffList.indexOf(sc);
                             if (scIdx >= 0) {
@@ -4615,14 +4718,16 @@ function validateScheduleGrid(grid, staffList, options = {}) {
             }
         }
 
-        // 専従: 3名以上（出張除く）
-        const totalFullTime = staffList.filter(s => !s.isUnused && s.isFullTime).length;
-        if (totalFullTime >= 3 && fullTimeWorkCount < 3) {
-            errors.push(`【${dayNum}日目】「専従」スタッフの出勤が${fullTimeWorkCount}名しかいません（要件: 3名以上、出張除く）。`);
+        // 専従: POテーブルは3名以上（出張除く）、STテーブルは全階で2名出勤
+        if (!this.isST) {
+            const totalFullTime = staffList.filter(s => !s.isUnused && s.isFullTime).length;
+            if (totalFullTime >= 3 && fullTimeWorkCount < 3) {
+                errors.push(`【${dayNum}日目】「専従」スタッフの出勤が${fullTimeWorkCount}名しかいません（要件: 3名以上、出張除く）。`);
+            }
         }
 
-        // 特殊勤務人数チェック（早番3名, 遅番1名, E2名, 8時1名）
-        if (isFinal) {
+        // 特殊勤務人数チェック（早番3名, 遅番1名, E2名, 8時1名）※POテーブルのみ
+        if (!this.isST && isFinal) {
             // 最終チェック＆完成: 完全充足を厳格チェック
             if (earlyCount !== 3) {
                 const reason = `${dayNum}日目の早番（早・ハヤ）が${earlyCount}名です（要件: 3名）`;

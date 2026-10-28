@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>勤務予定表 自動作成システム - ST専用テーブル</title>
+    <title>勤務予定表 自動作成システム - マスターテーブル</title>
     <link rel="stylesheet" href="style.css">
 </head>
 <body class="theme-st">
@@ -32,8 +32,12 @@
         <a href="2f.html" class="dept-nav-btn " style="background:#fff7ed; border-color:#fed7aa; color:#c2410c;">2階病棟</a>
         <a href="3f.html" class="dept-nav-btn " style="background:#f0fdf4; border-color:#bbf7d0; color:#15803d;">3階病棟</a>
         <a href="south.html" class="dept-nav-btn " style="background:#faf5ff; border-color:#e9d5ff; color:#7e22ce;">南病棟</a>
-        <a href="ST.html" class="dept-nav-btn dept-nav-st active" style="background:#fdf2f8; border-color:#fbcfe8; color:#be185d;">🌸 ST</a>
+        <a href="ST.html" class="dept-nav-btn dept-nav-st active" style="background:#fdf2f8; border-color:#fbcfe8; color:#be185d;">ST</a>
     </nav>
+    <!-- Table Navigation -->
+    <!-- Table Navigation -->
+    <!-- Table Navigation -->
+    <!-- Table Navigation -->
     <!-- Table Navigation -->
     <!-- Table Navigation -->
     <!-- Table Navigation -->
@@ -41,12 +45,16 @@
     <!-- Table Navigation -->
     <!-- ナビゲーションタブ -->
         <!-- Navigation Tabs (Master Table) -->
+        <!-- Navigation Tabs (Master Table) -->
+        <!-- Navigation Tabs (Master Table) -->
+        <!-- Navigation Tabs (Master Table) -->
+        <!-- Navigation Tabs (Master Table) -->
         <!-- Navigation Tabs -->
     <nav class="tab-container">
-        <button class="tab-btn active" data-tab="inputTab"><span>搭</span> 希望入力</button>
-        <button class="tab-btn" data-tab="outputTab"><span>笨擾ｸ・/span> 修正作業エリア</button>
-        <button class="tab-btn" data-tab="checkTab"><span>剥</span> 最終チェック&完成</button>
-        <button class="tab-btn" data-tab="statsTab"><span>嶋</span> 勤務分析繝ｻ平準化ダッシュボード</button>
+        <button class="tab-btn active" data-tab="inputTab">&#x1F4CB; 希望入力</button>
+        <button class="tab-btn" data-tab="outputTab">&#x270F;&#xFE0F; 修正作業エリア</button>
+        <button class="tab-btn" data-tab="checkTab">&#x1F50D; 最終チェック&完成</button>
+        <button class="tab-btn" data-tab="statsTab">&#x1F4C8; 勤務分析・平準化ダッシュボード</button>
     </nav>
 
     <!-- メインコンテンツ -->
@@ -122,6 +130,7 @@
                                 <option value="9.0">リフ月: 9.0日</option>
                             </select>
                         </div>
+<button type="button" class="btn btn-primary manual-save-btn" style="font-size:0.82rem; padding:4px 14px; font-weight:700; background:#0284c7; color:#ffffff; border:none; border-radius:4px; box-shadow:0 1px 3px rgba(0,0,0,0.1); cursor:pointer; margin-left:8px;">&#x1F4BE; 保存</button></div>
                         <button type="button" id="resetCurrentTermBtn" class="btn btn-outline" style="font-size: 0.78rem; padding: 3px 8px; color: #dc2626; border-color: #fca5a5; background: #fff5f5;" title="現在表示している期間の希望入力・作成データを白紙（初期化）に戻します">
                             🗑️ この期間を白紙化
                         </button>
@@ -344,7 +353,7 @@
                 <!-- 1行目: シートタイトル ＆ アクションボタン群 -->
                 <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 10px;">
                     <div style="display: flex; align-items: center; gap: 0.75rem;">
-                        <span id="checkTitleDisplay" style="font-weight: 800; color: #1e293b; font-size: 1.05rem;">🏢 全フロア統合</span>
+                        <span id="checkTitleDisplay" style="font-weight: 800; color: #1e293b; font-size: 1.05rem;">&#x1F3E2; 全フロア統合</span>
                     </div>
                     <div class="action-group" style="display: flex; gap: 8px; flex-wrap: wrap; align-items: center;">
                         <button class="btn btn-primary" id="checkCopyForExcelBtn" style="font-size: 0.82rem; padding: 5px 12px; font-weight: 700;" title="完成勤務表をExcel貼り付け用にコピーします（赤字太字・数式付き）">
@@ -647,6 +656,10 @@
         <!-- Dept Config -->
         <!-- Dept Config -->
         <!-- Dept Config -->
+        <!-- Dept Config -->
+        <!-- Dept Config -->
+        <!-- Dept Config -->
+        <!-- Dept Config -->
     <script>
         window.APP_CONFIG = {
             deptId: 'st',
@@ -656,8 +669,8 @@
             theme: 'theme-st'
         };
     </script>
-    <script src="solver.js?v=20261028_rev52"></script>
-    <script src="app.js?v=20261028_rev52"></script>
+    <script src="solver.js?v=20261028_rev53"></script>
+    <script src="app.js?v=20261028_rev53"></script>
 </body>
 </html>
 
