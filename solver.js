@@ -607,6 +607,10 @@ class ShiftScheduler {
         this.stDailyWork = (Array.isArray(options.stDailyWork) && options.stDailyWork.length === this.numDays)
             ? [...options.stDailyWork]
             : null;
+        // ★ 各フロア所属STスタッフの日別出勤人数（頭数：0.5トグルの人でも出勤人数は1）
+        this.stDailyHeadCount = (Array.isArray(options.stDailyHeadCount) && options.stDailyHeadCount.length === this.numDays)
+            ? [...options.stDailyHeadCount]
+            : null;
         this.stDailyFtWork = (Array.isArray(options.stDailyFtWork) && options.stDailyFtWork.length === this.numDays)
             ? [...options.stDailyFtWork]
             : null;
@@ -5006,10 +5010,11 @@ class ShiftScheduler {
                 }
             }
 
-            // ★ ST出勤実数の反映
+            // ★ ST出勤実数と出勤人数の反映
             const stWorkAmt = (this.stDailyWork && this.stDailyWork[d]) ? this.stDailyWork[d] : 0;
+            const stHeadAmt = (this.stDailyHeadCount && this.stDailyHeadCount[d]) ? this.stDailyHeadCount[d] : (this.stDailyWork ? (this.stDailyWork[d] >= 0.5 ? Math.ceil(this.stDailyWork[d]) : 0) : 0);
             sectionWork['ST'] = stWorkAmt;
-            totalWork += stWorkAmt;
+            totalWork += stHeadAmt;
 
             // 実数合計の計算 (案B: 出勤実働 - 増員分。マイナス/減員時は実数変更なし)
             let realWorkBase = stWorkAmt;

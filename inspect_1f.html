@@ -1,0 +1,43 @@
+﻿<!DOCTYPE html>
+<html>
+<head><meta charset="utf-8"></head>
+<body>
+<div id="outputTableFoot"><table><tfoot></tfoot></table></div>
+<div id="checkTableFoot"><table><tfoot></tfoot></table></div>
+<script>
+window.APP_CONFIG = {
+    deptId: '1f',
+    deptName: '1髫守羅譽・,
+    floor: '1F',
+    theme: 'theme-1f'
+};
+</script>
+<script src="solver.js"></script>
+<script src="app.js"></script>
+<script>
+window.addEventListener('DOMContentLoaded', () => {
+    setTimeout(() => {
+        const halfStaff = [];
+        if (typeof staffList !== 'undefined') {
+            staffList.forEach((s, idx) => {
+                if (!s.isUnused && s.isHalf) {
+                    halfStaff.push({ idx: idx, id: s.id, name: s.name, sec: s.section, isHalf: s.isHalf });
+                }
+            });
+        }
+        document.body.setAttribute('data-half-staff', JSON.stringify(halfStaff));
+
+        let linkedStInfo = [];
+        if (typeof linkedStStaffData !== 'undefined' && linkedStStaffData && linkedStStaffData.staffList) {
+            linkedStInfo = linkedStStaffData.staffList.map(s => ({ id: s.id, name: s.name, isHalf: s.isHalf, isZeroCount: s.isZeroCount, floor: s.floor }));
+        }
+        document.body.setAttribute('data-linked-st', JSON.stringify(linkedStInfo));
+
+        // 1髫弱・繝・ヵ繧ｩ繝ｫ繝医せ繧ｿ繝・ヵ繝槭せ繧ｿ縺ｮ蛻晄悄蛟､
+        document.body.setAttribute('data-staff-count', staffList.filter(s => !s.isUnused).length);
+        document.title = "INSPECTION_DONE";
+    }, 1500);
+});
+</script>
+</body>
+</html>

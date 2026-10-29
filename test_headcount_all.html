@@ -1,0 +1,48 @@
+﻿<!DOCTYPE html>
+<html>
+<head><meta charset="utf-8"></head>
+<body>
+<div id="checkTableFoot"></div>
+<div id="outputTableFoot"></div>
+<script>
+window.APP_CONFIG = {
+    deptId: '1f',
+    deptName: '1髫守羅譽・,
+    floor: '1F',
+    theme: 'theme-1f'
+};
+</script>
+<script src="solver.js"></script>
+<script src="app.js"></script>
+<script>
+// 蜷梧悄螳溯｡・(function() {
+    try {
+        const scheduler = new ShiftScheduler(staffList, {
+            standardHolidays: 8.0,
+            dates: getTermInfo().dates,
+            dayOffsets: new Array(28).fill(0),
+            isST: false,
+            isSouth: false,
+            isLife: false,
+            stDailyWork: getLinkedSTDailyWork(),
+            stDailyHeadCount: getLinkedSTDailyHeadCount(),
+            stDailyFtWork: getLinkedSTDailyFtWork()
+        });
+        const stats = scheduler.calculateStats();
+        
+        const nonIntTotalWork = [];
+        stats.daily.forEach((d, idx) => {
+            if (d.totalWork % 1 !== 0) {
+                nonIntTotalWork.push({ day: idx + 1, totalWork: d.totalWork, realWork: d.realWork });
+            }
+        });
+        
+        document.body.setAttribute('data-non-int-count', nonIntTotalWork.length);
+        document.body.setAttribute('data-sample-totals', JSON.stringify(stats.daily.slice(0, 7).map(d => ({ total: d.totalWork, real: d.realWork }))));
+    } catch(e) {
+        document.body.setAttribute('data-err', e.message);
+    }
+})();
+</script>
+</body>
+</html>

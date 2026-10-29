@@ -990,6 +990,7 @@ document.addEventListener('DOMContentLoaded', () => {
                     isSouth: isSouth,
                     isLife: isLife,
                     stDailyWork: getLinkedSTDailyWork(),
+                    stDailyHeadCount: getLinkedSTDailyHeadCount(),
                     stDailyFtWork: getLinkedSTDailyFtWork(),
                     stDailyEarly: getLinkedSTDailyEarly(),
                     stFloorFtCount: getLinkedSTFloorFtCount()
@@ -3551,6 +3552,7 @@ document.addEventListener('DOMContentLoaded', () => {
                         stChiefWorkingDays: stCoverage.chiefDays,
                         stSubChiefWorkingDays: stCoverage.subChiefDays,
                         stDailyWork: getLinkedSTDailyWork(),
+                        stDailyHeadCount: getLinkedSTDailyHeadCount(),
                         stDailyFtWork: getLinkedSTDailyFtWork(),
                         stDailyEarly: getLinkedSTDailyEarly(),
                         stFloorFtCount: getLinkedSTFloorFtCount()
@@ -3655,6 +3657,7 @@ document.addEventListener('DOMContentLoaded', () => {
                         stChiefWorkingDays: stCoverage3.chiefDays,
                         stSubChiefWorkingDays: stCoverage3.subChiefDays,
                         stDailyWork: getLinkedSTDailyWork(),
+                        stDailyHeadCount: getLinkedSTDailyHeadCount(),
                         stDailyFtWork: getLinkedSTDailyFtWork(),
                         stDailyEarly: getLinkedSTDailyEarly(),
                         stFloorFtCount: getLinkedSTFloorFtCount()
@@ -3694,6 +3697,7 @@ document.addEventListener('DOMContentLoaded', () => {
                         isSouth: isSouth,
                         isLife: isLife,
                         stDailyWork: getLinkedSTDailyWork(),
+                        stDailyHeadCount: getLinkedSTDailyHeadCount(),
                         stDailyFtWork: getLinkedSTDailyFtWork(),
                         stDailyEarly: getLinkedSTDailyEarly(),
                         stFloorFtCount: getLinkedSTFloorFtCount()
@@ -3857,6 +3861,26 @@ document.addEventListener('DOMContentLoaded', () => {
             }
         });
         return stWork;
+    }
+
+    // ★ ST所属スタッフの日別出勤人数（頭数）を取得（0.5トグルの人でも出勤人数は1）
+    function getLinkedSTDailyHeadCount() {
+        if (!linkedStStaffData || !linkedStStaffData.staffList || !linkedStStaffData.grid) return null;
+        const stHead = new Array(NUM_DAYS).fill(0);
+        linkedStStaffData.staffList.forEach((st, idx) => {
+            if (st.isUnused || st.isZeroCount) return;
+            const row = linkedStStaffData.grid[idx] || [];
+            for (let d = 0; d < NUM_DAYS; d++) {
+                const c = row[d] || { symbol: '' };
+                const sym = (c && typeof c === 'object') ? c.symbol : (c || '');
+                if (isWorkSymbol(sym) && sym !== '研' && sym !== '張') {
+                    stHead[d] += 1.0; // ★ 0.5トグルONでも出勤人数は1！
+                } else if (sym === '○/休' || sym === '休/○' || sym === '○/有' || sym === '有/○' || sym === '〇/休' || sym === '休/〇' || sym === '〇/有' || sym === '有/〇') {
+                    stHead[d] += 0.5;
+                }
+            }
+        });
+        return stHead;
     }
 
     // ★ ST専従スタッフの日別出勤数を取得（PT・OT・ST専従3名以上制約用）
@@ -4799,18 +4823,18 @@ document.addEventListener('DOMContentLoaded', () => {
                             sRef++;
                         } else if (sym === '早' || sym === 'ハヤ') {
                             if (sym === '早') sEarly++;
-                            if (!isZero) sWork += (isHalf ? 0.5 : 1.0);
+                            if (!isZero) sWork += 1.0;
                         } else if (sym === '遅' || sym === 'オソ') {
                             if (sym === '遅') sLate++;
-                            if (!isZero) sWork += (isHalf ? 0.5 : 1.0);
+                            if (!isZero) sWork += 1.0;
                         } else if (sym === 'E' || sym === 'イブ') {
                             if (sym === 'E') sEve++;
-                            if (!isZero) sWork += (isHalf ? 0.5 : 1.0);
+                            if (!isZero) sWork += 1.0;
                         } else if (sym === '8時') {
                             sH8++;
-                            if (!isZero) sWork += (isHalf ? 0.5 : 1.0);
+                            if (!isZero) sWork += 1.0;
                         } else if (isWorkSymbol(sym)) {
-                            if (!isZero) sWork += (isHalf ? 0.5 : 1.0);
+                            if (!isZero) sWork += 1.0;
                         } else if (sym === '○/休' || sym === '休/○' || sym === '○/有' || sym === '有/○') {
                             if (!isZero) sWork += 0.5;
                             if (sym.includes('休')) sOff += 0.5;
@@ -5061,10 +5085,12 @@ document.addEventListener('DOMContentLoaded', () => {
             let totalWork = stats.daily[d].totalWork;
             let realWork = stats.daily[d].realWork !== undefined ? stats.daily[d].realWork : totalWork;
 
-            // ★ 所属階STスタッフの実数を合算！
+            const alreadyHasST = stats.daily[d].sectionWork && (stats.daily[d].sectionWork['ST'] !== undefined && stats.daily[d].sectionWork['ST'] > 0);
+
+            // ★ 所属階STスタッフの実数を合算（ソルバー集計で未加算の場合のみ）
             let stReal = 0;
             let stTotal = 0;
-            if (!isST && currentFloor && linkedStStaffData && linkedStStaffData.staffList) {
+            if (!alreadyHasST && !isST && currentFloor && linkedStStaffData && linkedStStaffData.staffList) {
                 linkedStStaffData.staffList.forEach((st, stIdx) => {
                     const row = linkedStStaffData.grid[stIdx] || [];
                     const c = row[d] || { symbol: '' };
@@ -5076,8 +5102,10 @@ document.addEventListener('DOMContentLoaded', () => {
                 });
             }
 
-            totalWork += stTotal;
-            realWork = Number((realWork + stReal).toFixed(2));
+            if (!alreadyHasST) {
+                totalWork += stTotal;
+                realWork = Number((realWork + stReal).toFixed(2));
+            }
             stats.daily[d].stReal = stReal;
             stats.daily[d].combinedReal = realWork;
 
@@ -5883,6 +5911,7 @@ document.addEventListener('DOMContentLoaded', () => {
                     isSouth: isSouth,
                     isLife: isLife,
                     stDailyWork: getLinkedSTDailyWork(),
+                    stDailyHeadCount: getLinkedSTDailyHeadCount(),
                     stDailyFtWork: getLinkedSTDailyFtWork(),
                     stDailyEarly: getLinkedSTDailyEarly(),
                     stFloorFtCount: getLinkedSTFloorFtCount()
@@ -7133,6 +7162,7 @@ document.addEventListener('DOMContentLoaded', () => {
                     isSouth: isSouth,
                     isLife: isLife,
                     stDailyWork: getLinkedSTDailyWork(),
+                    stDailyHeadCount: getLinkedSTDailyHeadCount(),
                     stDailyFtWork: getLinkedSTDailyFtWork(),
                     stDailyEarly: getLinkedSTDailyEarly(),
                     stFloorFtCount: getLinkedSTFloorFtCount()
@@ -7284,6 +7314,7 @@ document.addEventListener('DOMContentLoaded', () => {
                     isSouth: isSouth,
                     isLife: isLife,
                     stDailyWork: getLinkedSTDailyWork(),
+                    stDailyHeadCount: getLinkedSTDailyHeadCount(),
                     stDailyFtWork: getLinkedSTDailyFtWork(),
                     stDailyEarly: getLinkedSTDailyEarly(),
                     stFloorFtCount: getLinkedSTFloorFtCount()
