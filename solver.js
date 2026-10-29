@@ -630,6 +630,27 @@ class ShiftScheduler {
     }
 
     /**
+     * 日インデックス d の日付表示ラベル（例: "4/10"）を取得
+     */
+    formatDateLabel(d) {
+        if (this.dates && this.dates[d]) {
+            const item = this.dates[d];
+            if (typeof item === 'object') {
+                if (item.label) return item.label;
+                if (item.m && item.day) return `${item.m}/${item.day}`;
+                if (item.month && item.day) return `${item.month}/${item.day}`;
+            } else if (typeof item === 'string') {
+                const parts = item.split('-');
+                if (parts.length === 3) return `${parseInt(parts[1], 10)}/${parseInt(parts[2], 10)}`;
+                return item;
+            } else if (item instanceof Date) {
+                return `${item.getMonth() + 1}/${item.getDate()}`;
+            }
+        }
+        return `${d + 1}日目`;
+    }
+
+    /**
      * スタッフ s の記号 sym に対する「実数（リハビリ実働換算）」寄与度を取得
      * 0.5トグル(isHalf)のスタッフは0.5倍、半休(○/休, ○/有等)は0.5倍として計算
      */
@@ -2383,7 +2404,7 @@ class ShiftScheduler {
                     if (!force) {
                         return {
                             success: false,
-                            errors: [`【${dayNum}日目の特殊勤務割当】「${req.label}」の担当者が必要数（${req.count}名）に対し、配置可能なスタッフが不足しています（候補${candidates.length}名 / 不足${needed}名）。`]
+                            errors: [`【${this.formatDateLabel(d)}の特殊勤務割当】「${req.label}」の担当者が必要数（${req.count}名）に対し、配置可能なスタッフが不足しています（候補${candidates.length}名 / 不足${needed}名）。`]
                         };
                     }
                 }
@@ -5036,6 +5057,24 @@ function validateScheduleGrid(grid, staffList, options = {}) {
     const isST = !!options.isST;
     const weekSpans = getSunToSatWeekSpans(dates, numDays);
 
+    const formatDateLabel = (d) => {
+        if (dates && dates[d]) {
+            const item = dates[d];
+            if (typeof item === 'object') {
+                if (item.label) return item.label;
+                if (item.m && item.day) return `${item.m}/${item.day}`;
+                if (item.month && item.day) return `${item.month}/${item.day}`;
+            } else if (typeof item === 'string') {
+                const parts = item.split('-');
+                if (parts.length === 3) return `${parseInt(parts[1], 10)}/${parseInt(parts[2], 10)}`;
+                return item;
+            } else if (item instanceof Date) {
+                return `${item.getMonth() + 1}/${item.getDate()}`;
+            }
+        }
+        return `${d + 1}日目`;
+    };
+
     const errors = [];
     const conflictCells = [];
     const addConflict = (sIdx, dIdx, reason) => {
@@ -5060,22 +5099,22 @@ function validateScheduleGrid(grid, staffList, options = {}) {
         for (let d = 0; d < numDays; d++) {
             if (staff.isSectionChief) break;
             const sym = getSym(s, d);
-            const dayNum = d + 1;
+            const dateLabel = formatDateLabel(d);
             if (sym === SYMBOLS.H8 && !staff.can8) {
-                errors.push(`【スタッフ No.${staff.id} ${staff.name}】${dayNum}日目に「8時」が入っていますが、「8時可」ではありません。`);
-                addConflict(s, d, `${dayNum}日目: 8時可フラグがOFFです`);
+                errors.push(`【スタッフ No.${staff.id} ${staff.name}】${dateLabel}に「8時」が入っていますが、「8時可」ではありません。`);
+                addConflict(s, d, `${dateLabel}: 8時可フラグがOFFです`);
             }
             if ((sym === SYMBOLS.EARLY || sym === SYMBOLS.NO_ALLOW_EARLY) && staff.noEarly) {
-                errors.push(`【スタッフ No.${staff.id} ${staff.name}】${dayNum}日目に「${sym}」が入っていますが、「早番不可」です。`);
-                addConflict(s, d, `${dayNum}日目: 早番不可です`);
+                errors.push(`【スタッフ No.${staff.id} ${staff.name}】${dateLabel}に「${sym}」が入っていますが、「早番不可」です。`);
+                addConflict(s, d, `${dateLabel}: 早番不可です`);
             }
             if ((sym === SYMBOLS.LATE || sym === SYMBOLS.NO_ALLOW_LATE) && staff.noLate) {
-                errors.push(`【スタッフ No.${staff.id} ${staff.name}】${dayNum}日目に「${sym}」が入っていますが、「遅番不可」です。`);
-                addConflict(s, d, `${dayNum}日目: 遅番不可です`);
+                errors.push(`【スタッフ No.${staff.id} ${staff.name}】${dateLabel}に「${sym}」が入っていますが、「遅番不可」です。`);
+                addConflict(s, d, `${dateLabel}: 遅番不可です`);
             }
             if ((sym === SYMBOLS.EVE || sym === SYMBOLS.NO_ALLOW_EVE) && staff.noEve) {
-                errors.push(`【スタッフ No.${staff.id} ${staff.name}】${dayNum}日目に「${sym}」が入っていますが、「E不可」です。`);
-                addConflict(s, d, `${dayNum}日目: E不可です`);
+                errors.push(`【スタッフ No.${staff.id} ${staff.name}】${dateLabel}に「${sym}」が入っていますが、「E不可」です。`);
+                addConflict(s, d, `${dateLabel}: E不可です`);
             }
         }
 
@@ -5086,9 +5125,11 @@ function validateScheduleGrid(grid, staffList, options = {}) {
                 if (isRestrictedSpecial(sym)) {
                     const nextSym = getSym(s, d + 1);
                     if (!isHolidaySymbol(nextSym)) {
-                        errors.push(`【スタッフ No.${staff.id} ${staff.name}】${d + 1}日目の特殊勤務「${sym}」の翌日（${d + 2}日目）が休日ではありません（現在:「${nextSym}」）。`);
-                        addConflict(s, d, `${d + 1}日目: 特殊勤務「${sym}」の翌日は原則休日が必要です`);
-                        addConflict(s, d + 1, `${d + 2}日目: 前日が「${sym}」のため原則休日にする必要があります`);
+                        const curDateLabel = formatDateLabel(d);
+                        const nextDateLabel = formatDateLabel(d + 1);
+                        errors.push(`【スタッフ No.${staff.id} ${staff.name}】${curDateLabel}の特殊勤務「${sym}」の翌日（${nextDateLabel}）が休日ではありません（現在:「${nextSym}」）。`);
+                        addConflict(s, d, `${curDateLabel}: 特殊勤務「${sym}」の翌日は原則休日が必要です`);
+                        addConflict(s, d + 1, `${nextDateLabel}: 前日が「${sym}」のため原則休日にする必要があります`);
                     }
                 }
             }
@@ -5113,8 +5154,8 @@ function validateScheduleGrid(grid, staffList, options = {}) {
                 if (nonOffStreak.length > maxAllowed) {
                     const sIdxSeq = nonOffStreak[0];
                     const eIdxSeq = idx;
-                    const sLabel = sIdxSeq < 5 ? `前${5 - sIdxSeq}日` : `${sIdxSeq - 4}日目`;
-                    const eLabel = eIdxSeq < 5 ? `前${5 - eIdxSeq}日` : `${eIdxSeq - 4}日目`;
+                    const sLabel = sIdxSeq < 5 ? `前${5 - sIdxSeq}日` : formatDateLabel(sIdxSeq - 5);
+                    const eLabel = eIdxSeq < 5 ? `前${5 - eIdxSeq}日` : formatDateLabel(eIdxSeq - 5);
                     const ruleMsg = staff.allow6Consec ? '6連勤許可（7日以上連続は不可）' : '最大5連勤（6日以上連続は不可）';
                     errors.push(`【スタッフ No.${staff.id} ${staff.name}】${sLabel}〜${eLabel}で公休なし${nonOffStreak.length}日連続となっています（要件: ${ruleMsg}）。`);
                     nonOffStreak.forEach(seqDay => {
@@ -5140,10 +5181,11 @@ function validateScheduleGrid(grid, staffList, options = {}) {
                             if (checkIdx < sequence.length) {
                                 const sym = sequence[checkIdx];
                                 if (sym !== '' && !isHolidaySymbol(sym)) {
-                                    const targetDay = checkIdx - 4; // 1-based
-                                    errors.push(`【スタッフ No.${staff.id} ${staff.name}】5連勤直後の${targetDay}日目は2連休（休・有・リフ）が必要です（現在:「${sym}」）。`);
-                                    if (targetDay >= 1 && targetDay <= numDays) {
-                                        addConflict(s, targetDay - 1, `5連勤の直後は2連休が必要です`);
+                                    const targetD = checkIdx - 5;
+                                    const targetLabel = (targetD >= 0 && targetD < numDays) ? formatDateLabel(targetD) : `${targetD + 1}日目`;
+                                    errors.push(`【スタッフ No.${staff.id} ${staff.name}】5連勤直後の${targetLabel}は2連休（休・有・リフ）が必要です（現在:「${sym}」）。`);
+                                    if (targetD >= 0 && targetD < numDays) {
+                                        addConflict(s, targetD, `5連勤の直後は2連休が必要です`);
                                     }
                                 }
                             }
@@ -5168,9 +5210,9 @@ function validateScheduleGrid(grid, staffList, options = {}) {
                     }
                 });
                 if (weekWorkCount > 5) {
-                    const sDay = wSpan[0] + 1;
-                    const eDay = wSpan[wSpan.length - 1] + 1;
-                    errors.push(`【スタッフ No.${staff.id} ${staff.name}】第${wIdx + 1}週（${sDay}日目〜${eDay}日目の日〜土）に出勤が${weekWorkCount}日あります（週休2日が必要です。出張・半休を除く）。`);
+                    const sDay = formatDateLabel(wSpan[0]);
+                    const eDay = formatDateLabel(wSpan[wSpan.length - 1]);
+                    errors.push(`【スタッフ No.${staff.id} ${staff.name}】第${wIdx + 1}週（${sDay}〜${eDay}の日〜土）に出勤が${weekWorkCount}日あります（週休2日が必要です。出張・半休を除く）。`);
                     workDaysInWeek.forEach(d => {
                         addConflict(s, d, `日〜土の週に出勤が6日以上含まれます（週休2日違反）`);
                     });
@@ -5217,6 +5259,7 @@ function validateScheduleGrid(grid, staffList, options = {}) {
     // 2. 日別の属性充足・特殊勤務枠数チェック
     for (let d = 0; d < numDays; d++) {
         const dayNum = d + 1;
+        const dateLabel = formatDateLabel(d);
         let schedWorkCount = 0;
         let roleWorkCount = 0;
         let fullTimeWorkCount = 0;
@@ -5241,10 +5284,10 @@ function validateScheduleGrid(grid, staffList, options = {}) {
         // スケ可: 日勤（○）が2名以上
         const totalSched = staffList.filter(s => !s.isUnused && s.canSched).length;
         if (totalSched >= 2 && schedWorkCount < 2) {
-            errors.push(`【${dayNum}日目】「スケ可」スタッフの日勤（○）が${schedWorkCount}名しかいません（要件: 2名以上）。`);
+            errors.push(`【${dateLabel}】「スケ可」スタッフの日勤（○）が${schedWorkCount}名しかいません（要件: 2名以上）。`);
             for (let s = 0; s < numStaff; s++) {
                 if (!staffList[s].isUnused && staffList[s].canSched && getSym(s, d) !== SYMBOLS.WORK) {
-                    addConflict(s, d, `${dayNum}日目: スケ可の日勤(○)が不足しています（現在:「${getSym(s, d) || '未設定'}」）`);
+                    addConflict(s, d, `${dateLabel}: スケ可の日勤(○)が不足しています（現在:「${getSym(s, d) || '未設定'}」）`);
                 }
             }
         }
@@ -5268,8 +5311,6 @@ function validateScheduleGrid(grid, staffList, options = {}) {
                 });
 
                 // ★ ST役職者の出勤補完判定:
-                // 「POのテーブルに役職者を必ず誰か出勤させる制約で難しい場合はSTの役職者を含めて数えてもらっていいです」
-                // 例: 1階の係長不在→PT・OTの主任不在だがST1階の主任が出勤ならOK。
                 let stChiefWorking = false;
                 let stSubChiefWorking = false;
                 if (this.options && this.options.linkedStStaffData && Array.isArray(this.options.linkedStStaffData.staffList)) {
@@ -5296,18 +5337,17 @@ function validateScheduleGrid(grid, staffList, options = {}) {
                         }
                     });
 
-                    // 「またSTの副主任はA・Bに分かれないが、PT・OTの副主任がAかBに1人いればSTの副主任を含めて条件クリアとしていい」
                     if (stSubChiefWorking && (subAWorking || subBWorking)) {
                         subAWorking = true;
                         subBWorking = true;
                     }
 
                     if (!(subAWorking && subBWorking)) {
-                        errors.push(`【${dayNum}日目】係長・主任ともに不在ですが、副主任（Aチーム・Bチーム両方）が出勤していません（主任を1名以上、または副主任をA・B両方配置してください。同階ST役職者含む）。`);
+                        errors.push(`【${dateLabel}】係長・主任ともに不在ですが、副主任（Aチーム・Bチーム両方）が出勤していません（主任を1名以上、または副主任をA・B両方配置してください。同階ST役職者含む）。`);
                         scStaffFinal.forEach(sc => {
                             const scIdx = staffList.indexOf(sc);
                             if (scIdx >= 0) {
-                                addConflict(scIdx, d, `⚠️ 役職不在エラー: この日は係長・主任が不在で、副主任(A・B両方)も不足しています（主任1名以上または副主任A・B両方を出勤させてください）`);
+                                addConflict(scIdx, d, `⚠️ 役職不在エラー: ${dateLabel}は係長・主任が不在で、副主任(A・B両方)も不足しています（主任1名以上または副主任A・B両方を出勤させてください）`);
                             }
                         });
                     }
@@ -5334,8 +5374,8 @@ function validateScheduleGrid(grid, staffList, options = {}) {
             const totalFloorFT = staffList.filter(s => !s.isUnused && s.isFullTime).length + (options.stFloorFtCount || (stFtWork > 0 ? 1 : 0));
             const reqFT = totalFloorFT >= 3 ? 3 : totalFloorFT;
             if (reqFT > 0 && totalFtWork < reqFT) {
-                const reason = `${dayNum}日目の専従合計出勤が${totalFtWork}名です（要件: ${reqFT}名以上）`;
-                errors.push(`【${dayNum}日目】「専従（PT・OT・ST合計）」スタッフの出勤が${totalFtWork}名しかいません（要件: ${reqFT}名以上、出張除く）。`);
+                const reason = `${dateLabel}の専従合計出勤が${totalFtWork}名です（要件: ${reqFT}名以上）`;
+                errors.push(`【${dateLabel}】「専従（PT・OT・ST合計）」スタッフの出勤が${totalFtWork}名しかいません（要件: ${reqFT}名以上、出張除く）。`);
                 staffList.forEach((st, sIdx) => {
                     if (!st.isUnused && st.isFullTime) {
                         addConflict(sIdx, d, reason);
@@ -5369,26 +5409,26 @@ function validateScheduleGrid(grid, staffList, options = {}) {
                 // 1. 早2人のうち1年目は1人まで
                 const allEarlyFY = [...s2Early, ...s3Early].filter(s => staffList[s].isFirstYear);
                 if (allEarlyFY.length > 1) {
-                    errors.push(`【${dayNum}日目】南病棟の早番のうち「1年目」が${allEarlyFY.length}名います（要件: 1名以下）。`);
-                    allEarlyFY.forEach(s => addConflict(s, d, `${dayNum}日目: 南病棟の早番で1年目が重複しています（上限1名）`));
+                    errors.push(`【${dateLabel}】南病棟の早番のうち「1年目」が${allEarlyFY.length}名います（要件: 1名以下）。`);
+                    allEarlyFY.forEach(s => addConflict(s, d, `${dateLabel}: 南病棟の早番で1年目が重複しています（上限1名）`));
                 }
                 // 2. 遅2人のうち1年目だけで2人OK（※エラー判定なし）
                 // 3. E2人のうち1年目は1人まで
                 const allEveFY = [...s2Eve, ...s3Eve].filter(s => staffList[s].isFirstYear);
                 if (allEveFY.length > 1) {
-                    errors.push(`【${dayNum}日目】南病棟のE番のうち「1年目」が${allEveFY.length}名います（要件: 1名以下）。`);
-                    allEveFY.forEach(s => addConflict(s, d, `${dayNum}日目: 南病棟のE番で1年目が重複しています（上限1名）`));
+                    errors.push(`【${dateLabel}】南病棟のE番のうち「1年目」が${allEveFY.length}名います（要件: 1名以下）。`);
+                    allEveFY.forEach(s => addConflict(s, d, `${dateLabel}: 南病棟のE番で1年目が重複しています（上限1名）`));
                 }
                 // 4. 同じフロアの遅とE2人のうち1年目は1人まで
                 const s2LateEveFY = [...s2Late, ...s2Eve].filter(s => staffList[s].isFirstYear);
                 if (s2LateEveFY.length > 1) {
-                    errors.push(`【${dayNum}日目】南2の遅番・E番（計${s2Late.length + s2Eve.length}名）のうち「1年目」が${s2LateEveFY.length}名います（要件: 1名以下）。`);
-                    s2LateEveFY.forEach(s => addConflict(s, d, `${dayNum}日目: 南2の遅番・E番で1年目が重複しています（上限1名）`));
+                    errors.push(`【${dateLabel}】南2の遅番・E番（計${s2Late.length + s2Eve.length}名）のうち「1年目」が${s2LateEveFY.length}名います（要件: 1名以下）。`);
+                    s2LateEveFY.forEach(s => addConflict(s, d, `${dateLabel}: 南2の遅番・E番で1年目が重複しています（上限1名）`));
                 }
                 const s3LateEveFY = [...s3Late, ...s3Eve].filter(s => staffList[s].isFirstYear);
                 if (s3LateEveFY.length > 1) {
-                    errors.push(`【${dayNum}日目】南3の遅番・E番（計${s3Late.length + s3Eve.length}名）のうち「1年目」が${s3LateEveFY.length}名います（要件: 1名以下）。`);
-                    s3LateEveFY.forEach(s => addConflict(s, d, `${dayNum}日目: 南3の遅番・E番で1年目が重複しています（上限1名）`));
+                    errors.push(`【${dateLabel}】南3の遅番・E番（計${s3Late.length + s3Eve.length}名）のうち「1年目」が${s3LateEveFY.length}名います（要件: 1名以下）。`);
+                    s3LateEveFY.forEach(s => addConflict(s, d, `${dateLabel}: 南3の遅番・E番で1年目が重複しています（上限1名）`));
                 }
             } else {
                 // 通常PO（特殊勤務カウントにハヤ・オソ・イブは含めない）
@@ -5402,13 +5442,13 @@ function validateScheduleGrid(grid, staffList, options = {}) {
                 });
                 const earlyFY = earlyStaff.filter(s => staffList[s].isFirstYear);
                 if (earlyFY.length >= 2) {
-                    errors.push(`【${dayNum}日目】早番（早）スタッフのうち「1年目」が${earlyFY.length}名います（要件: 1名以下）。`);
-                    earlyFY.forEach(s => addConflict(s, d, `${dayNum}日目: 早番で1年目が重複しています（上限1名）`));
+                    errors.push(`【${dateLabel}】早番（早）スタッフのうち「1年目」が${earlyFY.length}名います（要件: 1名以下）。`);
+                    earlyFY.forEach(s => addConflict(s, d, `${dateLabel}: 早番で1年目が重複しています（上限1名）`));
                 }
                 const lateEveFY = lateEveStaff.filter(s => staffList[s].isFirstYear);
                 if (lateEveFY.length >= 2) {
-                    errors.push(`【${dayNum}日目】遅番・E番（遅・E）のうち「1年目」が${lateEveFY.length}名います（要件: 1名以下）。`);
-                    lateEveFY.forEach(s => addConflict(s, d, `${dayNum}日目: 遅番・E番で1年目が重複しています（上限1名）`));
+                    errors.push(`【${dateLabel}】遅番・E番（遅・E）のうち「1年目」が${lateEveFY.length}名います（要件: 1名以下）。`);
+                    lateEveFY.forEach(s => addConflict(s, d, `${dateLabel}: 遅番・E番で1年目が重複しています（上限1名）`));
                 }
             }
         }
@@ -5446,8 +5486,8 @@ function validateScheduleGrid(grid, staffList, options = {}) {
                         });
                     }
                     if (stEarlyCount > 1) {
-                        const reason = `${dayNum}日目の南病棟所属ST早番が${stEarlyCount}名です（同日2名は希望以外NG）`;
-                        errors.push(`【${dayNum}日目】${reason}。`);
+                        const reason = `${dateLabel}の南病棟所属ST早番が${stEarlyCount}名です（同日2名は希望以外NG）`;
+                        errors.push(`【${dateLabel}】${reason}。`);
                         conflictCells.push({ dayIndex: d, footerStat: 'early', reason: reason });
                     }
 
@@ -5461,67 +5501,67 @@ function validateScheduleGrid(grid, staffList, options = {}) {
                         earlyValid = (s2Early === 0 && s3Early === 0);
                     }
                     if (!earlyValid) {
-                        const reason = `${dayNum}日目の南病棟早番要件を満たしていません（南2に1名、南3に1名。ST早番含めて計2名。現況: 南2=${s2Early}名, 南3=${s3Early}名, ST=${stEarlyCount}名）`;
-                        errors.push(`【${dayNum}日目】${reason}。`);
+                        const reason = `${dateLabel}の南病棟早番要件を満たしていません（南2に1名、南3に1名。ST早番含めて計2名。現況: 南2=${s2Early}名, 南3=${s3Early}名, ST=${stEarlyCount}名）`;
+                        errors.push(`【${dateLabel}】${reason}。`);
                         conflictCells.push({ dayIndex: d, footerStat: 'early', reason: reason });
                     }
                     if (s2Late !== 1 || s3Late !== 1) {
-                        const reason = `${dayNum}日目の南病棟遅番要件を満たしていません（南2に1名、南3に1名。現況: 南2=${s2Late}名, 南3=${s3Late}名）`;
-                        errors.push(`【${dayNum}日目】${reason}。`);
+                        const reason = `${dateLabel}の南病棟遅番要件を満たしていません（南2に1名、南3に1名。現況: 南2=${s2Late}名, 南3=${s3Late}名）`;
+                        errors.push(`【${dateLabel}】${reason}。`);
                         conflictCells.push({ dayIndex: d, footerStat: 'late', reason: reason });
                     }
                     if (s2Eve !== 1 || s3Eve !== 1) {
-                        const reason = `${dayNum}日目の南病棟E番要件を満たしていません（南2に1名、南3に1名。現況: 南2=${s2Eve}名, 南3=${s3Eve}名）`;
-                        errors.push(`【${dayNum}日目】${reason}。`);
+                        const reason = `${dateLabel}の南病棟E番要件を満たしていません（南2に1名、南3に1名。現況: 南2=${s2Eve}名, 南3=${s3Eve}名）`;
+                        errors.push(`【${dateLabel}】${reason}。`);
                         conflictCells.push({ dayIndex: d, footerStat: 'eve', reason: reason });
                     }
                 }
             } else if (isFinal) {
                 // 最終チェック＆完成: 完全充足を厳格チェック（ハヤ・オソ・イブはカウントしない）
                 if (earlyCount !== 3) {
-                    const reason = `${dayNum}日目の早番（早）が${earlyCount}名です（要件: 3名）`;
-                    errors.push(`【${dayNum}日目】${reason}。`);
+                    const reason = `${dateLabel}の早番（早）が${earlyCount}名です（要件: 3名）`;
+                    errors.push(`【${dateLabel}】${reason}。`);
                     conflictCells.push({ dayIndex: d, footerStat: 'early', reason: reason });
                 }
                 if (lateCount !== 1) {
-                    const reason = `${dayNum}日目の遅番（遅）が${lateCount}名です（要件: 1名）`;
-                    errors.push(`【${dayNum}日目】${reason}。`);
+                    const reason = `${dateLabel}の遅番（遅）が${lateCount}名です（要件: 1名）`;
+                    errors.push(`【${dateLabel}】${reason}。`);
                     conflictCells.push({ dayIndex: d, footerStat: 'late', reason: reason });
                 }
                 if (eveCount !== 2) {
-                    const reason = `${dayNum}日目のイブニング（E）が${eveCount}名です（要件: 2名）`;
-                    errors.push(`【${dayNum}日目】${reason}。`);
+                    const reason = `${dateLabel}のイブニング（E）が${eveCount}名です（要件: 2名）`;
+                    errors.push(`【${dateLabel}】${reason}。`);
                     conflictCells.push({ dayIndex: d, footerStat: 'eve', reason: reason });
                 }
                 if (h8Count !== 1) {
-                    const reason = `${dayNum}日目の8時開始が${h8Count}名です（要件: 1名）`;
-                    errors.push(`【${dayNum}日目】${reason}。`);
+                    const reason = `${dateLabel}の8時開始が${h8Count}名です（要件: 1名）`;
+                    errors.push(`【${dateLabel}】${reason}。`);
                     conflictCells.push({ dayIndex: d, footerStat: 'h8', reason: reason });
                 }
             } else {
                 // 修正作業エリア: 全日0名は許容するが、既に特殊勤務が入っている日での不足または超過は指摘＆網掛け
                 if (earlyCount > 0 && earlyCount !== 3) {
-                    const reason = `${dayNum}日目の早番（早）が${earlyCount}名です（要件: 3名）`;
-                    errors.push(`【${dayNum}日目】${reason}。`);
+                    const reason = `${dateLabel}の早番（早）が${earlyCount}名です（要件: 3名）`;
+                    errors.push(`【${dateLabel}】${reason}。`);
                     conflictCells.push({ dayIndex: d, footerStat: 'early', reason: reason });
                 } else if (earlyCount > 3) {
-                    const reason = `${dayNum}日目の早番（早）が${earlyCount}名で定員超過です（要件: 3名）`;
-                    errors.push(`【${dayNum}日目】${reason}。`);
+                    const reason = `${dateLabel}の早番（早）が${earlyCount}名で定員超過です（要件: 3名）`;
+                    errors.push(`【${dateLabel}】${reason}。`);
                     conflictCells.push({ dayIndex: d, footerStat: 'early', reason: reason });
                 }
                 if (lateCount > 1) {
-                    const reason = `${dayNum}日目の遅番（遅）が${lateCount}名で定員超過です（要件: 1名）`;
-                    errors.push(`【${dayNum}日目】${reason}。`);
+                    const reason = `${dateLabel}の遅番（遅）が${lateCount}名で定員超過です（要件: 1名）`;
+                    errors.push(`【${dateLabel}】${reason}。`);
                     conflictCells.push({ dayIndex: d, footerStat: 'late', reason: reason });
                 }
                 if (eveCount > 2) {
-                    const reason = `${dayNum}日目のイブニング（E）が${eveCount}名で定員超過です（要件: 2名）`;
-                    errors.push(`【${dayNum}日目】${reason}。`);
+                    const reason = `${dateLabel}のイブニング（E）が${eveCount}名で定員超過です（要件: 2名）`;
+                    errors.push(`【${dateLabel}】${reason}。`);
                     conflictCells.push({ dayIndex: d, footerStat: 'eve', reason: reason });
                 }
                 if (h8Count > 1) {
-                    const reason = `${dayNum}日目の8時開始が${h8Count}名で定員超過です（要件: 1名）`;
-                    errors.push(`【${dayNum}日目】${reason}。`);
+                    const reason = `${dateLabel}の8時開始が${h8Count}名で定員超過です（要件: 1名）`;
+                    errors.push(`【${dateLabel}】${reason}。`);
                     conflictCells.push({ dayIndex: d, footerStat: 'h8', reason: reason });
                 }
             }

@@ -105,8 +105,24 @@ window.addEventListener('DOMContentLoaded', () => {
             console.error("Violations:", violations.slice(0, 10));
         }
 
+        // 日付配列生成（4/1〜4/28、2026年4月1日は水曜日: wIdx=2）
+        const testDates = [];
+        for (let d = 0; d < numDays; d++) {
+            const dt = new Date(2026, 3, 1 + d);
+            const wIdx = (dt.getDay() + 6) % 7;
+            testDates.push({
+                label: `4/${d + 1}`,
+                m: 4,
+                day: d + 1,
+                wIdx: wIdx,
+                isSun: (wIdx === 6),
+                isSat: (wIdx === 5)
+            });
+        }
+
         // validateScheduleGrid でも検証
         const valRes = validateScheduleGrid(grid, staffList, {
+            dates: testDates,
             numDays: numDays,
             standardHolidays: 8.0,
             isSouth: true,
@@ -117,7 +133,24 @@ window.addEventListener('DOMContentLoaded', () => {
             console.error("Validation Errors:", valRes.errors.slice(0, 10));
         }
 
-        if (violations.length === 0 && valRes.errors.length === 0) {
+        // ★ 日付表示テスト: 10日目(4/10)にわざと違反を作り、【4/10】と出るか検証
+        const testGridWithViolation = JSON.parse(JSON.stringify(grid));
+        // s_0 (1年目) と s_1 (1年目) の4/10 (d=9) を早番にする
+        testGridWithViolation[0][9] = { symbol: SYMBOLS.EARLY, isFixed: false };
+        testGridWithViolation[1][9] = { symbol: SYMBOLS.EARLY, isFixed: false };
+        const testDateValRes = validateScheduleGrid(testGridWithViolation, staffList, {
+            dates: testDates,
+            numDays: numDays,
+            standardHolidays: 8.0,
+            isSouth: true,
+            isFinal: true
+        });
+        const has4_10Error = testDateValRes.errors.some(err => err.includes('4/10'));
+        console.log("DATE_LABEL_TEST_4_10_DETECTED:", has4_10Error);
+        const sampleErr = testDateValRes.errors.find(err => err.includes('4/10'));
+        console.log("Sample 4/10 Error Message:", sampleErr);
+
+        if (violations.length === 0 && valRes.errors.length === 0 && has4_10Error) {
             console.log("TEST_SOUTH_SPECIAL_PASSED_100_PERCENT");
         } else {
             console.error("TEST_SOUTH_SPECIAL_FAILED");

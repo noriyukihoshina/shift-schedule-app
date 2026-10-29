@@ -210,6 +210,8 @@ document.addEventListener('DOMContentLoaded', () => {
                     isZeroCount: !!s.isZeroCount,
                     isFirstYear: !!s.isFirstYear,
                     lifeSection: s.lifeSection || '',
+                    haSection: s.haSection || '',
+                    jobTitle: s.jobTitle || '',
                     isFullTime: !!s.isFullTime,
                     allow6Consec: !!s.allow6Consec,
                     prevName: cleanTextValue(s.prevName || '')
@@ -230,6 +232,8 @@ document.addEventListener('DOMContentLoaded', () => {
                 staffList[idx].floor = ms.floor !== undefined ? ms.floor : staffList[idx].floor;
                 staffList[idx].section = ms.section || '';
                 staffList[idx].lifeSection = ms.lifeSection || '';
+                staffList[idx].haSection = ms.haSection || '';
+                staffList[idx].jobTitle = ms.jobTitle || staffList[idx].jobTitle || '';
                 staffList[idx].can8 = ms.can8 !== undefined ? !!ms.can8 : staffList[idx].can8;
                 staffList[idx].noEarly = !!ms.noEarly;
                 staffList[idx].noLate = !!ms.noLate;
@@ -447,6 +451,8 @@ document.addEventListener('DOMContentLoaded', () => {
                     isZeroCount: false,     // 0
                     isFirstYear: false,     // 1年目
                     lifeSection: '',        // 生活期セクション
+                    haSection: '',          // ハセクション
+                    jobTitle: '',           // 職種（PT/OT/ST）
                     isFullTime: isFullTime, // 専従（1F: ST03, 2F: ST08, 3F: ST12, 南: ST16）
                     allow6Consec: false,    // 6連勤可
                     prevName: '',           // 旧姓
@@ -474,6 +480,8 @@ document.addEventListener('DOMContentLoaded', () => {
                     isZeroCount: false,                  // ★ 0（出勤実数を0人換算）
                     isFirstYear: false,                  // ★ 1年目
                     lifeSection: '',                     // ★ 生活期セクション
+                    haSection: '',                       // ★ ハセクション
+                    jobTitle: '',                        // ★ 職種（PT/OT/ST）
                     isFullTime: (i <= 10),               // ★ 専従
                     allow6Consec: false,                 // ★ 6連勤可
                     prevName: '',                        // ★ 旧姓（改姓時の引き継ぎ用）
@@ -1635,17 +1643,24 @@ document.addEventListener('DOMContentLoaded', () => {
                 <th class="remarks-col" rowspan="2" title="委員会等のメモ（ExcelのAG列と自動連携）" style="background:#f8fafc; color:#1e293b; min-width:220px; max-width:320px;">備考（メモ）</th>
             `;
         } else if (isLife) {
-            // ★ 生活期テーブル専用ヘッダー（訪問・通所・Cl1・Cl2・管理・ハ1〜ハ南、0、0.5）
+            // ★ 生活期テーブル専用ヘッダー（PT/OT/ST, 係長/主任/副主任, 訪問/通所/Cl1/Cl2/管理, ハ1〜ハ南/ハ外, 0, 0.5）
             headHtml += `
+                <th class="flag-col" rowspan="2" title="PT（択一）" style="background:#e0e7ff; color:#3730a3; font-weight:800;">PT</th>
+                <th class="flag-col" rowspan="2" title="OT（択一）" style="background:#fae8ff; color:#86198f; font-weight:800;">OT</th>
+                <th class="flag-col" rowspan="2" title="ST（択一）" style="background:#fce7f3; color:#9d174d; font-weight:800;">ST</th>
+                <th class="flag-col" rowspan="2" title="係長（択一）" style="background:#fef3c7; color:#92400e; font-weight:800;">係長</th>
+                <th class="flag-col" rowspan="2" title="主任（択一）" style="background:#fef9c3; color:#854d0e; font-weight:800;">主任</th>
+                <th class="flag-col" rowspan="2" title="副主任（択一）" style="background:#e0f2fe; color:#0369a1; font-weight:800;">副主任</th>
                 <th class="flag-col" rowspan="2" title="訪問（土日休み固定、PO人数除外）" style="background:#e0f2fe; color:#0369a1; font-weight:800;">訪問</th>
                 <th class="flag-col" rowspan="2" title="通所（日曜日全員休み、平日は分散、PO人数除外）" style="background:#fef3c7; color:#92400e; font-weight:800;">通所</th>
                 <th class="flag-col" rowspan="2" title="Cl1（集計に一切含めない）" style="background:#f1f5f9; color:#475569; font-weight:800;">Cl1</th>
                 <th class="flag-col" rowspan="2" title="Cl2（通所の集計に含める）" style="background:#ffedd5; color:#c2410c; font-weight:800;">Cl2</th>
                 <th class="flag-col" rowspan="2" title="管理（記載するが集計に一切含めない）" style="background:#f3e8ff; color:#6b21a8; font-weight:800;">管理</th>
-                <th class="flag-col" rowspan="2" title="ハ1" style="background:#dcfce7; color:#15803d; font-weight:800;">ハ1</th>
-                <th class="flag-col" rowspan="2" title="ハ2" style="background:#dcfce7; color:#15803d; font-weight:800;">ハ2</th>
-                <th class="flag-col" rowspan="2" title="ハ3" style="background:#dcfce7; color:#15803d; font-weight:800;">ハ3</th>
-                <th class="flag-col" rowspan="2" title="ハ南" style="background:#fae8ff; color:#86198f; font-weight:800;">ハ南</th>
+                <th class="flag-col" rowspan="2" title="ハ1（択一）" style="background:#dcfce7; color:#15803d; font-weight:800;">ハ1</th>
+                <th class="flag-col" rowspan="2" title="ハ2（択一）" style="background:#dcfce7; color:#15803d; font-weight:800;">ハ2</th>
+                <th class="flag-col" rowspan="2" title="ハ3（択一）" style="background:#dcfce7; color:#15803d; font-weight:800;">ハ3</th>
+                <th class="flag-col" rowspan="2" title="ハ南（択一）" style="background:#fae8ff; color:#86198f; font-weight:800;">ハ南</th>
+                <th class="flag-col" rowspan="2" title="ハ外（択一）" style="background:#ede9fe; color:#5b21b6; font-weight:800;">ハ外</th>
                 <th class="flag-col" rowspan="2" title="0（実数計算で0人換算）" style="background:#f5d0fe; color:#701a75; font-weight:800;">0</th>
                 <th class="flag-col" rowspan="2" title="0.5（実数計算で0.5人換算）" style="background:#e9d5ff; color:#581c87; font-weight:800;">0.5</th>
                 <th class="flag-col" rowspan="2" title="6連勤例外許可" style="background:#fee2e2; color:#991b1b;">6連勤<br>可</th>
@@ -1824,13 +1839,67 @@ document.addEventListener('DOMContentLoaded', () => {
                     </td>
                 `;
             } else if (isLife) {
-                // ★ 生活期テーブル専用行セル（訪問・通所・Cl1・Cl2・管理・ハ1〜ハ南、0、0.5）
-                const lifeSecs = ['訪問', '通所', 'Cl1', 'Cl2', '管理', 'ハ1', 'ハ2', 'ハ3', 'ハ南'];
+                // ★ 生活期テーブル専用行セル（PT/OT/ST, 係長/主任/副主任, 訪問/通所/Cl1/Cl2/管理, ハ1〜ハ南/ハ外, 0, 0.5）
+                // 1. 職種（PT/OT/ST: 択一）
+                bodyHtml += `
+                    <td class="flag-col" style="background:#eef2ff;">
+                        <label class="toggle-switch" title="PT">
+                            <input type="checkbox" ${staff.jobTitle === 'PT' ? 'checked' : ''} data-life-job="PT" data-s="${sIdx}">
+                            <span class="toggle-slider"></span>
+                        </label>
+                    </td>
+                    <td class="flag-col" style="background:#fdf4ff;">
+                        <label class="toggle-switch" title="OT">
+                            <input type="checkbox" ${staff.jobTitle === 'OT' ? 'checked' : ''} data-life-job="OT" data-s="${sIdx}">
+                            <span class="toggle-slider"></span>
+                        </label>
+                    </td>
+                    <td class="flag-col" style="background:#fff1f2;">
+                        <label class="toggle-switch" title="ST">
+                            <input type="checkbox" ${staff.jobTitle === 'ST' ? 'checked' : ''} data-life-job="ST" data-s="${sIdx}">
+                            <span class="toggle-slider"></span>
+                        </label>
+                    </td>
+                    <td class="flag-col" style="background:#fffbeb;">
+                        <label class="toggle-switch" title="係長">
+                            <input type="checkbox" ${staff.isSectionChief ? 'checked' : ''} data-life-role="isSectionChief" data-s="${sIdx}">
+                            <span class="toggle-slider"></span>
+                        </label>
+                    </td>
+                    <td class="flag-col" style="background:#fefce8;">
+                        <label class="toggle-switch" title="主任">
+                            <input type="checkbox" ${staff.isChief ? 'checked' : ''} data-life-role="isChief" data-s="${sIdx}">
+                            <span class="toggle-slider"></span>
+                        </label>
+                    </td>
+                    <td class="flag-col" style="background:#f0f9ff;">
+                        <label class="toggle-switch" title="副主任">
+                            <input type="checkbox" ${staff.isSubChief ? 'checked' : ''} data-life-role="isSubChief" data-s="${sIdx}">
+                            <span class="toggle-slider"></span>
+                        </label>
+                    </td>
+                `;
+
+                // 2. 生活期業務（訪問・通所・Cl1・Cl2・管理: 択一）
+                const lifeSecs = ['訪問', '通所', 'Cl1', 'Cl2', '管理'];
                 lifeSecs.forEach(secName => {
                     bodyHtml += `
                         <td class="flag-col" style="background:#f8fafc;">
                             <label class="toggle-switch" title="${secName}">
                                 <input type="checkbox" ${staff.lifeSection === secName ? 'checked' : ''} data-life-section="${secName}" data-s="${sIdx}">
+                                <span class="toggle-slider"></span>
+                            </label>
+                        </td>
+                    `;
+                });
+
+                // 3. ハセクション（ハ1・ハ2・ハ3・ハ南・ハ外: 択一）
+                const haSecs = ['ハ1', 'ハ2', 'ハ3', 'ハ南', 'ハ外'];
+                haSecs.forEach(haName => {
+                    bodyHtml += `
+                        <td class="flag-col" style="background:#f0fdf4;">
+                            <label class="toggle-switch" title="${haName}">
+                                <input type="checkbox" ${staff.haSection === haName ? 'checked' : ''} data-ha-section="${haName}" data-s="${sIdx}">
                                 <span class="toggle-slider"></span>
                             </label>
                         </td>
@@ -2174,7 +2243,48 @@ document.addEventListener('DOMContentLoaded', () => {
             });
         });
 
-        // ★ 生活期セクション択一排他制御（訪問・通所・Cl1・Cl2・管理・ハ1〜ハ南）
+        // ★ 生活期 職種択一排他制御（PT・OT・ST）
+        document.querySelectorAll('input[type="checkbox"][data-life-job]').forEach(chk => {
+            chk.addEventListener('change', (e) => {
+                const s = parseInt(e.target.dataset.s, 10);
+                const job = e.target.dataset.lifeJob;
+                pushHistory();
+                if (e.target.checked) {
+                    staffList[s].jobTitle = job;
+                    document.querySelectorAll(`input[type="checkbox"][data-life-job][data-s="${s}"]`).forEach(other => {
+                        if (other !== e.target) other.checked = false;
+                    });
+                } else {
+                    if (staffList[s].jobTitle === job) {
+                        staffList[s].jobTitle = '';
+                    }
+                }
+                saveStaffMaster();
+                saveCurrentTermToStorage();
+            });
+        });
+
+        // ★ 生活期 役職択一排他制御（係長・主任・副主任）
+        document.querySelectorAll('input[type="checkbox"][data-life-role]').forEach(chk => {
+            chk.addEventListener('change', (e) => {
+                const s = parseInt(e.target.dataset.s, 10);
+                const role = e.target.dataset.lifeRole;
+                pushHistory();
+                staffList[s].isSectionChief = false;
+                staffList[s].isChief = false;
+                staffList[s].isSubChief = false;
+                if (e.target.checked) {
+                    staffList[s][role] = true;
+                    document.querySelectorAll(`input[type="checkbox"][data-life-role][data-s="${s}"]`).forEach(other => {
+                        if (other !== e.target) other.checked = false;
+                    });
+                }
+                saveStaffMaster();
+                saveCurrentTermToStorage();
+            });
+        });
+
+        // ★ 生活期セクション択一排他制御（訪問・通所・Cl1・Cl2・管理）
         document.querySelectorAll('input[type="checkbox"][data-life-section]').forEach(chk => {
             chk.addEventListener('change', (e) => {
                 const s = parseInt(e.target.dataset.s, 10);
@@ -2188,6 +2298,27 @@ document.addEventListener('DOMContentLoaded', () => {
                 } else {
                     if (staffList[s].lifeSection === sec) {
                         staffList[s].lifeSection = '';
+                    }
+                }
+                saveStaffMaster();
+                saveCurrentTermToStorage();
+            });
+        });
+
+        // ★ 生活期 ハセクション択一排他制御（ハ1・ハ2・ハ3・ハ南・ハ外）
+        document.querySelectorAll('input[type="checkbox"][data-ha-section]').forEach(chk => {
+            chk.addEventListener('change', (e) => {
+                const s = parseInt(e.target.dataset.s, 10);
+                const ha = e.target.dataset.haSection;
+                pushHistory();
+                if (e.target.checked) {
+                    staffList[s].haSection = ha;
+                    document.querySelectorAll(`input[type="checkbox"][data-ha-section][data-s="${s}"]`).forEach(other => {
+                        if (other !== e.target) other.checked = false;
+                    });
+                } else {
+                    if (staffList[s].haSection === ha) {
+                        staffList[s].haSection = '';
                     }
                 }
                 saveStaffMaster();
