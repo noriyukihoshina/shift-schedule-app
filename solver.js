@@ -618,6 +618,18 @@ class ShiftScheduler {
     }
 
     /**
+     * 南病棟におけるスタッフ s の所属サブフロア（南2 or 南3）を取得
+     */
+    getSubFloor(s) {
+        const st = this.staffList[s];
+        if (!st) return (s % 2 === 0) ? '南2' : '南3';
+        const sec = st.section || '';
+        if (sec.includes('2') || sec === 'PT A' || sec === 'OT A') return '南2';
+        if (sec.includes('3') || sec === 'PT B' || sec === 'OT B') return '南3';
+        return (s % 2 === 0) ? '南2' : '南3';
+    }
+
+    /**
      * スタッフ s の記号 sym に対する「実数（リハビリ実働換算）」寄与度を取得
      * 0.5トグル(isHalf)のスタッフは0.5倍、半休(○/休, ○/有等)は0.5倍として計算
      */
@@ -1901,42 +1913,52 @@ class ShiftScheduler {
             }
         }
 
-        const getSubFloor = (s) => {
-            const st = this.staffList[s];
-            if (!st) return '';
-            const sec = st.section || '';
-            if (sec.includes('2') || sec === 'PT A' || sec === 'OT A') return '南2';
-            if (sec.includes('3') || sec === 'PT B' || sec === 'OT B') return '南3';
-            return '';
-        };
+        const getSubFloor = (s) => this.getSubFloor(s);
 
         for (let d = 0; d < this.numDays; d++) {
             const dayNum = d + 1;
 
             let requirements = [];
             if (this.isSouth) {
-                // 南病棟: 遅番南2に1名・南3に1名、E番南2に1名・南3に1名、早番南2に1名・南3に1名
-                const stEarlyCount = (this.stDailyEarly && this.stDailyEarly[d]) ? this.stDailyEarly[d] : 0;
-                let needEarlySouth2 = 1;
-                let needEarlySouth3 = 1;
-                if (stEarlyCount >= 2) {
-                    needEarlySouth2 = 0;
-                    needEarlySouth3 = 0;
-                } else if (stEarlyCount === 1) {
-                    // ST早番が1名ある場合、南2か南3どちらかをSTが担当
-                    needEarlySouth3 = 0;
-                }
-
+                // 南病棟特殊ルール:
+                // ・遅: 南2に1名、南3に1名ずつだけ配置、合計2名
+                // ・E: 南2に1名、南3に1名ずつだけ配置、合計2名
+                // ・早: 南2に1名、南3に1名ずつだけ配置、合計2名（ST早番は南2または南3どちらにカウントしてもOK）
                 requirements = [
                     { type: SYMBOLS.LATE, count: 1, targetFloor: '南2', label: '南2遅番', key: 'late', noFlag: 'noLate', matchSyms: [SYMBOLS.LATE] },
                     { type: SYMBOLS.LATE, count: 1, targetFloor: '南3', label: '南3遅番', key: 'late', noFlag: 'noLate', matchSyms: [SYMBOLS.LATE] },
                     { type: SYMBOLS.EVE, count: 1, targetFloor: '南2', label: '南2イブニング(E)', key: 'eve', noFlag: 'noEve', matchSyms: [SYMBOLS.EVE] },
                     { type: SYMBOLS.EVE, count: 1, targetFloor: '南3', label: '南3イブニング(E)', key: 'eve', noFlag: 'noEve', matchSyms: [SYMBOLS.EVE] }
                 ];
-                if (needEarlySouth2 > 0) {
+
+                const stEarlyCount = (this.stDailyEarly && this.stDailyEarly[d]) ? this.stDailyEarly[d] : 0;
+                if (stEarlyCount >= 2) {
+                    // ST早番が2名ある場合は南2と南3の両方をSTが満たすためPO早番は不要
+                } else if (stEarlyCount === 1) {
+                    // ST早番が1名ある場合: 南2または南3のどちらか一方にSTを充当し、もう一方にPO早番1名を配置
+                    let s2HasEarly = false, s3HasEarly = false;
+                    for (let s = 0; s < this.numStaff; s++) {
+                        if (this.staffList[s].isUnused) continue;
+                        if (this.grid[s][d].symbol === SYMBOLS.EARLY) {
+                            if (getSubFloor(s) === '南2') s2HasEarly = true;
+                            if (getSubFloor(s) === '南3') s3HasEarly = true;
+                        }
+                    }
+                    if (s2HasEarly && !s3HasEarly) {
+                        // 南2に既にPO早番があるため、ST早番は南3に充当
+                    } else if (s3HasEarly && !s2HasEarly) {
+                        // 南3に既にPO早番があるため、ST早番は南2に充当
+                    } else {
+                        // どちらも事前希望なしの場合: 交互に割り当て
+                        if (d % 2 === 0) {
+                            requirements.push({ type: SYMBOLS.EARLY, count: 1, targetFloor: '南2', label: '南2早番', key: 'early', noFlag: 'noEarly', matchSyms: [SYMBOLS.EARLY] });
+                        } else {
+                            requirements.push({ type: SYMBOLS.EARLY, count: 1, targetFloor: '南3', label: '南3早番', key: 'early', noFlag: 'noEarly', matchSyms: [SYMBOLS.EARLY] });
+                        }
+                    }
+                } else {
+                    // ST早番なし: 南2に1名、南3に1名
                     requirements.push({ type: SYMBOLS.EARLY, count: 1, targetFloor: '南2', label: '南2早番', key: 'early', noFlag: 'noEarly', matchSyms: [SYMBOLS.EARLY] });
-                }
-                if (needEarlySouth3 > 0) {
                     requirements.push({ type: SYMBOLS.EARLY, count: 1, targetFloor: '南3', label: '南3早番', key: 'early', noFlag: 'noEarly', matchSyms: [SYMBOLS.EARLY] });
                 }
             } else {
@@ -1951,6 +1973,8 @@ class ShiftScheduler {
                 let assigned = 0;
                 for (let s = 0; s < this.numStaff; s++) {
                     if (this.staffList[s].isUnused) continue;
+                    // ★ 南病棟の場合はフロア（南2 or 南3）を厳密に区別してカウント！
+                    if (req.targetFloor && getSubFloor(s) !== req.targetFloor) continue;
                     if (req.matchSyms.includes(this.grid[s][d].symbol)) assigned++;
                 }
 
@@ -2469,6 +2493,63 @@ class ShiftScheduler {
                     for (let sLow = 0; sLow < this.numStaff; sLow++) {
                         if (sLow === sHigh || this.staffList[sLow].isUnused || this.staffList[sLow].isSectionChief) continue;
                         if (this.staffList[sLow][currentReq.noFlag]) continue;
+
+                        // ★ 南病棟の場合：同一フロア（南2同士、南3同士）でのみ交代を許可！（南2・南3の人数崩れを物理防止）
+                        if (this.isSouth && this.getSubFloor(sLow) !== this.getSubFloor(sHigh)) continue;
+
+                        // ★ 南病棟および通常POの1年目制約チェック
+                        if (this.staffList[sLow].isFirstYear) {
+                            if (this.isSouth) {
+                                // 1. 早2人のうち1年目は1人まで
+                                if (currentReq.key === 'early') {
+                                    let curEarlyFY = 0;
+                                    for (let otherS = 0; otherS < this.numStaff; otherS++) {
+                                        if (otherS !== sHigh && this.staffList[otherS].isFirstYear && this.grid[otherS][d].symbol === SYMBOLS.EARLY) curEarlyFY++;
+                                    }
+                                    if (curEarlyFY >= 1) continue;
+                                }
+                                // 2. E2人のうち1年目は1人まで
+                                if (currentReq.key === 'eve') {
+                                    let curEveFY = 0;
+                                    for (let otherS = 0; otherS < this.numStaff; otherS++) {
+                                        if (otherS !== sHigh && this.staffList[otherS].isFirstYear && this.grid[otherS][d].symbol === SYMBOLS.EVE) curEveFY++;
+                                    }
+                                    if (curEveFY >= 1) continue;
+                                }
+                                // 3. 遅2人のうち1年目だけで2人OK（制限なし）
+                                // 4. 同じフロアの遅とE2人のうち1年目は1人まで
+                                const subFl = this.getSubFloor(sLow);
+                                if (currentReq.key === 'late') {
+                                    let floorEveFY = 0;
+                                    for (let otherS = 0; otherS < this.numStaff; otherS++) {
+                                        if (otherS !== sHigh && this.getSubFloor(otherS) === subFl && this.staffList[otherS].isFirstYear && this.grid[otherS][d].symbol === SYMBOLS.EVE) floorEveFY++;
+                                    }
+                                    if (floorEveFY >= 1) continue;
+                                }
+                                if (currentReq.key === 'eve') {
+                                    let floorLateFY = 0;
+                                    for (let otherS = 0; otherS < this.numStaff; otherS++) {
+                                        if (otherS !== sHigh && this.getSubFloor(otherS) === subFl && this.staffList[otherS].isFirstYear && this.grid[otherS][d].symbol === SYMBOLS.LATE) floorLateFY++;
+                                    }
+                                    if (floorLateFY >= 1) continue;
+                                }
+                            } else {
+                                if (currentReq.key === 'early') {
+                                    let curEarlyFY = 0;
+                                    for (let otherS = 0; otherS < this.numStaff; otherS++) {
+                                        if (otherS !== sHigh && this.staffList[otherS].isFirstYear && this.grid[otherS][d].symbol === SYMBOLS.EARLY) curEarlyFY++;
+                                    }
+                                    if (curEarlyFY >= 1) continue;
+                                }
+                                if (currentReq.key === 'late' || currentReq.key === 'eve') {
+                                    let curLateEveFY = 0;
+                                    for (let otherS = 0; otherS < this.numStaff; otherS++) {
+                                        if (otherS !== sHigh && this.staffList[otherS].isFirstYear && (this.grid[otherS][d].symbol === SYMBOLS.LATE || this.grid[otherS][d].symbol === SYMBOLS.EVE)) curLateEveFY++;
+                                    }
+                                    if (curLateEveFY >= 1) continue;
+                                }
+                            }
+                        }
 
                         const sLowLimit = is8(sLow) ? 2 : 5;
                         // 合計回数が上限未満のスタッフにのみ譲渡（8時担当者は最大2回で打ち止め）
@@ -5263,13 +5344,20 @@ function validateScheduleGrid(grid, staffList, options = {}) {
             }
 
             // ★ 1年目制約（通常PO ＆ 南病棟特殊ルール）
+            const getSouthSubFloor = (st, sIdx) => {
+                if (!st) return (sIdx % 2 === 0) ? '南2' : '南3';
+                const sec = st.section || '';
+                if (sec.includes('2') || sec === 'PT A' || sec === 'OT A') return '南2';
+                if (sec.includes('3') || sec === 'PT B' || sec === 'OT B') return '南3';
+                return (sIdx % 2 === 0) ? '南2' : '南3';
+            };
+
             if (isSouth) {
                 const s2Staff = [], s3Staff = [];
                 staffList.forEach((st, sIdx) => {
                     if (st.isUnused) return;
-                    const sec = st.section || '';
-                    if (sec.includes('2')) s2Staff.push(sIdx);
-                    else if (sec.includes('3')) s3Staff.push(sIdx);
+                    if (getSouthSubFloor(st, sIdx) === '南2') s2Staff.push(sIdx);
+                    else s3Staff.push(sIdx);
                 });
                 const s2Early = s2Staff.filter(s => getSym(s, d) === SYMBOLS.EARLY);
                 const s3Early = s3Staff.filter(s => getSym(s, d) === SYMBOLS.EARLY);
@@ -5278,19 +5366,20 @@ function validateScheduleGrid(grid, staffList, options = {}) {
                 const s2Eve   = s2Staff.filter(s => getSym(s, d) === SYMBOLS.EVE);
                 const s3Eve   = s3Staff.filter(s => getSym(s, d) === SYMBOLS.EVE);
 
-                // 早2人のうち1年目は1人まで
+                // 1. 早2人のうち1年目は1人まで
                 const allEarlyFY = [...s2Early, ...s3Early].filter(s => staffList[s].isFirstYear);
                 if (allEarlyFY.length > 1) {
                     errors.push(`【${dayNum}日目】南病棟の早番のうち「1年目」が${allEarlyFY.length}名います（要件: 1名以下）。`);
                     allEarlyFY.forEach(s => addConflict(s, d, `${dayNum}日目: 南病棟の早番で1年目が重複しています（上限1名）`));
                 }
-                // E2人のうち1年目は1人まで
+                // 2. 遅2人のうち1年目だけで2人OK（※エラー判定なし）
+                // 3. E2人のうち1年目は1人まで
                 const allEveFY = [...s2Eve, ...s3Eve].filter(s => staffList[s].isFirstYear);
                 if (allEveFY.length > 1) {
                     errors.push(`【${dayNum}日目】南病棟のE番のうち「1年目」が${allEveFY.length}名います（要件: 1名以下）。`);
                     allEveFY.forEach(s => addConflict(s, d, `${dayNum}日目: 南病棟のE番で1年目が重複しています（上限1名）`));
                 }
-                // 同じフロアの遅とE2人のうち1年目は1人まで
+                // 4. 同じフロアの遅とE2人のうち1年目は1人まで
                 const s2LateEveFY = [...s2Late, ...s2Eve].filter(s => staffList[s].isFirstYear);
                 if (s2LateEveFY.length > 1) {
                     errors.push(`【${dayNum}日目】南2の遅番・E番（計${s2Late.length + s2Eve.length}名）のうち「1年目」が${s2LateEveFY.length}名います（要件: 1名以下）。`);
@@ -5333,8 +5422,10 @@ function validateScheduleGrid(grid, staffList, options = {}) {
                     staffList.forEach((st, sIdx) => {
                         if (st.isUnused) return;
                         const sec = st.section || '';
-                        if (sec.includes('2')) s2Staff.push(sIdx);
-                        else if (sec.includes('3')) s3Staff.push(sIdx);
+                        if (sec.includes('2') || sec === 'PT A' || sec === 'OT A') s2Staff.push(sIdx);
+                        else if (sec.includes('3') || sec === 'PT B' || sec === 'OT B') s3Staff.push(sIdx);
+                        else if (sIdx % 2 === 0) s2Staff.push(sIdx);
+                        else s3Staff.push(sIdx);
                     });
                     const s2Early = s2Staff.filter(s => getSym(s, d) === SYMBOLS.EARLY).length;
                     const s3Early = s3Staff.filter(s => getSym(s, d) === SYMBOLS.EARLY).length;
@@ -5360,10 +5451,17 @@ function validateScheduleGrid(grid, staffList, options = {}) {
                         conflictCells.push({ dayIndex: d, footerStat: 'early', reason: reason });
                     }
 
-                    // 早番チェック（ST早番は南2または南3どちらにカウントしてもOK）
-                    const totalEarlyPO = s2Early + s3Early;
-                    if (totalEarlyPO + stEarlyCount !== 2 || (s2Early > 1 || s3Early > 1)) {
-                        const reason = `${dayNum}日目の南病棟早番要件を満たしていません（南2に1名、南3に1名。ST早番含めて計2名）`;
+                    // 早番チェック（南2に1名、南3に1名。ST早番は南2または南3どちらにカウントしてもOK）
+                    let earlyValid = false;
+                    if (stEarlyCount === 0) {
+                        earlyValid = (s2Early === 1 && s3Early === 1);
+                    } else if (stEarlyCount === 1) {
+                        earlyValid = (s2Early === 1 && s3Early === 0) || (s2Early === 0 && s3Early === 1);
+                    } else if (stEarlyCount >= 2) {
+                        earlyValid = (s2Early === 0 && s3Early === 0);
+                    }
+                    if (!earlyValid) {
+                        const reason = `${dayNum}日目の南病棟早番要件を満たしていません（南2に1名、南3に1名。ST早番含めて計2名。現況: 南2=${s2Early}名, 南3=${s3Early}名, ST=${stEarlyCount}名）`;
                         errors.push(`【${dayNum}日目】${reason}。`);
                         conflictCells.push({ dayIndex: d, footerStat: 'early', reason: reason });
                     }

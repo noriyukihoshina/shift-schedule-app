@@ -6,11 +6,7 @@ $allPassed = $true
 
 foreach ($s in $screens) {
     $url = "file:///" + ($dir.Replace('\', '/') + "/" + $s)
-    $logFile = Join-Path $dir "verify_out.log"
-    if (Test-Path $logFile) {
-        # overwrite with empty string
-        [System.IO.File]::WriteAllText($logFile, "", [System.Text.Encoding]::UTF8)
-    }
+    $logFile = Join-Path $dir ("verify_out_" + [System.Guid]::NewGuid().ToString("N") + ".log")
 
     $p = Start-Process -FilePath $edge -ArgumentList "--headless=new", "--enable-logging=stderr", "--v=1", $url -RedirectStandardError $logFile -NoNewWindow -PassThru
     Start-Sleep -Seconds 4
@@ -19,7 +15,11 @@ foreach ($s in $screens) {
     }
     Start-Sleep -Milliseconds 500
 
-    $content = [System.IO.File]::ReadAllText($logFile, [System.Text.Encoding]::UTF8)
+    $content = ""
+    if (Test-Path $logFile) {
+        $content = [System.IO.File]::ReadAllText($logFile, [System.Text.Encoding]::UTF8)
+        # Note: Do not remove file to respect RULE[user_global]
+    }
     $errors = ($content -split "`r?`n") | Where-Object { $_ -match "CONSOLE.*Error|SyntaxError|ReferenceError|TypeError" -and $_ -notmatch "chrome-extension" }
 
     if ($errors.Count -gt 0) {

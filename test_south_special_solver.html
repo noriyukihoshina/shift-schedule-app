@@ -1,0 +1,131 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>South Special Duty Solver Test</title>
+</head>
+<body>
+<h1>Testing South Special Duty Rules...</h1>
+<div id="results"></div>
+<script src="solver.js"></script>
+<script>
+window.addEventListener('DOMContentLoaded', () => {
+    try {
+        console.log("Starting South Special Solver Test...");
+        const numDays = 28;
+        // スタッフ36名（南2: 18名、南3: 18名、うち1年目各3名、スケ可各4名、8時各3名）
+        const staffList = [];
+        for (let i = 0; i < 36; i++) {
+            const isS2 = (i < 18);
+            const localIdx = isS2 ? i : (i - 18);
+            staffList.push({
+                id: `s_${i}`,
+                name: `スタッフ${i+1}`,
+                jobTitle: (i % 2 === 0) ? 'PT' : 'OT',
+                section: isS2 ? ((i % 2 === 0) ? 'PT 2' : 'OT 2') : ((i % 2 === 0) ? 'PT 3' : 'OT 3'),
+                isFirstYear: (localIdx < 3), // 各フロア3名ずつ計6名
+                canSched: (localIdx >= 3 && localIdx < 7), // 各フロア4名ずつ計8名
+                can8: (localIdx >= 7 && localIdx < 10), // 各フロア3名ずつ計6名
+                isSectionChief: false,
+                isUnused: false,
+                noEarly: false,
+                noLate: false,
+                noEve: false,
+                prevDays: ['', '', '', '', ''],
+                days: new Array(numDays).fill('')
+            });
+        }
+
+        const scheduler = new ShiftScheduler(staffList, {
+            numDays: numDays,
+            standardHolidays: 8.0,
+            isSouth: true,
+            isFinal: true
+        });
+
+        const baseRes = scheduler.solveBaseSchedule();
+        console.log("Base Solve Success:", baseRes.success);
+        if (!baseRes.success) {
+            console.error("Base Solver failed:", baseRes.errors);
+        }
+
+        const specialRes = scheduler.assignSpecialDutiesToGrid({ force: true });
+        console.log("Special Solve Success:", specialRes.success);
+        if (!specialRes.success) {
+            console.error("Special Solver failed:", specialRes.errors);
+        }
+
+        const grid = specialRes.grid;
+        // ルール検証
+        let violations = [];
+        const getSub = (s) => (s < 18 ? '南2' : '南3');
+
+        for (let d = 0; d < numDays; d++) {
+            let s2Early = 0, s3Early = 0;
+            let s2Late = 0, s3Late = 0;
+            let s2Eve = 0, s3Eve = 0;
+            let earlyFY = 0, eveFY = 0;
+            let s2LateEveFY = 0, s3LateEveFY = 0;
+
+            for (let s = 0; s < 36; s++) {
+                const sym = grid[s][d].symbol;
+                const isFY = staffList[s].isFirstYear;
+                const sub = getSub(s);
+
+                if (sym === SYMBOLS.EARLY) {
+                    if (sub === '南2') s2Early++; else s3Early++;
+                    if (isFY) earlyFY++;
+                }
+                if (sym === SYMBOLS.LATE) {
+                    if (sub === '南2') s2Late++; else s3Late++;
+                    if (isFY) {
+                        if (sub === '南2') s2LateEveFY++; else s3LateEveFY++;
+                    }
+                }
+                if (sym === SYMBOLS.EVE) {
+                    if (sub === '南2') s2Eve++; else s3Eve++;
+                    if (isFY) {
+                        eveFY++;
+                        if (sub === '南2') s2LateEveFY++; else s3LateEveFY++;
+                    }
+                }
+            }
+
+            if (s2Early !== 1 || s3Early !== 1) violations.push(`Day ${d+1}: 早番不一致 南2=${s2Early}, 南3=${s3Early}`);
+            if (s2Late !== 1 || s3Late !== 1) violations.push(`Day ${d+1}: 遅番不一致 南2=${s2Late}, 南3=${s3Late}`);
+            if (s2Eve !== 1 || s3Eve !== 1) violations.push(`Day ${d+1}: E番不一致 南2=${s2Eve}, 南3=${s3Eve}`);
+            if (earlyFY > 1) violations.push(`Day ${d+1}: 早番1年目超過 ${earlyFY}名`);
+            if (eveFY > 1) violations.push(`Day ${d+1}: E番1年目超過 ${eveFY}名`);
+            if (s2LateEveFY > 1) violations.push(`Day ${d+1}: 南2遅E1年目超過 ${s2LateEveFY}名`);
+            if (s3LateEveFY > 1) violations.push(`Day ${d+1}: 南3遅E1年目超過 ${s3LateEveFY}名`);
+        }
+
+        console.log("Violations Count:", violations.length);
+        if (violations.length > 0) {
+            console.error("Violations:", violations.slice(0, 10));
+        }
+
+        // validateScheduleGrid でも検証
+        const valRes = validateScheduleGrid(grid, staffList, {
+            numDays: numDays,
+            standardHolidays: 8.0,
+            isSouth: true,
+            isFinal: true
+        });
+        console.log("validateScheduleGrid Errors Count:", valRes.errors.length);
+        if (valRes.errors.length > 0) {
+            console.error("Validation Errors:", valRes.errors.slice(0, 10));
+        }
+
+        if (violations.length === 0 && valRes.errors.length === 0) {
+            console.log("TEST_SOUTH_SPECIAL_PASSED_100_PERCENT");
+        } else {
+            console.error("TEST_SOUTH_SPECIAL_FAILED");
+        }
+    } catch (e) {
+        console.error("Test Exception:", e.message, e.stack);
+    }
+});
+</script>
+</body>
+</html>
