@@ -1979,12 +1979,12 @@ document.addEventListener('DOMContentLoaded', () => {
         });
 
         // ★「1階」「2階」「3階」「南」のテーブルの最下部にSTのスタッフ名と勤務を確認できるように表示
-        // ★ 重大修正: 列数をヘッダー（52列: 1+1+5+28+17）と完全に一致させ、列ズレ・列幅肥大化を完全防止！
+        // ★ STカラー（ピンク/ローズ系）を全階共通で適用
         if (!isST && currentFloor && linkedStStaffData && linkedStStaffData.staffList && linkedStStaffData.staffList.length > 0) {
             bodyHtml += `
-                <tr style="background:#f0fdf4; border-top: 3px solid #10b981;">
-                    <th colspan="${NUM_DAYS + 24}" style="text-align:left; padding:8px 12px; font-size:0.85rem; font-weight:800; color:#065f46; letter-spacing:0.03em;">
-                        🌿 【${currentFloor} 所属 STスタッフ（参照表示・ST専用テーブルで作成済み）】
+                <tr style="background:#fce7f3; border-top: 3px solid #db2777;">
+                    <th colspan="${NUM_DAYS + 24}" style="text-align:left; padding:8px 12px; font-size:0.85rem; font-weight:800; color:#9d174d; letter-spacing:0.03em;">
+                        🌸 【${currentFloor} 所属 STスタッフ（参照表示・ST専用テーブルで作成済み）】
                     </th>
                 </tr>
             `;
@@ -1992,17 +1992,17 @@ document.addEventListener('DOMContentLoaded', () => {
             linkedStStaffData.staffList.forEach((st, stIdx) => {
                 const rowData = linkedStStaffData.grid[stIdx] || [];
 
-                bodyHtml += `<tr style="background:#f8fafc; color:#334155; opacity:0.95;">`;
-                bodyHtml += `<td class="sticky-col-1 font-mono" style="background:#f0fdf4; color:#047857; font-weight:800;">ST-${stIdx + 1}</td>`;
-                bodyHtml += `<td class="sticky-col-2 border-thick-right" style="background:#f0fdf4; font-weight:700; text-align:left; padding-left:8px;">
+                bodyHtml += `<tr style="background:#fff5f8; color:#334155; opacity:0.95;">`;
+                bodyHtml += `<td class="sticky-col-1 font-mono" style="background:#fff5f8; color:#9d174d; font-weight:800;">ST-${stIdx + 1}</td>`;
+                bodyHtml += `<td class="sticky-col-2 border-thick-right" style="background:#fff5f8; font-weight:700; text-align:left; padding-left:8px;">
                     ${escapeHtmlText(st.name)}
                     ${st.prevName ? `<span style="font-size:0.7rem; color:#64748b;">(${escapeHtmlText(st.prevName)})</span>` : ''}
-                    <span style="font-size:0.65rem; background:#dcfce7; color:#15803d; padding:1px 5px; border-radius:3px; margin-left:4px; font-weight:700;">${st.floor}</span>
+                    <span style="font-size:0.65rem; background:#fbcfe8; color:#9d174d; padding:1px 5px; border-radius:3px; margin-left:4px; font-weight:700;">${st.floor}</span>
                 </td>`;
 
                 // 前5日間（空セル5列）
                 for (let p = 0; p < 5; p++) {
-                    bodyHtml += `<td class="prev-col-cell text-center" style="background:#f0fdf4; color:#94a3b8; font-size:0.8rem;">-</td>`;
+                    bodyHtml += `<td class="prev-col-cell text-center" style="background:#fff5f8; color:#94a3b8; font-size:0.8rem;">-</td>`;
                 }
 
                 // 当ターム 1日〜28日
@@ -2022,11 +2022,11 @@ document.addEventListener('DOMContentLoaded', () => {
                         ? `STスタッフ（事前固定希望）: ${escapeHtmlText(st.name)} / ${sym}`
                         : `STスタッフ（自動配置）: ${escapeHtmlText(st.name)} / ${sym}`;
 
-                    bodyHtml += `<td class="${thickCls} ${cellCls}" style="text-align:center; font-size:0.85rem; background:#f0fdf4;" title="${cellTitle}">${sym}</td>`;
+                    bodyHtml += `<td class="${thickCls} ${cellCls}" style="text-align:center; font-size:0.85rem; background:#fff5f8;" title="${cellTitle}">${sym}</td>`;
                 }
 
                 // 右側フラグ列（17列分）
-                bodyHtml += `<td class="flag-col" colspan="17" style="background:#f0fdf4; color:#065f46; font-size:0.75rem; text-align:left; padding:2px 8px; font-weight:600;">ST専用テーブル連携（参照のみ）</td>`;
+                bodyHtml += `<td class="flag-col" colspan="17" style="background:#fff5f8; color:#9d174d; font-size:0.75rem; text-align:left; padding:2px 8px; font-weight:600;">ST専用テーブル連携（参照のみ）</td>`;
                 bodyHtml += `</tr>`;
             });
         }
@@ -3932,38 +3932,18 @@ document.addEventListener('DOMContentLoaded', () => {
             });
         }
 
-        // ★「1階」「2階」「3階」「南」のテーブルの最下部にSTのスタッフ名と勤務を確認できるように表示（各画面のテーブルカラーに完全連動）
+        // ★「1階」「2階」「3階」「南」のテーブルの最下部にSTのスタッフ名と勤務を確認できるように表示（どの階でも一目で識別できるようST専用公式カラー・ピンク/ローズ系を適用）
         if (!isST && currentFloor && linkedStStaffData && linkedStStaffData.staffList && linkedStStaffData.staffList.length > 0) {
-            let stThemeBg = '#f0f9ff';
-            let stThemeHeaderBg = '#e0f2fe';
-            let stThemeBorder = '#0284c7';
-            let stThemeTextColor = '#0369a1';
-            let stThemeBadgeBg = '#bae6fd';
-
-            if (currentFloor === '2F' || currentFloor === '2階') {
-                stThemeBg = '#fff7ed';
-                stThemeHeaderBg = '#ffedd5';
-                stThemeBorder = '#ea580c';
-                stThemeTextColor = '#c2410c';
-                stThemeBadgeBg = '#fed7aa';
-            } else if (currentFloor === '3F' || currentFloor === '3階') {
-                stThemeBg = '#ecfdf5';
-                stThemeHeaderBg = '#a7f3d0';
-                stThemeBorder = '#047857';
-                stThemeTextColor = '#065f46';
-                stThemeBadgeBg = '#34d399';
-            } else if (currentFloor === '南' || isSouth) {
-                stThemeBg = '#faf5ff';
-                stThemeHeaderBg = '#f3e8ff';
-                stThemeBorder = '#9333ea';
-                stThemeTextColor = '#7e22ce';
-                stThemeBadgeBg = '#e9d5ff';
-            }
+            const stThemeBg = '#fff5f8';
+            const stThemeHeaderBg = '#fce7f3';
+            const stThemeBorder = '#db2777';
+            const stThemeTextColor = '#9d174d';
+            const stThemeBadgeBg = '#fbcfe8';
 
             bodyHtml += `
                 <tr style="background:${stThemeHeaderBg}; border-top: 3px solid ${stThemeBorder};">
                     <th colspan="${NUM_DAYS + 11}" style="text-align:left; padding:8px 12px; font-size:0.85rem; font-weight:800; color:${stThemeTextColor}; letter-spacing:0.03em;">
-                        ✨ 【${currentFloor} 所属 STスタッフ（参照表示・ST専用テーブルで作成済み）】
+                        🌸 【${currentFloor} 所属 STスタッフ（参照表示・ST専用テーブルで作成済み）】
                     </th>
                 </tr>
             `;
@@ -4610,8 +4590,8 @@ document.addEventListener('DOMContentLoaded', () => {
 
             orderedStaffList.forEach(item => {
                 const s = item.staff;
-                const secBadgeBg = item.sec === 'PT A' ? '#e0e7ff' : (item.sec === 'PT B' ? '#ede9fe' : (item.sec === 'OT A' ? '#fae8ff' : (item.sec === 'OT B' ? '#fce7f3' : (item.isST ? '#dcfce7' : '#f1f5f9'))));
-                const secBadgeColor = item.sec === 'PT A' ? '#3730a3' : (item.sec === 'PT B' ? '#5b21b6' : (item.sec === 'OT A' ? '#86198f' : (item.sec === 'OT B' ? '#9d174d' : (item.isST ? '#166534' : '#475569'))));
+                const secBadgeBg = item.sec === 'PT A' ? '#e0e7ff' : (item.sec === 'PT B' ? '#ede9fe' : (item.sec === 'OT A' ? '#fae8ff' : (item.sec === 'OT B' ? '#fce7f3' : (item.isST ? '#fdf2f8' : '#f1f5f9'))));
+                const secBadgeColor = item.sec === 'PT A' ? '#3730a3' : (item.sec === 'PT B' ? '#5b21b6' : (item.sec === 'OT A' ? '#86198f' : (item.sec === 'OT B' ? '#9d174d' : (item.isST ? '#be185d' : '#475569'))));
 
                 html += `<tr class="master-detail-row master-detail-${fc.id}" style="display:none; background:#ffffff;">
                     <td class="sticky-col-1" style="background:${secBadgeBg}; color:${secBadgeColor}; font-size:0.75rem; font-weight:700; text-align:center; border-right:1px solid #cbd5e1;">${item.sec}</td>
