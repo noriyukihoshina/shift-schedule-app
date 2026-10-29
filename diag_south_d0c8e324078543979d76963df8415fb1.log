@@ -1,0 +1,9 @@
+[15772:5236:1030/003122.575:WARNING:chrome\browser\extensions\external_registry_loader_win.cc:283] Error observing HKLM: 5
+[15772:5236:1030/003123.089:INFO:CONSOLE:10] "STARTING_SOUTH_ERROR_DIAGNOSIS", source: file:///C:/Users/coffe/OneDrive/%E3%83%87%E3%82%B9%E3%82%AF%E3%83%88%E3%83%83%E3%83%97/Antigravity/%E5%8B%A4%E5%8B%99%E8%A1%A8%E4%BD%9C%E6%88%90/test_south_run_debug.html (10)
+[15772:5236:1030/003123.522:INFO:CONSOLE:65] "BASE_RES_SUCCESS: true", source: file:///C:/Users/coffe/OneDrive/%E3%83%87%E3%82%B9%E3%82%AF%E3%83%88%E3%83%83%E3%83%97/Antigravity/%E5%8B%A4%E5%8B%99%E8%A1%A8%E4%BD%9C%E6%88%90/test_south_run_debug.html (65)
+[15772:5236:1030/003123.629:INFO:CONSOLE:6220] "[ProtocolLaunch] handler constructed; wiring port events.", source: chrome-extension://ndcpkimcihhghdcddljkfmmjccdmcmof/background.rollup.js (6220)
+[15772:5236:1030/003123.989:INFO:CONSOLE:71] "SPEC_RES_SUCCESS: true", source: file:///C:/Users/coffe/OneDrive/%E3%83%87%E3%82%B9%E3%82%AF%E3%83%88%E3%83%83%E3%83%97/Antigravity/%E5%8B%A4%E5%8B%99%E8%A1%A8%E4%BD%9C%E6%88%90/test_south_run_debug.html (71)
+[15772:5236:1030/003123.994:INFO:CONSOLE:84] "VALIDATION_ERRORS_COUNT: 0", source: file:///C:/Users/coffe/OneDrive/%E3%83%87%E3%82%B9%E3%82%AF%E3%83%88%E3%83%83%E3%83%97/Antigravity/%E5%8B%A4%E5%8B%99%E8%A1%A8%E4%BD%9C%E6%88%90/test_south_run_debug.html (84)
+[15772:5236:1030/003123.997:INFO:CONSOLE:85] "VALIDATION_ERRORS: []", source: file:///C:/Users/coffe/OneDrive/%E3%83%87%E3%82%B9%E3%82%AF%E3%83%88%E3%83%83%E3%83%97/Antigravity/%E5%8B%A4%E5%8B%99%E8%A1%A8%E4%BD%9C%E6%88%90/test_south_run_debug.html (85)
+[15772:5236:1030/003125.766:WARNING:components\signin\internal\identity_manager\account_fetcher_service.cc:252] Edge does not support fetching account capabilities
+[15772:5236:1030/003125.768:WARNING:components\signin\internal\identity_manager\account_fetcher_service.cc:213] Should not execute: Tests depending on this function may fail

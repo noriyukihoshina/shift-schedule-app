@@ -4546,6 +4546,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 const offset = (fOffsets && fOffsets[d] !== undefined) ? fOffsets[d] : 0;
                 dailyOffsets.push(offset);
 
+                let headCount = 0;
                 let realCount = 0;
                 let earlyCount = 0;
                 let lateCount = 0;
@@ -4560,12 +4561,29 @@ document.addEventListener('DOMContentLoaded', () => {
                         const cell = fGrid[s] ? fGrid[s][d] : null;
                         const sym = (cell && typeof cell === 'object') ? cell.symbol : (cell || '');
                         // ★ ハヤ・オソ・イブは特殊勤務カウントから除外、通常出勤（〇）としてカウント
-                        if (sym === '早') { earlyCount++; realCount += (staff.isHalf ? 0.5 : 1.0); }
-                        else if (sym === '遅') { lateCount++; realCount += (staff.isHalf ? 0.5 : 1.0); }
-                        else if (sym === 'E') { eveCount++; realCount += (staff.isHalf ? 0.5 : 1.0); }
-                        else if (sym === '8時') { h8Count++; realCount += (staff.isHalf ? 0.5 : 1.0); }
-                        else if (sym === '○' || sym === '出' || sym === '研' || sym === '張' || sym === 'ハヤ' || sym === 'オソ' || sym === 'イブ') { realCount += (staff.isHalf ? 0.5 : 1.0); }
-                        else if (sym === '○/休' || sym === '休/○' || sym === '○/有' || sym === '有/○') { realCount += 0.5; }
+                        if (sym === '早') {
+                            earlyCount++;
+                            headCount += 1.0;
+                            realCount += (staff.isHalf ? 0.5 : 1.0);
+                        } else if (sym === '遅') {
+                            lateCount++;
+                            headCount += 1.0;
+                            realCount += (staff.isHalf ? 0.5 : 1.0);
+                        } else if (sym === 'E') {
+                            eveCount++;
+                            headCount += 1.0;
+                            realCount += (staff.isHalf ? 0.5 : 1.0);
+                        } else if (sym === '8時') {
+                            h8Count++;
+                            headCount += 1.0;
+                            realCount += (staff.isHalf ? 0.5 : 1.0);
+                        } else if (sym === '○' || sym === '出' || sym === '研' || sym === '張' || sym === 'ハヤ' || sym === 'オソ' || sym === 'イブ') {
+                            headCount += 1.0;
+                            realCount += (staff.isHalf ? 0.5 : 1.0);
+                        } else if (sym === '○/休' || sym === '休/○' || sym === '○/有' || sym === '有/○' || sym === '〇/休' || sym === '休/〇' || sym === '〇/有' || sym === '有/〇') {
+                            headCount += 0.5;
+                            realCount += (staff.isHalf ? 0.25 : 0.5);
+                        }
                     }
                 }
 
@@ -4574,9 +4592,17 @@ document.addEventListener('DOMContentLoaded', () => {
                     const st = floorStStaff[si];
                     const cell = floorStGrid[si] ? floorStGrid[si][d] : null;
                     const sym = (cell && typeof cell === 'object') ? cell.symbol : (cell || '');
-                    if (sym === '早') { earlyCount++; realCount += (st.isHalf ? 0.5 : 1.0); }
-                    else if (sym === '○' || sym === '出' || sym === '研' || sym === '張' || sym === 'ハヤ' || sym === 'オソ' || sym === 'イブ') { realCount += (st.isHalf ? 0.5 : 1.0); }
-                    else if (sym === '○/休' || sym === '休/○' || sym === '○/有' || sym === '有/○') { realCount += 0.5; }
+                    if (sym === '早') {
+                        earlyCount++;
+                        headCount += 1.0;
+                        realCount += (st.isHalf ? 0.5 : 1.0);
+                    } else if (sym === '○' || sym === '出' || sym === '研' || sym === '張' || sym === 'ハヤ' || sym === 'オソ' || sym === 'イブ') {
+                        headCount += 1.0;
+                        realCount += (st.isHalf ? 0.5 : 1.0);
+                    } else if (sym === '○/休' || sym === '休/○' || sym === '○/有' || sym === '有/○' || sym === '〇/休' || sym === '休/〇' || sym === '〇/有' || sym === '有/〇') {
+                        headCount += 0.5;
+                        realCount += (st.isHalf ? 0.25 : 0.5);
+                    }
                 }
 
                 dailyReal.push(realCount);
@@ -4584,7 +4610,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 dailyLate.push(lateCount);
                 dailyEve.push(eveCount);
                 dailyH8.push(h8Count);
-                const displayTotal = realCount > 0 ? (realCount + (offset > 0 ? offset : 0)) : 0;
+                const displayTotal = headCount > 0 ? (headCount + (offset > 0 ? offset : 0)) : 0;
                 dailyTotal.push(displayTotal);
 
                 // 全フロア合算に加算

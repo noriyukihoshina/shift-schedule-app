@@ -1,0 +1,92 @@
+<!DOCTYPE html>
+<html>
+<head><meta charset="utf-8"></head>
+<body>
+<div id="out"></div>
+<script src="solver.js"></script>
+<script>
+window.addEventListener('DOMContentLoaded', () => {
+    try {
+        console.log("STARTING_SOUTH_ERROR_DIAGNOSIS");
+        // 南病棟の実際のLocalStorageデータがあるか確認
+        let stored = null;
+        for (let i = 0; i < localStorage.length; i++) {
+            const k = localStorage.key(i);
+            if (k && k.includes('south')) {
+                console.log("FOUND_SOUTH_STORAGE_KEY:", k);
+                stored = JSON.parse(localStorage.getItem(k));
+                break;
+            }
+        }
+
+        // もしデータがあればそのスタッフリスト、なければ36名の南病棟標準リスト
+        let staffList = (stored && stored.staffList) ? stored.staffList : null;
+        if (!staffList) {
+            staffList = [];
+            for (let i = 0; i < 36; i++) {
+                const isS2 = (i < 18);
+                staffList.push({
+                    id: `s_${i}`,
+                    name: `南スタッフ${i+1}`,
+                    section: isS2 ? ((i % 2 === 0) ? 'PT 2' : 'OT 2') : ((i % 2 === 0) ? 'PT 3' : 'OT 3'),
+                    floor: '南',
+                    isFirstYear: (i === 0 || i === 1 || i === 18 || i === 19),
+                    canSched: (i >= 2 && i <= 6) || (i >= 20 && i <= 24),
+                    can8: (i >= 7 && i <= 10) || (i >= 25 && i <= 28),
+                    isSectionChief: (i === 11),
+                    isChief: (i === 12),
+                    isSubChief: (i === 13 || i === 29),
+                    isUnused: false,
+                    noEarly: false,
+                    noLate: false,
+                    noEve: false,
+                    prevDays: ['', '', '', '', ''],
+                    days: new Array(28).fill('')
+                });
+            }
+        }
+
+        const dates = [];
+        for (let d = 0; d < 28; d++) {
+            const dt = new Date(2026, 3, 1 + d);
+            const wIdx = (dt.getDay() + 6) % 7;
+            dates.push({ label: `4/${d+1}`, m: 4, day: d+1, wIdx: wIdx, isSun: (wIdx===6), isSat: (wIdx===5) });
+        }
+
+        const scheduler = new ShiftScheduler(staffList, {
+            numDays: 28,
+            dates: dates,
+            standardHolidays: 8.0,
+            isSouth: true,
+            isFinal: true
+        });
+
+        const baseRes = scheduler.solveBaseSchedule();
+        console.log("BASE_RES_SUCCESS:", baseRes.success);
+        if (!baseRes.success) {
+            console.log("BASE_ERRORS:", JSON.stringify(baseRes.errors));
+        }
+
+        const specRes = scheduler.assignSpecialDutiesToGrid({ force: false });
+        console.log("SPEC_RES_SUCCESS:", specRes.success);
+        if (!specRes.success) {
+            console.log("SPEC_ERRORS:", JSON.stringify(specRes.errors));
+        }
+
+        // validateScheduleGrid のチェック結果
+        const valRes = validateScheduleGrid(specRes.grid || scheduler.grid, staffList, {
+            dates: dates,
+            numDays: 28,
+            standardHolidays: 8.0,
+            isSouth: true,
+            isFinal: true
+        });
+        console.log("VALIDATION_ERRORS_COUNT:", valRes.errors.length);
+        console.log("VALIDATION_ERRORS:", JSON.stringify(valRes.errors));
+    } catch(e) {
+        console.error("DIAGNOSE_EXCEPTION:", e.message, e.stack);
+    }
+});
+</script>
+</body>
+</html>
