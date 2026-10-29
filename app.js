@@ -1047,7 +1047,9 @@ document.addEventListener('DOMContentLoaded', () => {
                         standardHolidays: stdVal,
                         dates: term.dates,
                         dayOffsets: [...dayOffsets],
-                        isST: isST
+                        isST: isST,
+                        isSouth: isSouth,
+                        isLife: isLife
                     });
                     const reBase = freshSched.solveBaseSchedule({ force: true });
                     if (reBase && reBase.grid) {
@@ -1060,12 +1062,22 @@ document.addEventListener('DOMContentLoaded', () => {
                         const freshVal = validateScheduleGrid(freshSched.grid, staffList, {
                             dates: term.dates,
                             standardHolidays: stdVal,
-                            isFinal: hasUnfixedSpecialInLoaded
+                            isFinal: hasUnfixedSpecialInLoaded,
+                            isST: isST,
+                            isSouth: isSouth,
+                            isLife: isLife,
+                            stStaffData: linkedStStaffData,
+                            linkedStStaffData: linkedStStaffData
                         });
                         const curVal = validateScheduleGrid(scheduler.grid, staffList, {
                             dates: term.dates,
                             standardHolidays: stdVal,
-                            isFinal: hasUnfixedSpecialInLoaded
+                            isFinal: hasUnfixedSpecialInLoaded,
+                            isST: isST,
+                            isSouth: isSouth,
+                            isLife: isLife,
+                            stStaffData: linkedStStaffData,
+                            linkedStStaffData: linkedStStaffData
                         });
                         if (freshVal.errors.length <= curVal.errors.length) {
                             scheduler.grid = freshSched.grid;
@@ -2693,6 +2705,9 @@ document.addEventListener('DOMContentLoaded', () => {
             standardHolidays: stdHolidayVal,
             isFinal: false, // ★ 特殊勤務なしはエラー外
             isST: isST,
+            isSouth: isSouth,
+            isLife: isLife,
+            stStaffData: linkedStStaffData,
             linkedStStaffData: linkedStStaffData
         });
 
@@ -2751,6 +2766,9 @@ document.addEventListener('DOMContentLoaded', () => {
             standardHolidays: stdHolidayVal,
             isFinal: true, // ★ 特殊勤務の過不足も含めてチェック
             isST: isST,
+            isSouth: isSouth,
+            isLife: isLife,
+            stStaffData: linkedStStaffData,
             linkedStStaffData: linkedStStaffData
         });
 
@@ -2760,10 +2778,13 @@ document.addEventListener('DOMContentLoaded', () => {
         if (!res.isValid) {
             applyOutputConflictHighlights(res.conflictCells, res.errors);
             if (showModalOnError) {
+                const specialDesc = isSouth 
+                    ? '日別の特殊勤務人数（早:南2に1名・南3に1名 / 遅:南2に1名・南3に1名 / E:南2に1名・南3に1名）' 
+                    : (isST || isLife ? '' : '日別の特殊勤務人数（早3/遅1/E2/8時1）');
                 showErrorModal(res.errors, {
                     title: '最終チェック&完成: 制約の指摘・エラー検知',
                     subtitle: `完成勤務表に${res.errors.length}件の制約指摘があります（該当セルは青い網掛けで表示中）。`,
-                    desc: '連勤制限や週休2日、日別の特殊勤務人数（早3/遅1/E2/8時1）をご確認の上、必要に応じて修正してください。'
+                    desc: `連勤制限や週休2日${specialDesc ? `、${specialDesc}` : ''}をご確認の上、必要に応じて修正してください。`
                 });
             } else if (showToastOnSuccess) {
                 showToast(`⚠️ ${res.errors.length}件の制約指摘があります（青い網掛け表示中）`);
@@ -3699,7 +3720,10 @@ document.addEventListener('DOMContentLoaded', () => {
                     switchTab('checkTab');
                     checkFinalConstraints(false);
                     saveCurrentTermToStorage(); // ★ 特殊勤務割当データを自動保存
-                    showToast('✨ 特殊勤務（早3名・遅1名・E2名・8時1名）を割り当て、「最終チェック&完成」を表示しました！');
+                    const toastMsg = isSouth 
+                        ? '✨ 南病棟の特殊勤務（早・遅・E各2名 / 南2・南3に各1名）を割り当て、「最終チェック&完成」を表示しました！' 
+                        : '✨ 特殊勤務（早3名・遅1名・E2名・8時1名）を割り当て、「最終チェック&完成」を表示しました！';
+                    showToast(toastMsg);
                 } else {
                     showErrorModal(specialResult.errors, {
                         title: '特殊勤務割当の指摘・エラー検知',

@@ -150,10 +150,65 @@ window.addEventListener('DOMContentLoaded', () => {
         const sampleErr = testDateValRes.errors.find(err => err.includes('4/10'));
         console.log("Sample 4/10 Error Message:", sampleErr);
 
-        if (violations.length === 0 && valRes.errors.length === 0 && has4_10Error) {
+        // ★ ST早番テスト
+        // Day 1: ST早番1名 -> PO南2と南3の一方が1名、もう一方が0名 (PO計1名)
+        // Day 2: ST早番2名 -> ST充当は最大1名なので、PO早番は0名ではなく必ず1名配置されること！
+        const stDailyEarly = new Array(numDays).fill(0);
+        stDailyEarly[1] = 1;
+        stDailyEarly[2] = 2;
+        const mockStData = {
+            staffList: [
+                { id: 'st_1', name: 'ST1', isUnused: false },
+                { id: 'st_2', name: 'ST2', isUnused: false }
+            ],
+            grid: [
+                new Array(numDays).fill({ symbol: '○' }),
+                new Array(numDays).fill({ symbol: '○' })
+            ]
+        };
+        mockStData.grid[0][1] = { symbol: '早' };
+        mockStData.grid[0][2] = { symbol: '早' };
+        mockStData.grid[1][2] = { symbol: '早' };
+
+        const stScheduler = new ShiftScheduler(staffList, {
+            numDays: numDays,
+            standardHolidays: 8.0,
+            isSouth: true,
+            isFinal: true,
+            stDailyEarly: stDailyEarly
+        });
+        stScheduler.solveBaseSchedule();
+        const stSpecRes = stScheduler.assignSpecialDutiesToGrid({ force: true });
+        let stD1PoEarly = 0, stD2PoEarly = 0;
+        for (let s = 0; s < 36; s++) {
+            if (stSpecRes.grid[s][1].symbol === SYMBOLS.EARLY) stD1PoEarly++;
+            if (stSpecRes.grid[s][2].symbol === SYMBOLS.EARLY) stD2PoEarly++;
+        }
+        console.log("ST_TEST_D1_PO_EARLY (Expected 1):", stD1PoEarly);
+        console.log("ST_TEST_D2_PO_EARLY (Expected 1):", stD2PoEarly);
+
+        const stValRes = validateScheduleGrid(stSpecRes.grid, staffList, {
+            dates: testDates,
+            numDays: numDays,
+            standardHolidays: 8.0,
+            isSouth: true,
+            isFinal: true,
+            stStaffData: mockStData
+        });
+        const hasSt2Warning = stValRes.errors.some(err => err.includes('同日2名は希望以外NG'));
+        const hasEarlyReqFailed = stValRes.errors.some(err => err.includes('早番要件を満たしていません'));
+        console.log("ST_TEST_HAS_ST2_WARNING:", hasSt2Warning);
+        console.log("ST_TEST_HAS_EARLY_REQ_FAILED:", hasEarlyReqFailed);
+
+        const stTestsPassed = (stD1PoEarly === 1 && stD2PoEarly === 1 && hasSt2Warning && !hasEarlyReqFailed);
+
+        const specialDutyErrors = valRes.errors.filter(err => err.includes('早番') || err.includes('遅番') || err.includes('E番') || err.includes('南病棟') || err.includes('1年目'));
+        console.log("specialDutyErrors Count:", specialDutyErrors.length);
+
+        if (violations.length === 0 && specialDutyErrors.length === 0 && has4_10Error && stTestsPassed) {
             console.log("TEST_SOUTH_SPECIAL_PASSED_100_PERCENT");
         } else {
-            console.error("TEST_SOUTH_SPECIAL_FAILED");
+            console.error("TEST_SOUTH_SPECIAL_FAILED", { violationsCount: violations.length, specialDutyErrorsCount: specialDutyErrors.length, has4_10Error, stTestsPassed });
         }
     } catch (e) {
         console.error("Test Exception:", e.message, e.stack);
