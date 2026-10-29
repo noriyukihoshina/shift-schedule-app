@@ -347,9 +347,10 @@ function validateInitialState(staffList, options = {}) {
         staffList.forEach((staff, sIdx) => {
             if (staff.isUnused) return;
             const sym = staff.days[d];
-            if (sym === SYMBOLS.EARLY || sym === SYMBOLS.NO_ALLOW_EARLY) earlyStaff.push(sIdx);
-            if (sym === SYMBOLS.LATE || sym === SYMBOLS.NO_ALLOW_LATE) lateStaff.push(sIdx);
-            if (sym === SYMBOLS.EVE || sym === SYMBOLS.NO_ALLOW_EVE) eveStaff.push(sIdx);
+            // ★ 特殊勤務（早・遅・E）のカウントには、手当のつかないハヤ・オソ・イブは含めない
+            if (sym === SYMBOLS.EARLY) earlyStaff.push(sIdx);
+            if (sym === SYMBOLS.LATE) lateStaff.push(sIdx);
+            if (sym === SYMBOLS.EVE) eveStaff.push(sIdx);
             if (sym === SYMBOLS.H8) h8Staff.push(sIdx);
             if (isWishLeaveSymbol(sym) || isExcludeSymbol(sym)) {
                 if (isWishLeaveSymbol(sym)) holidayStaff.push(sIdx);
@@ -1893,9 +1894,9 @@ class ShiftScheduler {
             if (this.staffList[s].isUnused) continue;
             for (let d = 0; d < this.numDays; d++) {
                 const sym = this.grid[s][d].symbol;
-                if (sym === SYMBOLS.EARLY || sym === SYMBOLS.NO_ALLOW_EARLY) { counts.early[s]++; counts.total[s]++; lastDay[s] = Math.max(lastDay[s], d); }
-                if (sym === SYMBOLS.LATE || sym === SYMBOLS.NO_ALLOW_LATE) { counts.late[s]++; counts.total[s]++; lastDay[s] = Math.max(lastDay[s], d); }
-                if (sym === SYMBOLS.EVE || sym === SYMBOLS.NO_ALLOW_EVE) { counts.eve[s]++; counts.total[s]++; lastDay[s] = Math.max(lastDay[s], d); }
+                if (sym === SYMBOLS.EARLY) { counts.early[s]++; counts.total[s]++; lastDay[s] = Math.max(lastDay[s], d); }
+                if (sym === SYMBOLS.LATE) { counts.late[s]++; counts.total[s]++; lastDay[s] = Math.max(lastDay[s], d); }
+                if (sym === SYMBOLS.EVE) { counts.eve[s]++; counts.total[s]++; lastDay[s] = Math.max(lastDay[s], d); }
                 if (sym === SYMBOLS.H8) { counts.h8[s]++; }
             }
         }
@@ -1927,22 +1928,22 @@ class ShiftScheduler {
                 }
 
                 requirements = [
-                    { type: SYMBOLS.LATE, count: 1, targetFloor: '南2', label: '南2遅番', key: 'late', noFlag: 'noLate', matchSyms: [SYMBOLS.LATE, SYMBOLS.NO_ALLOW_LATE] },
-                    { type: SYMBOLS.LATE, count: 1, targetFloor: '南3', label: '南3遅番', key: 'late', noFlag: 'noLate', matchSyms: [SYMBOLS.LATE, SYMBOLS.NO_ALLOW_LATE] },
-                    { type: SYMBOLS.EVE, count: 1, targetFloor: '南2', label: '南2イブニング(E)', key: 'eve', noFlag: 'noEve', matchSyms: [SYMBOLS.EVE, SYMBOLS.NO_ALLOW_EVE] },
-                    { type: SYMBOLS.EVE, count: 1, targetFloor: '南3', label: '南3イブニング(E)', key: 'eve', noFlag: 'noEve', matchSyms: [SYMBOLS.EVE, SYMBOLS.NO_ALLOW_EVE] }
+                    { type: SYMBOLS.LATE, count: 1, targetFloor: '南2', label: '南2遅番', key: 'late', noFlag: 'noLate', matchSyms: [SYMBOLS.LATE] },
+                    { type: SYMBOLS.LATE, count: 1, targetFloor: '南3', label: '南3遅番', key: 'late', noFlag: 'noLate', matchSyms: [SYMBOLS.LATE] },
+                    { type: SYMBOLS.EVE, count: 1, targetFloor: '南2', label: '南2イブニング(E)', key: 'eve', noFlag: 'noEve', matchSyms: [SYMBOLS.EVE] },
+                    { type: SYMBOLS.EVE, count: 1, targetFloor: '南3', label: '南3イブニング(E)', key: 'eve', noFlag: 'noEve', matchSyms: [SYMBOLS.EVE] }
                 ];
                 if (needEarlySouth2 > 0) {
-                    requirements.push({ type: SYMBOLS.EARLY, count: 1, targetFloor: '南2', label: '南2早番', key: 'early', noFlag: 'noEarly', matchSyms: [SYMBOLS.EARLY, SYMBOLS.NO_ALLOW_EARLY] });
+                    requirements.push({ type: SYMBOLS.EARLY, count: 1, targetFloor: '南2', label: '南2早番', key: 'early', noFlag: 'noEarly', matchSyms: [SYMBOLS.EARLY] });
                 }
                 if (needEarlySouth3 > 0) {
-                    requirements.push({ type: SYMBOLS.EARLY, count: 1, targetFloor: '南3', label: '南3早番', key: 'early', noFlag: 'noEarly', matchSyms: [SYMBOLS.EARLY, SYMBOLS.NO_ALLOW_EARLY] });
+                    requirements.push({ type: SYMBOLS.EARLY, count: 1, targetFloor: '南3', label: '南3早番', key: 'early', noFlag: 'noEarly', matchSyms: [SYMBOLS.EARLY] });
                 }
             } else {
                 requirements = [
-                    { type: SYMBOLS.LATE, count: 1, label: '遅番', key: 'late', noFlag: 'noLate', matchSyms: [SYMBOLS.LATE, SYMBOLS.NO_ALLOW_LATE] },
-                    { type: SYMBOLS.EVE, count: 2, label: 'イブニング(E)', key: 'eve', noFlag: 'noEve', matchSyms: [SYMBOLS.EVE, SYMBOLS.NO_ALLOW_EVE] },
-                    { type: SYMBOLS.EARLY, count: 3, label: '早番', key: 'early', noFlag: 'noEarly', matchSyms: [SYMBOLS.EARLY, SYMBOLS.NO_ALLOW_EARLY] }
+                    { type: SYMBOLS.LATE, count: 1, label: '遅番', key: 'late', noFlag: 'noLate', matchSyms: [SYMBOLS.LATE] },
+                    { type: SYMBOLS.EVE, count: 2, label: 'イブニング(E)', key: 'eve', noFlag: 'noEve', matchSyms: [SYMBOLS.EVE] },
+                    { type: SYMBOLS.EARLY, count: 3, label: '早番', key: 'early', noFlag: 'noEarly', matchSyms: [SYMBOLS.EARLY] }
                 ];
             }
 
@@ -2006,14 +2007,14 @@ class ShiftScheduler {
                             if (req.key === 'early') {
                                 let curEarlyFY = 0;
                                 for (let otherS = 0; otherS < this.numStaff; otherS++) {
-                                    if (this.staffList[otherS].isFirstYear && (this.grid[otherS][d].symbol === SYMBOLS.EARLY || this.grid[otherS][d].symbol === SYMBOLS.NO_ALLOW_EARLY)) curEarlyFY++;
+                                    if (this.staffList[otherS].isFirstYear && this.grid[otherS][d].symbol === SYMBOLS.EARLY) curEarlyFY++;
                                 }
                                 if (curEarlyFY >= 1) continue;
                             }
                             if (req.key === 'late' || req.key === 'eve') {
                                 let curLateEveFY = 0;
                                 for (let otherS = 0; otherS < this.numStaff; otherS++) {
-                                    if (this.staffList[otherS].isFirstYear && (this.grid[otherS][d].symbol === SYMBOLS.LATE || this.grid[otherS][d].symbol === SYMBOLS.NO_ALLOW_LATE || this.grid[otherS][d].symbol === SYMBOLS.EVE || this.grid[otherS][d].symbol === SYMBOLS.NO_ALLOW_EVE)) curLateEveFY++;
+                                    if (this.staffList[otherS].isFirstYear && (this.grid[otherS][d].symbol === SYMBOLS.LATE || this.grid[otherS][d].symbol === SYMBOLS.EVE)) curLateEveFY++;
                                 }
                                 if (curLateEveFY >= 1) continue;
                             }
@@ -2291,14 +2292,14 @@ class ShiftScheduler {
                                 if (req.key === 'early') {
                                     let curEarlyFY = 0;
                                     for (let otherS = 0; otherS < this.numStaff; otherS++) {
-                                        if (this.staffList[otherS].isFirstYear && (this.grid[otherS][d].symbol === SYMBOLS.EARLY || this.grid[otherS][d].symbol === SYMBOLS.NO_ALLOW_EARLY)) curEarlyFY++;
+                                        if (this.staffList[otherS].isFirstYear && this.grid[otherS][d].symbol === SYMBOLS.EARLY) curEarlyFY++;
                                     }
                                     if (curEarlyFY >= 1) continue;
                                 }
                                 if (req.key === 'late' || req.key === 'eve') {
                                     let curLateEveFY = 0;
                                     for (let otherS = 0; otherS < this.numStaff; otherS++) {
-                                        if (this.staffList[otherS].isFirstYear && (this.grid[otherS][d].symbol === SYMBOLS.LATE || this.grid[otherS][d].symbol === SYMBOLS.NO_ALLOW_LATE || this.grid[otherS][d].symbol === SYMBOLS.EVE || this.grid[otherS][d].symbol === SYMBOLS.NO_ALLOW_EVE)) curLateEveFY++;
+                                        if (this.staffList[otherS].isFirstYear && (this.grid[otherS][d].symbol === SYMBOLS.LATE || this.grid[otherS][d].symbol === SYMBOLS.EVE)) curLateEveFY++;
                                     }
                                     if (curLateEveFY >= 1) continue;
                                 }
@@ -2424,9 +2425,9 @@ class ShiftScheduler {
                 if (this.staffList[s].isUnused || this.staffList[s].isSectionChief) continue;
                 for (let d = 0; d < this.numDays; d++) {
                     const sym = this.grid[s][d].symbol;
-                    if (sym === SYMBOLS.EARLY || sym === SYMBOLS.NO_ALLOW_EARLY) { counts.early[s]++; counts.total[s]++; }
-                    if (sym === SYMBOLS.LATE || sym === SYMBOLS.NO_ALLOW_LATE) { counts.late[s]++; counts.total[s]++; }
-                    if (sym === SYMBOLS.EVE || sym === SYMBOLS.NO_ALLOW_EVE) { counts.eve[s]++; counts.total[s]++; }
+                    if (sym === SYMBOLS.EARLY) { counts.early[s]++; counts.total[s]++; }
+                    if (sym === SYMBOLS.LATE) { counts.late[s]++; counts.total[s]++; }
+                    if (sym === SYMBOLS.EVE) { counts.eve[s]++; counts.total[s]++; }
                 }
             }
 
@@ -4716,18 +4717,18 @@ class ShiftScheduler {
                     for (let s = 0; s < this.numStaff; s++) {
                         if (this.staffList[s].isUnused) continue;
                         const sym = this.grid[s][d].symbol;
-                        if (sym === SYMBOLS.EARLY || sym === SYMBOLS.NO_ALLOW_EARLY) earlyStaff.push(s);
-                        if (sym === SYMBOLS.LATE || sym === SYMBOLS.NO_ALLOW_LATE || sym === SYMBOLS.EVE || sym === SYMBOLS.NO_ALLOW_EVE) lateEveStaff.push(s);
+                        if (sym === SYMBOLS.EARLY) earlyStaff.push(s);
+                        if (sym === SYMBOLS.LATE || sym === SYMBOLS.EVE) lateEveStaff.push(s);
                     }
                     // 早3名中1年目は最大1名
                     const earlyFY = earlyStaff.filter(s => this.staffList[s].isFirstYear);
                     if (earlyFY.length >= 2) {
-                        errors.push(`【${dayNum}日目】早番（早・ハヤ）スタッフのうち「1年目」が${earlyFY.length}名います（要件: 1名以下）。`);
+                        errors.push(`【${dayNum}日目】早番（早）スタッフのうち「1年目」が${earlyFY.length}名います（要件: 1名以下）。`);
                     }
                     // 遅＋E 3名中1年目は最大1名
                     const lateEveFY = lateEveStaff.filter(s => this.staffList[s].isFirstYear);
                     if (lateEveFY.length >= 2) {
-                        errors.push(`【${dayNum}日目】遅番・E番（遅・オソ・E・イブ）のうち「1年目」が${lateEveFY.length}名います（要件: 1名以下）。`);
+                        errors.push(`【${dayNum}日目】遅番・E番（遅・E）のうち「1年目」が${lateEveFY.length}名います（要件: 1名以下）。`);
                     }
                 }
             }
@@ -5252,7 +5253,13 @@ function validateScheduleGrid(grid, staffList, options = {}) {
             const totalFloorFT = staffList.filter(s => !s.isUnused && s.isFullTime).length + (options.stFloorFtCount || (stFtWork > 0 ? 1 : 0));
             const reqFT = totalFloorFT >= 3 ? 3 : totalFloorFT;
             if (reqFT > 0 && totalFtWork < reqFT) {
+                const reason = `${dayNum}日目の専従合計出勤が${totalFtWork}名です（要件: ${reqFT}名以上）`;
                 errors.push(`【${dayNum}日目】「専従（PT・OT・ST合計）」スタッフの出勤が${totalFtWork}名しかいません（要件: ${reqFT}名以上、出張除く）。`);
+                staffList.forEach((st, sIdx) => {
+                    if (!st.isUnused && st.isFullTime) {
+                        addConflict(sIdx, d, reason);
+                    }
+                });
             }
 
             // ★ 1年目制約（通常PO ＆ 南病棟特殊ルール）
@@ -5275,38 +5282,44 @@ function validateScheduleGrid(grid, staffList, options = {}) {
                 const allEarlyFY = [...s2Early, ...s3Early].filter(s => staffList[s].isFirstYear);
                 if (allEarlyFY.length > 1) {
                     errors.push(`【${dayNum}日目】南病棟の早番のうち「1年目」が${allEarlyFY.length}名います（要件: 1名以下）。`);
+                    allEarlyFY.forEach(s => addConflict(s, d, `${dayNum}日目: 南病棟の早番で1年目が重複しています（上限1名）`));
                 }
                 // E2人のうち1年目は1人まで
                 const allEveFY = [...s2Eve, ...s3Eve].filter(s => staffList[s].isFirstYear);
                 if (allEveFY.length > 1) {
                     errors.push(`【${dayNum}日目】南病棟のE番のうち「1年目」が${allEveFY.length}名います（要件: 1名以下）。`);
+                    allEveFY.forEach(s => addConflict(s, d, `${dayNum}日目: 南病棟のE番で1年目が重複しています（上限1名）`));
                 }
                 // 同じフロアの遅とE2人のうち1年目は1人まで
                 const s2LateEveFY = [...s2Late, ...s2Eve].filter(s => staffList[s].isFirstYear);
                 if (s2LateEveFY.length > 1) {
                     errors.push(`【${dayNum}日目】南2の遅番・E番（計${s2Late.length + s2Eve.length}名）のうち「1年目」が${s2LateEveFY.length}名います（要件: 1名以下）。`);
+                    s2LateEveFY.forEach(s => addConflict(s, d, `${dayNum}日目: 南2の遅番・E番で1年目が重複しています（上限1名）`));
                 }
                 const s3LateEveFY = [...s3Late, ...s3Eve].filter(s => staffList[s].isFirstYear);
                 if (s3LateEveFY.length > 1) {
                     errors.push(`【${dayNum}日目】南3の遅番・E番（計${s3Late.length + s3Eve.length}名）のうち「1年目」が${s3LateEveFY.length}名います（要件: 1名以下）。`);
+                    s3LateEveFY.forEach(s => addConflict(s, d, `${dayNum}日目: 南3の遅番・E番で1年目が重複しています（上限1名）`));
                 }
             } else {
-                // 通常PO
+                // 通常PO（特殊勤務カウントにハヤ・オソ・イブは含めない）
                 const earlyStaff = [];
                 const lateEveStaff = [];
                 staffList.forEach((st, sIdx) => {
                     if (st.isUnused) return;
                     const sym = getSym(sIdx, d);
-                    if (sym === SYMBOLS.EARLY || sym === SYMBOLS.NO_ALLOW_EARLY) earlyStaff.push(sIdx);
-                    if (sym === SYMBOLS.LATE || sym === SYMBOLS.NO_ALLOW_LATE || sym === SYMBOLS.EVE || sym === SYMBOLS.NO_ALLOW_EVE) lateEveStaff.push(sIdx);
+                    if (sym === SYMBOLS.EARLY) earlyStaff.push(sIdx);
+                    if (sym === SYMBOLS.LATE || sym === SYMBOLS.EVE) lateEveStaff.push(sIdx);
                 });
                 const earlyFY = earlyStaff.filter(s => staffList[s].isFirstYear);
                 if (earlyFY.length >= 2) {
-                    errors.push(`【${dayNum}日目】早番（早・ハヤ）スタッフのうち「1年目」が${earlyFY.length}名います（要件: 1名以下）。`);
+                    errors.push(`【${dayNum}日目】早番（早）スタッフのうち「1年目」が${earlyFY.length}名います（要件: 1名以下）。`);
+                    earlyFY.forEach(s => addConflict(s, d, `${dayNum}日目: 早番で1年目が重複しています（上限1名）`));
                 }
                 const lateEveFY = lateEveStaff.filter(s => staffList[s].isFirstYear);
                 if (lateEveFY.length >= 2) {
-                    errors.push(`【${dayNum}日目】遅番・E番（遅・オソ・E・イブ）のうち「1年目」が${lateEveFY.length}名います（要件: 1名以下）。`);
+                    errors.push(`【${dayNum}日目】遅番・E番（遅・E）のうち「1年目」が${lateEveFY.length}名います（要件: 1名以下）。`);
+                    lateEveFY.forEach(s => addConflict(s, d, `${dayNum}日目: 遅番・E番で1年目が重複しています（上限1名）`));
                 }
             }
         }
@@ -5342,19 +5355,27 @@ function validateScheduleGrid(grid, staffList, options = {}) {
                         });
                     }
                     if (stEarlyCount > 1) {
-                        errors.push(`【${dayNum}日目】南病棟所属のST早番が${stEarlyCount}名います（同日2名は希望以外NG）。`);
+                        const reason = `${dayNum}日目の南病棟所属ST早番が${stEarlyCount}名です（同日2名は希望以外NG）`;
+                        errors.push(`【${dayNum}日目】${reason}。`);
+                        conflictCells.push({ dayIndex: d, footerStat: 'early', reason: reason });
                     }
 
                     // 早番チェック（ST早番は南2または南3どちらにカウントしてもOK）
                     const totalEarlyPO = s2Early + s3Early;
                     if (totalEarlyPO + stEarlyCount !== 2 || (s2Early > 1 || s3Early > 1)) {
-                        errors.push(`【${dayNum}日目】南病棟の早番要件を満たしていません（南2に1名、南3に1名。ST早番含めて計2名）。`);
+                        const reason = `${dayNum}日目の南病棟早番要件を満たしていません（南2に1名、南3に1名。ST早番含めて計2名）`;
+                        errors.push(`【${dayNum}日目】${reason}。`);
+                        conflictCells.push({ dayIndex: d, footerStat: 'early', reason: reason });
                     }
                     if (s2Late !== 1 || s3Late !== 1) {
-                        errors.push(`【${dayNum}日目】南病棟の遅番要件を満たしていません（南2に1名、南3に1名。現況: 南2=${s2Late}名, 南3=${s3Late}名）。`);
+                        const reason = `${dayNum}日目の南病棟遅番要件を満たしていません（南2に1名、南3に1名。現況: 南2=${s2Late}名, 南3=${s3Late}名）`;
+                        errors.push(`【${dayNum}日目】${reason}。`);
+                        conflictCells.push({ dayIndex: d, footerStat: 'late', reason: reason });
                     }
                     if (s2Eve !== 1 || s3Eve !== 1) {
-                        errors.push(`【${dayNum}日目】南病棟のE番要件を満たしていません（南2に1名、南3に1名。現況: 南2=${s2Eve}名, 南3=${s3Eve}名）。`);
+                        const reason = `${dayNum}日目の南病棟E番要件を満たしていません（南2に1名、南3に1名。現況: 南2=${s2Eve}名, 南3=${s3Eve}名）`;
+                        errors.push(`【${dayNum}日目】${reason}。`);
+                        conflictCells.push({ dayIndex: d, footerStat: 'eve', reason: reason });
                     }
                 }
             } else if (isFinal) {

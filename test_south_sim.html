@@ -1,0 +1,115 @@
+<!DOCTYPE html>
+<html>
+<head><meta charset="utf-8"></head>
+<body>
+<script src="solver.js"></script>
+<script>
+window.addEventListener('DOMContentLoaded', () => {
+    // 48名の南病棟スタッフを作成
+    const staffList = [];
+    for (let i = 1; i <= 60; i++) {
+        let sec = '';
+        if (i <= 12) sec = 'PT 2';
+        else if (i <= 24) sec = 'PT 3';
+        else if (i <= 36) sec = 'OT 2';
+        else if (i <= 48) sec = 'OT 3';
+
+        staffList.push({
+            id: i,
+            name: 'スタッフ ' + i,
+            isUnused: (i > 48),
+            floor: '南',
+            section: sec,
+            can8: (i <= 9),
+            noEarly: false,
+            noLate: false,
+            noEve: false,
+            canSched: (i <= 8),
+            isSectionChief: (i === 1),
+            isChief: (i === 2 || i === 3),
+            isSubChief: (i === 4 || i === 5),
+            isHalf: false,
+            isZeroCount: false,
+            isFirstYear: (i === 6 || i === 7 || i === 18 || i === 19 || i === 30 || i === 31 || i === 42 || i === 43),
+            isFullTime: (i <= 10),
+            allow6Consec: false,
+            prevDays: ['', '', '', '', ''],
+            days: new Array(28).fill('')
+        });
+    }
+
+    const dates = [];
+    for (let i = 1; i <= 28; i++) {
+        dates.push({ dateStr: '2026-04-' + String(i).padStart(2, '0'), dayOfWeek: (i % 7) });
+    }
+
+    const sched = new ShiftScheduler(staffList, {
+        standardHolidays: 8.0,
+        dates: dates,
+        dayOffsets: new Array(28).fill(0),
+        isST: false,
+        isSouth: true,
+        isLife: false
+    });
+
+    console.log("=== SOLVE BASE ===");
+    const baseRes = sched.solveBaseSchedule();
+    console.log("Base result: " + baseRes.success);
+    if (!baseRes.success) {
+        console.log("BASE_ERRORS: " + JSON.stringify(baseRes.errors));
+    }
+
+    console.log("=== DIAGNOSE DAY 0 SOUTH 2 LATE ===");
+    const d = 0;
+    const req = { type: '遅', count: 1, targetFloor: '南2', label: '南2遅番', key: 'late', noFlag: 'noLate', matchSyms: ['遅', 'オソ'] };
+
+    const getSubFloor = (s) => {
+        const st = sched.staffList[s];
+        if (!st) return '';
+        const sec = st.section || '';
+        if (sec.includes('2') || sec === 'PT A' || sec === 'OT A') return '南2';
+        if (sec.includes('3') || sec === 'PT B' || sec === 'OT B') return '南3';
+        return '';
+    };
+
+    let rejectReasons = {};
+    for (let s = 0; s < sched.numStaff; s++) {
+        const st = sched.staffList[s];
+        if (st.isUnused) continue;
+        const subFl = getSubFloor(s);
+
+        if (st.isSectionChief) { rejectReasons[st.name] = "係長"; continue; }
+        if (sched.grid[s][d].isFixed || sched.grid[s][d].symbol !== '○') { rejectReasons[st.name] = "当日非○(" + sched.grid[s][d].symbol + ")"; continue; }
+        if (st[req.noFlag]) { rejectReasons[st.name] = "noLate"; continue; }
+        if (req.targetFloor && subFl !== req.targetFloor) { rejectReasons[st.name] = "フロア不一致(" + subFl + " != " + req.targetFloor + ")"; continue; }
+
+        if (st.isFirstYear) {
+            // 1年目チェック
+            rejectReasons[st.name] = "1年目";
+            continue;
+        }
+
+        if (st.canSched) {
+            let remainingSchedWork = 0;
+            for (let otherS = 0; otherS < sched.numStaff; otherS++) {
+                if (otherS === s || sched.staffList[otherS].isUnused) continue;
+                if (sched.staffList[otherS].canSched && sched.grid[otherS][d].symbol === '○') remainingSchedWork++;
+            }
+            if (remainingSchedWork < 2) { rejectReasons[st.name] = "スケ可不足(残" + remainingSchedWork + ")"; continue; }
+        }
+
+        // 翌日休
+        rejectReasons[st.name] = "OKまたは翌日休スワップ可否確認中";
+    }
+
+    console.log("REJECT_REASONS: " + JSON.stringify(rejectReasons));
+
+    const specRes = sched.assignSpecialDutiesToGrid();
+    console.log("Special result: " + specRes.success);
+    if (!specRes.success) {
+        console.log("ERRORS: " + JSON.stringify(specRes.errors));
+    }
+});
+</script>
+</body>
+</html>
