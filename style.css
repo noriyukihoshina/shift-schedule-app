@@ -986,17 +986,34 @@ input:checked + .toggle-slider:before {
     box-shadow: 0 1px 3px rgba(2, 132, 199, 0.3);
 }
 .dept-nav-btn.dept-nav-st {
-    background: #f0fdf4;
-    border-color: #86efac;
-    color: #15803d;
+    background: #fdf2f8;
+    border-color: #fbcfe8;
+    color: #be185d;
 }
 .dept-nav-btn.dept-nav-st:hover {
-    background: #dcfce7;
-    border-color: #4ade80;
+    background: #fce7f3;
+    border-color: #f472b6;
+    color: #9d174d;
 }
 .dept-nav-btn.dept-nav-st.active {
-    background: #10b981;
-    border-color: #10b981;
+    background: #db2777;
+    border-color: #db2777;
+    color: #ffffff !important;
+}
+
+.dept-nav-btn.dept-nav-life {
+    background: #f0fdfa;
+    border-color: #99f6e4;
+    color: #0f766e;
+}
+.dept-nav-btn.dept-nav-life:hover {
+    background: #ccfbf1;
+    border-color: #5eead4;
+    color: #115e59;
+}
+.dept-nav-btn.dept-nav-life.active {
+    background: #0d9488;
+    border-color: #0d9488;
     color: #ffffff !important;
 }
 
@@ -1083,30 +1100,62 @@ body.theme-2f thead th.sticky-col-2 {
     background-color: #fed7aa !important;
 }
 
-/* 4. 3階病棟テーブル: 薄く淡いみどり */
+/* 4. 3階病棟テーブル: 濃くはっきりしたエメラルドグリーン（STと完全に区別可能） */
 body.theme-3f {
-    background-color: #f7fdf9;
+    background-color: #f0fdf4;
 }
 body.theme-3f .sheet-wrapper {
-    background-color: #edfcf2 !important;
-    border-color: #bbf7d0 !important;
+    background-color: #ecfdf5 !important;
+    border-color: #6ee7b7 !important;
 }
 body.theme-3f .sheet-table {
-    background-color: #f2fcf5 !important;
+    background-color: #f0fdf4 !important;
 }
 body.theme-3f .sheet-table tbody td:not(.prev-col-cell):not([style*="background"]) {
-    background-color: #f2fcf5 !important;
+    background-color: #f0fdf4 !important;
 }
 body.theme-3f .sheet-table tbody tr:hover td {
-    background-color: #dcfce7 !important;
+    background-color: #d1fae5 !important;
 }
 body.theme-3f .sticky-col-1,
 body.theme-3f .sticky-col-2 {
-    background-color: #dcfce7 !important;
+    background-color: #d1fae5 !important;
+    color: #065f46 !important;
+    font-weight: 700;
 }
 body.theme-3f thead th.sticky-col-1,
 body.theme-3f thead th.sticky-col-2 {
-    background-color: #bbf7d0 !important;
+    background-color: #a7f3d0 !important;
+    color: #064e3b !important;
+}
+
+/* 7. 生活期テーブル: 爽やかなティール/シアン */
+body.theme-life {
+    background-color: #f0fdfa;
+}
+body.theme-life .sheet-wrapper {
+    background-color: #f0fdfa !important;
+    border-color: #99f6e4 !important;
+}
+body.theme-life .sheet-table {
+    background-color: #f0fdfa !important;
+}
+body.theme-life .sheet-table tbody td:not(.prev-col-cell):not([style*="background"]) {
+    background-color: #f0fdfa !important;
+}
+body.theme-life .sheet-table tbody tr:hover td {
+    background-color: #ccfbf1 !important;
+}
+body.theme-life .sticky-col-1,
+body.theme-life .sticky-col-2 {
+    background-color: #ccfbf1 !important;
+    color: #0f766e !important;
+    font-weight: 700;
+}
+body.theme-life thead th.sticky-col-1,
+body.theme-life thead th.sticky-col-2 {
+    background-color: #99f6e4 !important;
+    color: #115e59 !important;
 }
 
 /* 5. マスターテーブル: 薄く淡い黄色 */
@@ -1124,15 +1173,16 @@ body.theme-master .sheet-table tbody td:not(.prev-col-cell):not([style*="backgro
     background-color: #fffdf0 !important;
 }
 body.theme-master .sheet-table tbody tr:hover td {
-    background-color: #fef9c3 !important;
+    background-color: #fef9c3;
 }
+/* マスターテーブルのsticky列はフロアごとのカラーを尊重するため、!importantで上書きしない */
 body.theme-master .sticky-col-1,
 body.theme-master .sticky-col-2 {
-    background-color: #fef9c3 !important;
+    background-color: inherit;
 }
 body.theme-master thead th.sticky-col-1,
 body.theme-master thead th.sticky-col-2 {
-    background-color: #fef08a !important;
+    background-color: inherit;
 }
 
 /* 6. 南病棟テーブル: 薄く淡いラベンダー/淡紫 */

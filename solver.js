@@ -600,10 +600,19 @@ class ShiftScheduler {
         this.weekSpans = getSunToSatWeekSpans(this.options.dates, this.numDays);
         this.grid = [];
         this.isST = !!(options && options.isST) || !!(this.options && this.options.isST);
+        this.isSouth = !!(options && options.isSouth) || !!(this.options && this.options.isSouth);
+        this.isLife = !!(options && options.isLife) || !!(this.options && this.options.isLife);
         // ★ 各フロア所属STスタッフの日別出勤実数（PT・OTの配分均等化時にST実数を加味）
         this.stDailyWork = (Array.isArray(options.stDailyWork) && options.stDailyWork.length === this.numDays)
             ? [...options.stDailyWork]
             : null;
+        this.stDailyFtWork = (Array.isArray(options.stDailyFtWork) && options.stDailyFtWork.length === this.numDays)
+            ? [...options.stDailyFtWork]
+            : null;
+        this.stDailyEarly = (Array.isArray(options.stDailyEarly) && options.stDailyEarly.length === this.numDays)
+            ? [...options.stDailyEarly]
+            : null;
+        this.stFloorFtCount = typeof options.stFloorFtCount === 'number' ? options.stFloorFtCount : 0;
         this.initGrid();
     }
 
@@ -620,7 +629,12 @@ class ShiftScheduler {
             amt = 0.5;
         }
         if (amt <= 0) return 0;
-        const factor = this.staffList[s].isHalf ? 0.5 : 1.0;
+        const staff = this.staffList[s];
+        // ★ 0トグルON、または生活期の管理・Cl1は実数0としてカウント！
+        if (staff.isZeroCount || staff.lifeSection === '管理' || staff.lifeSection === 'Cl1') {
+            return 0;
+        }
+        const factor = staff.isHalf ? 0.5 : 1.0;
         return amt * factor;
     }
 
@@ -1565,12 +1579,169 @@ class ShiftScheduler {
     }
 
     /**
+     * ★ 生活期専用スケジュール自動生成メイン
+     * - 訪問: 土日休みで完全固定、平日は事前希望を反映し空き枠は「○」
+     * - 通所: 日曜日が全員休み、平日は休みが重ならない様に分散配置、空き枠は「○」
+     * - Cl1, Cl2, 管理, ハ1〜ハ南: 公休8日を日曜・祝日中心に均等配置、空き枠は「○」
+     */
+    solveLife(options = {}) {
+        const stdHols = this.options.standardHolidays || 8;
+        const dates = this.dates || [];
+
+        for (let s = 0; s < this.numStaff; s++) {
+            const staff = this.staffList[s];
+            if (staff.isUnused) continue;
+
+            const sec = staff.lifeSection || '';
+
+            // 1. まず事前固定枠・希望枠の初期設定
+            for (let d = 0; d < this.numDays; d++) {
+                const wish = (staff.days && staff.days[d]) ? staff.days[d] : '';
+                if (wish) {
+                    this.grid[s][d] = {
+                        symbol: wish.replace(/[◦•･◯〇●]/g, '○'),
+                        isFixed: true,
+                        isOriginalWish: true
+                    };
+                } else {
+                    this.grid[s][d] = {
+                        symbol: '',
+                        isFixed: false
+                    };
+                }
+            }
+
+            if (sec === '訪問') {
+                // 訪問: 土日休み固定
+                for (let d = 0; d < this.numDays; d++) {
+                    const di = dates[d];
+                    const isWeekend = di ? (di.wIdx === 5 || di.wIdx === 6) : ((d % 7 === 5) || (d % 7 === 6));
+                    if (isWeekend) {
+                        if (!this.grid[s][d].isFixed || this.grid[s][d].symbol === '') {
+                            this.grid[s][d].symbol = SYMBOLS.OFF;
+                        }
+                    } else {
+                        if (this.grid[s][d].symbol === '') {
+                            this.grid[s][d].symbol = SYMBOLS.WORK;
+                        }
+                    }
+                }
+            } else if (sec === '通所') {
+                // 通所: 日曜日が全員休み固定
+                for (let d = 0; d < this.numDays; d++) {
+                    const di = dates[d];
+                    const isSunday = di ? (di.wIdx === 6) : (d % 7 === 6);
+                    if (isSunday) {
+                        if (!this.grid[s][d].isFixed || this.grid[s][d].symbol === '') {
+                            this.grid[s][d].symbol = SYMBOLS.OFF;
+                        }
+                    }
+                }
+            }
+        }
+
+        // 通所スタッフの平日公休分散配置（スタッフ間で休みが重ならないよう均等配置）
+        const tsushoStaffIndices = [];
+        for (let s = 0; s < this.numStaff; s++) {
+            if (!this.staffList[s].isUnused && this.staffList[s].lifeSection === '通所') {
+                tsushoStaffIndices.push(s);
+            }
+        }
+
+        if (tsushoStaffIndices.length > 0) {
+            const tsushoOffPerDay = new Array(this.numDays).fill(0);
+            tsushoStaffIndices.forEach(s => {
+                for (let d = 0; d < this.numDays; d++) {
+                    if (isHolidaySymbol(this.grid[s][d].symbol)) {
+                        tsushoOffPerDay[d]++;
+                    }
+                }
+            });
+
+            tsushoStaffIndices.forEach(s => {
+                let currentHols = 0;
+                for (let d = 0; d < this.numDays; d++) {
+                    if (isHolidaySymbol(this.grid[s][d].symbol)) currentHols++;
+                }
+
+                const needed = Math.round(stdHols - currentHols);
+                if (needed > 0) {
+                    const candidates = [];
+                    for (let d = 0; d < this.numDays; d++) {
+                        const di = dates[d];
+                        const isSunday = di ? (di.wIdx === 6) : (d % 7 === 6);
+                        if (!isSunday && this.grid[s][d].symbol === '' && !this.grid[s][d].isFixed) {
+                            candidates.push({
+                                d: d,
+                                offCount: tsushoOffPerDay[d],
+                                hash: (s * 7 + d * 3) % 11
+                            });
+                        }
+                    }
+                    candidates.sort((a, b) => a.offCount - b.offCount || a.hash - b.hash);
+                    for (let i = 0; i < Math.min(needed, candidates.length); i++) {
+                        const targetD = candidates[i].d;
+                        this.grid[s][targetD].symbol = SYMBOLS.OFF;
+                        tsushoOffPerDay[targetD]++;
+                    }
+                }
+            });
+        }
+
+        // 残りのスタッフ（Cl1, Cl2, 管理, ハ1〜ハ南、未設定）の公休配置
+        for (let s = 0; s < this.numStaff; s++) {
+            const staff = this.staffList[s];
+            if (staff.isUnused || staff.lifeSection === '訪問') continue;
+
+            let currentHols = 0;
+            for (let d = 0; d < this.numDays; d++) {
+                if (isHolidaySymbol(this.grid[s][d].symbol)) currentHols++;
+            }
+
+            const needed = Math.round(stdHols - currentHols);
+            if (needed > 0) {
+                const candidates = [];
+                for (let d = 0; d < this.numDays; d++) {
+                    const di = dates[d];
+                    const isSun = di ? (di.wIdx === 6) : (d % 7 === 6);
+                    const isSat = di ? (di.wIdx === 5) : (d % 7 === 5);
+                    const isHol = di ? !!di.isHoliday : false;
+                    if (this.grid[s][d].symbol === '' && !this.grid[s][d].isFixed) {
+                        let priority = (isSun || isHol) ? 0 : (isSat ? 1 : 2);
+                        candidates.push({ d, priority, hash: (s * 5 + d * 7) % 13 });
+                    }
+                }
+                candidates.sort((a, b) => a.priority - b.priority || a.hash - b.hash);
+                for (let i = 0; i < Math.min(needed, candidates.length); i++) {
+                    this.grid[s][candidates[i].d].symbol = SYMBOLS.OFF;
+                }
+            }
+
+            // 空き枠はすべて通常勤務「○」
+            for (let d = 0; d < this.numDays; d++) {
+                if (this.grid[s][d].symbol === '') {
+                    this.grid[s][d].symbol = SYMBOLS.WORK;
+                }
+            }
+        }
+
+        return {
+            success: true,
+            grid: this.grid,
+            stats: this.calculateStats()
+        };
+    }
+
+    /**
      * 第1段階: 基本勤務表の自動生成
      * （特殊勤務の自動割り振りは行わず、希望休・公休日数・連勤・週休・属性充足を満たして空き枠を「○」で確定）
      */
     solveBaseSchedule(options = {}) {
         if (this.isST) {
             return this.solveST(Object.assign({}, options, { assignSpecial: false }));
+        }
+        if (this.isLife) {
+            return this.solveLife(options);
         }
         const force = options && options.force === true;
         // 事前バリデーション（forceでない場合のみ厳格チェック）
@@ -1614,6 +1785,9 @@ class ShiftScheduler {
     assignSpecialDutiesToGrid(options = {}) {
         if (this.isST) {
             return this.solveST(Object.assign({}, options, { assignSpecial: true }));
+        }
+        if (this.isLife) {
+            return this.solveLife(options);
         }
         const force = options && options.force === true;
 
@@ -1726,14 +1900,51 @@ class ShiftScheduler {
             }
         }
 
-        const requirements = [
-            { type: SYMBOLS.LATE, count: 1, label: '遅番', key: 'late', noFlag: 'noLate', matchSyms: [SYMBOLS.LATE, SYMBOLS.NO_ALLOW_LATE] },
-            { type: SYMBOLS.EVE, count: 2, label: 'イブニング(E)', key: 'eve', noFlag: 'noEve', matchSyms: [SYMBOLS.EVE, SYMBOLS.NO_ALLOW_EVE] },
-            { type: SYMBOLS.EARLY, count: 3, label: '早番', key: 'early', noFlag: 'noEarly', matchSyms: [SYMBOLS.EARLY, SYMBOLS.NO_ALLOW_EARLY] }
-        ];
+        const getSubFloor = (s) => {
+            const st = this.staffList[s];
+            if (!st) return '';
+            const sec = st.section || '';
+            if (sec.includes('2') || sec === 'PT A' || sec === 'OT A') return '南2';
+            if (sec.includes('3') || sec === 'PT B' || sec === 'OT B') return '南3';
+            return '';
+        };
 
         for (let d = 0; d < this.numDays; d++) {
             const dayNum = d + 1;
+
+            let requirements = [];
+            if (this.isSouth) {
+                // 南病棟: 遅番南2に1名・南3に1名、E番南2に1名・南3に1名、早番南2に1名・南3に1名
+                const stEarlyCount = (this.stDailyEarly && this.stDailyEarly[d]) ? this.stDailyEarly[d] : 0;
+                let needEarlySouth2 = 1;
+                let needEarlySouth3 = 1;
+                if (stEarlyCount >= 2) {
+                    needEarlySouth2 = 0;
+                    needEarlySouth3 = 0;
+                } else if (stEarlyCount === 1) {
+                    // ST早番が1名ある場合、南2か南3どちらかをSTが担当
+                    needEarlySouth3 = 0;
+                }
+
+                requirements = [
+                    { type: SYMBOLS.LATE, count: 1, targetFloor: '南2', label: '南2遅番', key: 'late', noFlag: 'noLate', matchSyms: [SYMBOLS.LATE, SYMBOLS.NO_ALLOW_LATE] },
+                    { type: SYMBOLS.LATE, count: 1, targetFloor: '南3', label: '南3遅番', key: 'late', noFlag: 'noLate', matchSyms: [SYMBOLS.LATE, SYMBOLS.NO_ALLOW_LATE] },
+                    { type: SYMBOLS.EVE, count: 1, targetFloor: '南2', label: '南2イブニング(E)', key: 'eve', noFlag: 'noEve', matchSyms: [SYMBOLS.EVE, SYMBOLS.NO_ALLOW_EVE] },
+                    { type: SYMBOLS.EVE, count: 1, targetFloor: '南3', label: '南3イブニング(E)', key: 'eve', noFlag: 'noEve', matchSyms: [SYMBOLS.EVE, SYMBOLS.NO_ALLOW_EVE] }
+                ];
+                if (needEarlySouth2 > 0) {
+                    requirements.push({ type: SYMBOLS.EARLY, count: 1, targetFloor: '南2', label: '南2早番', key: 'early', noFlag: 'noEarly', matchSyms: [SYMBOLS.EARLY, SYMBOLS.NO_ALLOW_EARLY] });
+                }
+                if (needEarlySouth3 > 0) {
+                    requirements.push({ type: SYMBOLS.EARLY, count: 1, targetFloor: '南3', label: '南3早番', key: 'early', noFlag: 'noEarly', matchSyms: [SYMBOLS.EARLY, SYMBOLS.NO_ALLOW_EARLY] });
+                }
+            } else {
+                requirements = [
+                    { type: SYMBOLS.LATE, count: 1, label: '遅番', key: 'late', noFlag: 'noLate', matchSyms: [SYMBOLS.LATE, SYMBOLS.NO_ALLOW_LATE] },
+                    { type: SYMBOLS.EVE, count: 2, label: 'イブニング(E)', key: 'eve', noFlag: 'noEve', matchSyms: [SYMBOLS.EVE, SYMBOLS.NO_ALLOW_EVE] },
+                    { type: SYMBOLS.EARLY, count: 3, label: '早番', key: 'early', noFlag: 'noEarly', matchSyms: [SYMBOLS.EARLY, SYMBOLS.NO_ALLOW_EARLY] }
+                ];
+            }
 
             for (const req of requirements) {
                 let assigned = 0;
@@ -1755,6 +1966,59 @@ class ShiftScheduler {
 
                     // 個別不可フラグ
                     if (this.staffList[s][req.noFlag]) continue;
+
+                    // 南病棟のフロア指定チェック
+                    if (req.targetFloor && getSubFloor(s) !== req.targetFloor) continue;
+
+                    // 1年目スタッフの制約チェック
+                    if (this.staffList[s].isFirstYear) {
+                        if (this.isSouth) {
+                            if (req.key === 'early') {
+                                let curEarlyFY = 0;
+                                for (let otherS = 0; otherS < this.numStaff; otherS++) {
+                                    if (this.staffList[otherS].isFirstYear && this.grid[otherS][d].symbol === SYMBOLS.EARLY) curEarlyFY++;
+                                }
+                                if (curEarlyFY >= 1) continue;
+                            }
+                            if (req.key === 'eve') {
+                                let curEveFY = 0;
+                                for (let otherS = 0; otherS < this.numStaff; otherS++) {
+                                    if (this.staffList[otherS].isFirstYear && this.grid[otherS][d].symbol === SYMBOLS.EVE) curEveFY++;
+                                }
+                                if (curEveFY >= 1) continue;
+                            }
+                            const subFl = getSubFloor(s);
+                            if (req.key === 'late') {
+                                let floorEveFY = 0;
+                                for (let otherS = 0; otherS < this.numStaff; otherS++) {
+                                    if (getSubFloor(otherS) === subFl && this.staffList[otherS].isFirstYear && this.grid[otherS][d].symbol === SYMBOLS.EVE) floorEveFY++;
+                                }
+                                if (floorEveFY >= 1) continue;
+                            }
+                            if (req.key === 'eve') {
+                                let floorLateFY = 0;
+                                for (let otherS = 0; otherS < this.numStaff; otherS++) {
+                                    if (getSubFloor(otherS) === subFl && this.staffList[otherS].isFirstYear && this.grid[otherS][d].symbol === SYMBOLS.LATE) floorLateFY++;
+                                }
+                                if (floorLateFY >= 1) continue;
+                            }
+                        } else {
+                            if (req.key === 'early') {
+                                let curEarlyFY = 0;
+                                for (let otherS = 0; otherS < this.numStaff; otherS++) {
+                                    if (this.staffList[otherS].isFirstYear && (this.grid[otherS][d].symbol === SYMBOLS.EARLY || this.grid[otherS][d].symbol === SYMBOLS.NO_ALLOW_EARLY)) curEarlyFY++;
+                                }
+                                if (curEarlyFY >= 1) continue;
+                            }
+                            if (req.key === 'late' || req.key === 'eve') {
+                                let curLateEveFY = 0;
+                                for (let otherS = 0; otherS < this.numStaff; otherS++) {
+                                    if (this.staffList[otherS].isFirstYear && (this.grid[otherS][d].symbol === SYMBOLS.LATE || this.grid[otherS][d].symbol === SYMBOLS.NO_ALLOW_LATE || this.grid[otherS][d].symbol === SYMBOLS.EVE || this.grid[otherS][d].symbol === SYMBOLS.NO_ALLOW_EVE)) curLateEveFY++;
+                                }
+                                if (curLateEveFY >= 1) continue;
+                            }
+                        }
+                    }
 
                     // スケ可保護：このスタッフを特殊勤務にしても、当日のスケ可かつ○が2名以上残るか
                     if (this.staffList[s].canSched) {
@@ -1987,6 +2251,59 @@ class ShiftScheduler {
                         if (this.staffList[s].isUnused || this.staffList[s].isSectionChief) continue;
                         if (this.grid[s][d].isFixed || this.grid[s][d].symbol !== SYMBOLS.WORK) continue;
                         if (this.staffList[s][req.noFlag]) continue;
+
+                        // 南病棟のフロア指定チェック
+                        if (req.targetFloor && getSubFloor(s) !== req.targetFloor) continue;
+
+                        // 1年目スタッフの制約チェック
+                        if (this.staffList[s].isFirstYear) {
+                            if (this.isSouth) {
+                                if (req.key === 'early') {
+                                    let curEarlyFY = 0;
+                                    for (let otherS = 0; otherS < this.numStaff; otherS++) {
+                                        if (this.staffList[otherS].isFirstYear && this.grid[otherS][d].symbol === SYMBOLS.EARLY) curEarlyFY++;
+                                    }
+                                    if (curEarlyFY >= 1) continue;
+                                }
+                                if (req.key === 'eve') {
+                                    let curEveFY = 0;
+                                    for (let otherS = 0; otherS < this.numStaff; otherS++) {
+                                        if (this.staffList[otherS].isFirstYear && this.grid[otherS][d].symbol === SYMBOLS.EVE) curEveFY++;
+                                    }
+                                    if (curEveFY >= 1) continue;
+                                }
+                                const subFl = getSubFloor(s);
+                                if (req.key === 'late') {
+                                    let floorEveFY = 0;
+                                    for (let otherS = 0; otherS < this.numStaff; otherS++) {
+                                        if (getSubFloor(otherS) === subFl && this.staffList[otherS].isFirstYear && this.grid[otherS][d].symbol === SYMBOLS.EVE) floorEveFY++;
+                                    }
+                                    if (floorEveFY >= 1) continue;
+                                }
+                                if (req.key === 'eve') {
+                                    let floorLateFY = 0;
+                                    for (let otherS = 0; otherS < this.numStaff; otherS++) {
+                                        if (getSubFloor(otherS) === subFl && this.staffList[otherS].isFirstYear && this.grid[otherS][d].symbol === SYMBOLS.LATE) floorLateFY++;
+                                    }
+                                    if (floorLateFY >= 1) continue;
+                                }
+                            } else {
+                                if (req.key === 'early') {
+                                    let curEarlyFY = 0;
+                                    for (let otherS = 0; otherS < this.numStaff; otherS++) {
+                                        if (this.staffList[otherS].isFirstYear && (this.grid[otherS][d].symbol === SYMBOLS.EARLY || this.grid[otherS][d].symbol === SYMBOLS.NO_ALLOW_EARLY)) curEarlyFY++;
+                                    }
+                                    if (curEarlyFY >= 1) continue;
+                                }
+                                if (req.key === 'late' || req.key === 'eve') {
+                                    let curLateEveFY = 0;
+                                    for (let otherS = 0; otherS < this.numStaff; otherS++) {
+                                        if (this.staffList[otherS].isFirstYear && (this.grid[otherS][d].symbol === SYMBOLS.LATE || this.grid[otherS][d].symbol === SYMBOLS.NO_ALLOW_LATE || this.grid[otherS][d].symbol === SYMBOLS.EVE || this.grid[otherS][d].symbol === SYMBOLS.NO_ALLOW_EVE)) curLateEveFY++;
+                                    }
+                                    if (curLateEveFY >= 1) continue;
+                                }
+                            }
+                        }
 
                         // スケ可保護
                         if (this.staffList[s].canSched) {
@@ -4338,10 +4655,81 @@ class ShiftScheduler {
                     }
                 }
             }
-            const totalFullTime = this.staffList.filter(s => !s.isUnused && s.isFullTime).length;
-            const reqFT = this.isST ? 2 : (totalFullTime >= 4 ? 3 : (totalFullTime >= 2 ? 2 : 1));
-            if (totalFullTime >= reqFT && fullTimeWorkCount < reqFT) {
-                errors.push(`【${dayNum}日目】「専従」スタッフの出勤が${fullTimeWorkCount}名しかいません（要件: ${reqFT}名以上、出張除く）。`);
+            // ★ PT・OT・STの専従はその階で3人以上出勤する制約
+            if (!this.isST && !this.isLife) {
+                const stFtCount = (this.stDailyFtWork && this.stDailyFtWork[d]) ? this.stDailyFtWork[d] : 0;
+                const totalFtWork = fullTimeWorkCount + stFtCount;
+                const totalFloorFT = this.staffList.filter(s => !s.isUnused && s.isFullTime).length + (this.stFloorFtCount || 0);
+                const reqFT = totalFloorFT >= 3 ? 3 : totalFloorFT;
+                if (reqFT > 0 && totalFtWork < reqFT) {
+                    errors.push(`【${dayNum}日目】「専従（PT・OT・ST合計）」スタッフの出勤が${totalFtWork}名しかいません（要件: ${reqFT}名以上、出張除く）。`);
+                }
+            } else if (this.isST) {
+                const totalFullTime = this.staffList.filter(s => !s.isUnused && s.isFullTime).length;
+                if (totalFullTime >= 2 && fullTimeWorkCount < 2) {
+                    errors.push(`【${dayNum}日目】ST「専従」スタッフの出勤が${fullTimeWorkCount}名しかいません（要件: 2名以上、出張除く）。`);
+                }
+            }
+
+            // ★ 1年目制約（通常PO ＆ 南病棟特殊ルール）
+            if (!this.isST && !this.isLife) {
+                if (this.isSouth) {
+                    // 南病棟の特殊ルール
+                    const s2Staff = [], s3Staff = [];
+                    for (let s = 0; s < this.numStaff; s++) {
+                        const st = this.staffList[s];
+                        if (st.isUnused) continue;
+                        const sec = st.section || '';
+                        if (sec.includes('2')) s2Staff.push(s);
+                        else if (sec.includes('3')) s3Staff.push(s);
+                    }
+                    const s2Early = s2Staff.filter(s => this.grid[s][d].symbol === SYMBOLS.EARLY);
+                    const s3Early = s3Staff.filter(s => this.grid[s][d].symbol === SYMBOLS.EARLY);
+                    const s2Late = s2Staff.filter(s => this.grid[s][d].symbol === SYMBOLS.LATE);
+                    const s3Late = s3Staff.filter(s => this.grid[s][d].symbol === SYMBOLS.LATE);
+                    const s2Eve = s2Staff.filter(s => this.grid[s][d].symbol === SYMBOLS.EVE);
+                    const s3Eve = s3Staff.filter(s => this.grid[s][d].symbol === SYMBOLS.EVE);
+
+                    // 早2人のうち1年目は1人まで
+                    const allEarlyFY = [...s2Early, ...s3Early].filter(s => this.staffList[s].isFirstYear);
+                    if (allEarlyFY.length > 1) {
+                        errors.push(`【${dayNum}日目】南病棟の早番のうち「1年目」が${allEarlyFY.length}名います（要件: 1名以下）。`);
+                    }
+                    // E2人のうち1年目は1人まで
+                    const allEveFY = [...s2Eve, ...s3Eve].filter(s => this.staffList[s].isFirstYear);
+                    if (allEveFY.length > 1) {
+                        errors.push(`【${dayNum}日目】南病棟のE番のうち「1年目」が${allEveFY.length}名います（要件: 1名以下）。`);
+                    }
+                    // 同じフロアの遅とE2人のうち1年目は1人まで
+                    const s2LateEveFY = [...s2Late, ...s2Eve].filter(s => this.staffList[s].isFirstYear);
+                    if (s2LateEveFY.length > 1) {
+                        errors.push(`【${dayNum}日目】南2の遅番・E番（計${s2Late.length + s2Eve.length}名）のうち「1年目」が${s2LateEveFY.length}名います（要件: 1名以下）。`);
+                    }
+                    const s3LateEveFY = [...s3Late, ...s3Eve].filter(s => this.staffList[s].isFirstYear);
+                    if (s3LateEveFY.length > 1) {
+                        errors.push(`【${dayNum}日目】南3の遅番・E番（計${s3Late.length + s3Eve.length}名）のうち「1年目」が${s3LateEveFY.length}名います（要件: 1名以下）。`);
+                    }
+                } else {
+                    // 通常PO
+                    const earlyStaff = [];
+                    const lateEveStaff = [];
+                    for (let s = 0; s < this.numStaff; s++) {
+                        if (this.staffList[s].isUnused) continue;
+                        const sym = this.grid[s][d].symbol;
+                        if (sym === SYMBOLS.EARLY || sym === SYMBOLS.NO_ALLOW_EARLY) earlyStaff.push(s);
+                        if (sym === SYMBOLS.LATE || sym === SYMBOLS.NO_ALLOW_LATE || sym === SYMBOLS.EVE || sym === SYMBOLS.NO_ALLOW_EVE) lateEveStaff.push(s);
+                    }
+                    // 早3名中1年目は最大1名
+                    const earlyFY = earlyStaff.filter(s => this.staffList[s].isFirstYear);
+                    if (earlyFY.length >= 2) {
+                        errors.push(`【${dayNum}日目】早番（早・ハヤ）スタッフのうち「1年目」が${earlyFY.length}名います（要件: 1名以下）。`);
+                    }
+                    // 遅＋E 3名中1年目は最大1名
+                    const lateEveFY = lateEveStaff.filter(s => this.staffList[s].isFirstYear);
+                    if (lateEveFY.length >= 2) {
+                        errors.push(`【${dayNum}日目】遅番・E番（遅・オソ・E・イブ）のうち「1年目」が${lateEveFY.length}名います（要件: 1名以下）。`);
+                    }
+                }
             }
         }
 
@@ -4414,36 +4802,43 @@ class ShiftScheduler {
         const daily = [];
         for (let d = 0; d < this.numDays; d++) {
             let totalWork = 0, early = 0, late = 0, eve = 0, h8 = 0, normal = 0, off = 0, paid = 0, ref = 0;
-            const sectionWork = { 'PT A': 0, 'PT B': 0, 'OT A': 0, 'OT B': 0, 'PT 2': 0, 'PT 3': 0, 'OT 2': 0, 'OT 3': 0, 'ST': 0, 'その他': 0 };
+            const sectionWork = {
+                'PT A': 0, 'PT B': 0, 'OT A': 0, 'OT B': 0,
+                'PT 2': 0, 'PT 3': 0, 'OT 2': 0, 'OT 3': 0,
+                'ST': 0, '訪問': 0, '通所': 0, 'Cl1': 0, 'Cl2': 0, '管理': 0,
+                'ハ1': 0, 'ハ2': 0, 'ハ3': 0, 'ハ南': 0, 'その他': 0
+            };
             for (let s = 0; s < this.numStaff; s++) {
                 if (this.staffList[s].isUnused) continue;
+                const staff = this.staffList[s];
                 const sym = this.grid[s][d].symbol;
-                const sec = this.staffList[s].section || 'その他';
+                const isExcludedFromWork = (staff.lifeSection === '管理' || staff.lifeSection === 'Cl1');
+                const sec = staff.lifeSection ? (staff.lifeSection === 'Cl2' ? '通所' : staff.lifeSection) : (staff.section || 'その他');
                 let staffWorkAmt = 0;
 
                 // ★ ハヤ・オソ・イブは特殊時間と同じ時間で出勤する勤務だが、早・遅・Eとしてのカウントはせず、〇としてカウント！
-                if (sym === SYMBOLS.EARLY) { early++; totalWork += 1.0; staffWorkAmt = 1.0; }
-                else if (sym === SYMBOLS.LATE) { late++; totalWork += 1.0; staffWorkAmt = 1.0; }
-                else if (sym === SYMBOLS.EVE) { eve++; totalWork += 1.0; staffWorkAmt = 1.0; }
-                else if (sym === SYMBOLS.H8) { h8++; totalWork += 1.0; staffWorkAmt = 1.0; }
+                if (sym === SYMBOLS.EARLY) { early++; if (!isExcludedFromWork) totalWork += 1.0; staffWorkAmt = 1.0; }
+                else if (sym === SYMBOLS.LATE) { late++; if (!isExcludedFromWork) totalWork += 1.0; staffWorkAmt = 1.0; }
+                else if (sym === SYMBOLS.EVE) { eve++; if (!isExcludedFromWork) totalWork += 1.0; staffWorkAmt = 1.0; }
+                else if (sym === SYMBOLS.H8) { h8++; if (!isExcludedFromWork) totalWork += 1.0; staffWorkAmt = 1.0; }
                 else if (sym === SYMBOLS.WORK || sym === '〇' || sym === '◯' || sym === SYMBOLS.TRIP || sym === SYMBOLS.NO_ALLOW_EARLY || sym === SYMBOLS.NO_ALLOW_LATE || sym === SYMBOLS.NO_ALLOW_EVE) {
-                    normal++; totalWork += 1.0; staffWorkAmt = 1.0;
+                    normal++; if (!isExcludedFromWork) totalWork += 1.0; staffWorkAmt = 1.0;
                 }
                 else if (sym === SYMBOLS.OFF) { off += 1.0; }
                 else if (sym === SYMBOLS.PAID) { paid += 1.0; }
                 else if (SYMBOLS.REF_SUMMER.includes(sym) || SYMBOLS.REF_WINTER.includes(sym)) { ref += 1.0; }
                 else if (sym === SYMBOLS.HALF_WORK_OFF || sym === SYMBOLS.HALF_OFF_WORK) {
-                    totalWork += 0.5;
+                    if (!isExcludedFromWork) totalWork += 0.5;
                     off += 0.5;
                     staffWorkAmt = 0.5;
                 }
                 else if (sym === SYMBOLS.HALF_WORK_PAID || sym === SYMBOLS.HALF_PAID_WORK) {
-                    totalWork += 0.5;
+                    if (!isExcludedFromWork) totalWork += 0.5;
                     paid += 0.5;
                     staffWorkAmt = 0.5;
                 }
 
-                if (staffWorkAmt > 0) {
+                if (staffWorkAmt > 0 && !isExcludedFromWork) {
                     if (sec in sectionWork) {
                         sectionWork[sec] += staffWorkAmt;
                     } else {
@@ -4461,6 +4856,8 @@ class ShiftScheduler {
             let realWorkBase = stWorkAmt;
             for (let s = 0; s < this.numStaff; s++) {
                 if (this.staffList[s].isUnused) continue;
+                const staff = this.staffList[s];
+                if (staff.isZeroCount || staff.lifeSection === '管理' || staff.lifeSection === 'Cl1') continue;
                 const sym = this.grid[s][d].symbol;
                 let amt = 0;
                 if ([SYMBOLS.EARLY, SYMBOLS.LATE, SYMBOLS.EVE, SYMBOLS.H8, SYMBOLS.WORK, '〇', '◯', SYMBOLS.TRIP, SYMBOLS.NO_ALLOW_EARLY, SYMBOLS.NO_ALLOW_LATE, SYMBOLS.NO_ALLOW_EVE].includes(sym)) {
@@ -4469,7 +4866,7 @@ class ShiftScheduler {
                     amt = 0.5;
                 }
                 if (amt > 0) {
-                    const factor = this.staffList[s].isHalf ? 0.5 : 1.0;
+                    const factor = staff.isHalf ? 0.5 : 1.0;
                     realWorkBase += amt * factor;
                 }
             }
@@ -4836,17 +5233,131 @@ function validateScheduleGrid(grid, staffList, options = {}) {
             }
         }
 
-        // 専従: POテーブルは3名以上（出張除く）、STテーブルは全階で2名出勤
-        if (!isST) {
-            const totalFullTime = staffList.filter(s => !s.isUnused && s.isFullTime).length;
-            if (totalFullTime >= 3 && fullTimeWorkCount < 3) {
-                errors.push(`【${dayNum}日目】「専従」スタッフの出勤が${fullTimeWorkCount}名しかいません（要件: 3名以上、出張除く）。`);
+        // 専従: PT・OT・STの専従はその階で3人以上出勤する制約
+        const isLife = !!options.isLife;
+        const isSouth = !!options.isSouth;
+        if (!isST && !isLife) {
+            let stFtWork = 0;
+            if (options.stStaffData && options.stStaffData.staffList) {
+                options.stStaffData.staffList.forEach((st, stIdx) => {
+                    if (!st.isUnused && st.isFullTime) {
+                        const stRow = (options.stStaffData.grid && options.stStaffData.grid[stIdx]) ? options.stStaffData.grid[stIdx] : (st.days || []);
+                        const c = stRow[d] || { symbol: '' };
+                        const sSym = (c && typeof c === 'object') ? c.symbol : (c || '');
+                        if (isWorkSymbol(sSym) && sSym !== SYMBOLS.TRIP) stFtWork++;
+                    }
+                });
+            }
+            const totalFtWork = fullTimeWorkCount + stFtWork;
+            const totalFloorFT = staffList.filter(s => !s.isUnused && s.isFullTime).length + (options.stFloorFtCount || (stFtWork > 0 ? 1 : 0));
+            const reqFT = totalFloorFT >= 3 ? 3 : totalFloorFT;
+            if (reqFT > 0 && totalFtWork < reqFT) {
+                errors.push(`【${dayNum}日目】「専従（PT・OT・ST合計）」スタッフの出勤が${totalFtWork}名しかいません（要件: ${reqFT}名以上、出張除く）。`);
+            }
+
+            // ★ 1年目制約（通常PO ＆ 南病棟特殊ルール）
+            if (isSouth) {
+                const s2Staff = [], s3Staff = [];
+                staffList.forEach((st, sIdx) => {
+                    if (st.isUnused) return;
+                    const sec = st.section || '';
+                    if (sec.includes('2')) s2Staff.push(sIdx);
+                    else if (sec.includes('3')) s3Staff.push(sIdx);
+                });
+                const s2Early = s2Staff.filter(s => getSym(s, d) === SYMBOLS.EARLY);
+                const s3Early = s3Staff.filter(s => getSym(s, d) === SYMBOLS.EARLY);
+                const s2Late  = s2Staff.filter(s => getSym(s, d) === SYMBOLS.LATE);
+                const s3Late  = s3Staff.filter(s => getSym(s, d) === SYMBOLS.LATE);
+                const s2Eve   = s2Staff.filter(s => getSym(s, d) === SYMBOLS.EVE);
+                const s3Eve   = s3Staff.filter(s => getSym(s, d) === SYMBOLS.EVE);
+
+                // 早2人のうち1年目は1人まで
+                const allEarlyFY = [...s2Early, ...s3Early].filter(s => staffList[s].isFirstYear);
+                if (allEarlyFY.length > 1) {
+                    errors.push(`【${dayNum}日目】南病棟の早番のうち「1年目」が${allEarlyFY.length}名います（要件: 1名以下）。`);
+                }
+                // E2人のうち1年目は1人まで
+                const allEveFY = [...s2Eve, ...s3Eve].filter(s => staffList[s].isFirstYear);
+                if (allEveFY.length > 1) {
+                    errors.push(`【${dayNum}日目】南病棟のE番のうち「1年目」が${allEveFY.length}名います（要件: 1名以下）。`);
+                }
+                // 同じフロアの遅とE2人のうち1年目は1人まで
+                const s2LateEveFY = [...s2Late, ...s2Eve].filter(s => staffList[s].isFirstYear);
+                if (s2LateEveFY.length > 1) {
+                    errors.push(`【${dayNum}日目】南2の遅番・E番（計${s2Late.length + s2Eve.length}名）のうち「1年目」が${s2LateEveFY.length}名います（要件: 1名以下）。`);
+                }
+                const s3LateEveFY = [...s3Late, ...s3Eve].filter(s => staffList[s].isFirstYear);
+                if (s3LateEveFY.length > 1) {
+                    errors.push(`【${dayNum}日目】南3の遅番・E番（計${s3Late.length + s3Eve.length}名）のうち「1年目」が${s3LateEveFY.length}名います（要件: 1名以下）。`);
+                }
+            } else {
+                // 通常PO
+                const earlyStaff = [];
+                const lateEveStaff = [];
+                staffList.forEach((st, sIdx) => {
+                    if (st.isUnused) return;
+                    const sym = getSym(sIdx, d);
+                    if (sym === SYMBOLS.EARLY || sym === SYMBOLS.NO_ALLOW_EARLY) earlyStaff.push(sIdx);
+                    if (sym === SYMBOLS.LATE || sym === SYMBOLS.NO_ALLOW_LATE || sym === SYMBOLS.EVE || sym === SYMBOLS.NO_ALLOW_EVE) lateEveStaff.push(sIdx);
+                });
+                const earlyFY = earlyStaff.filter(s => staffList[s].isFirstYear);
+                if (earlyFY.length >= 2) {
+                    errors.push(`【${dayNum}日目】早番（早・ハヤ）スタッフのうち「1年目」が${earlyFY.length}名います（要件: 1名以下）。`);
+                }
+                const lateEveFY = lateEveStaff.filter(s => staffList[s].isFirstYear);
+                if (lateEveFY.length >= 2) {
+                    errors.push(`【${dayNum}日目】遅番・E番（遅・オソ・E・イブ）のうち「1年目」が${lateEveFY.length}名います（要件: 1名以下）。`);
+                }
             }
         }
 
-        // 特殊勤務人数チェック（早番3名, 遅番1名, E2名, 8時1名）※POテーブルのみ！STテーブルは単独で満たせないためスキップ
-        if (!isST) {
-            if (isFinal) {
+        // 特殊勤務人数チェック（早番3名, 遅番1名, E2名, 8時1名）※POテーブルのみ！STテーブルおよび生活期はスキップ
+        if (!isST && !isLife) {
+            if (isSouth) {
+                // 南病棟の特殊勤務人数チェック: 早=南2に1名・南3に1名、遅=南2に1名・南3に1名、E=南2に1名・南3に1名
+                if (isFinal) {
+                    const s2Staff = [], s3Staff = [];
+                    staffList.forEach((st, sIdx) => {
+                        if (st.isUnused) return;
+                        const sec = st.section || '';
+                        if (sec.includes('2')) s2Staff.push(sIdx);
+                        else if (sec.includes('3')) s3Staff.push(sIdx);
+                    });
+                    const s2Early = s2Staff.filter(s => getSym(s, d) === SYMBOLS.EARLY).length;
+                    const s3Early = s3Staff.filter(s => getSym(s, d) === SYMBOLS.EARLY).length;
+                    const s2Late  = s2Staff.filter(s => getSym(s, d) === SYMBOLS.LATE).length;
+                    const s3Late  = s3Staff.filter(s => getSym(s, d) === SYMBOLS.LATE).length;
+                    const s2Eve   = s2Staff.filter(s => getSym(s, d) === SYMBOLS.EVE).length;
+                    const s3Eve   = s3Staff.filter(s => getSym(s, d) === SYMBOLS.EVE).length;
+
+                    let stEarlyCount = 0;
+                    if (options.stStaffData && options.stStaffData.staffList) {
+                        options.stStaffData.staffList.forEach((st, stIdx) => {
+                            if (!st.isUnused) {
+                                const stRow = (options.stStaffData.grid && options.stStaffData.grid[stIdx]) ? options.stStaffData.grid[stIdx] : (st.days || []);
+                                const c = stRow[d] || { symbol: '' };
+                                const sSym = (c && typeof c === 'object') ? c.symbol : (c || '');
+                                if (sSym === SYMBOLS.EARLY) stEarlyCount++;
+                            }
+                        });
+                    }
+                    if (stEarlyCount > 1) {
+                        errors.push(`【${dayNum}日目】南病棟所属のST早番が${stEarlyCount}名います（同日2名は希望以外NG）。`);
+                    }
+
+                    // 早番チェック（ST早番は南2または南3どちらにカウントしてもOK）
+                    const totalEarlyPO = s2Early + s3Early;
+                    if (totalEarlyPO + stEarlyCount !== 2 || (s2Early > 1 || s3Early > 1)) {
+                        errors.push(`【${dayNum}日目】南病棟の早番要件を満たしていません（南2に1名、南3に1名。ST早番含めて計2名）。`);
+                    }
+                    if (s2Late !== 1 || s3Late !== 1) {
+                        errors.push(`【${dayNum}日目】南病棟の遅番要件を満たしていません（南2に1名、南3に1名。現況: 南2=${s2Late}名, 南3=${s3Late}名）。`);
+                    }
+                    if (s2Eve !== 1 || s3Eve !== 1) {
+                        errors.push(`【${dayNum}日目】南病棟のE番要件を満たしていません（南2に1名、南3に1名。現況: 南2=${s2Eve}名, 南3=${s3Eve}名）。`);
+                    }
+                }
+            } else if (isFinal) {
                 // 最終チェック＆完成: 完全充足を厳格チェック（ハヤ・オソ・イブはカウントしない）
                 if (earlyCount !== 3) {
                     const reason = `${dayNum}日目の早番（早）が${earlyCount}名です（要件: 3名）`;
