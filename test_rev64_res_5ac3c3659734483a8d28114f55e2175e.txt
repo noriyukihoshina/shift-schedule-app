@@ -1,0 +1,185 @@
+﻿<!DOCTYPE html>
+<html lang="ja"><head>
+    <meta charset="UTF-8">
+    <title>Rev64 Verification</title>
+</head>
+<body>
+    <div id="testResults"><pre>✅ PASS: ST基本勤務表生成成功
+✅ PASS: ST特殊勤務割当成功
+✅ PASS: STテーブルで早番3名・遅番1名・E2名・8時1名のエラーが0件（完全スキップ）: []
+✅ PASS: 1日目(ハヤ)のearlyカウントが0名
+✅ PASS: 1日目(ハヤ)のnormalカウントが1名
+✅ PASS: 2日目(オソ)のlateカウントが0名
+✅ PASS: 2日目(オソ)のnormalカウントが1名
+✅ PASS: 3日目(イブ)のeveカウントが0名
+✅ PASS: 3日目(イブ)のnormalカウントが1名
+✅ PASS: 4日目(早)のearlyカウントが1名
+✅ PASS: 5日目(遅)のlateカウントが1名
+✅ PASS: 6日目(E)のeveカウントが1名
+✅ PASS: 個人統計 earlyが1回 (実測: 1)
+✅ PASS: 個人統計 lateが1回 (実測: 1)
+✅ PASS: 個人統計 eveが1回 (実測: 1)
+✅ PASS: ST実数考慮の基本勤務表生成成功
+✅ PASS: 1日目のST実数が4.0名
+✅ PASS: 2日目のST実数が2.0名
+✅ PASS: 1日目のフロア全体実数が計算されている
+✅ PASS: 南病棟セクション（PT 2/3, OT 2/3）基本勤務表生成成功
+✅ PASS: 南病棟 PT 2 の集計が存在する
+✅ PASS: 南病棟 PT 3 の集計が存在する</pre></div>
+
+    <script src="solver.js"></script>
+    <script>
+    (function() {
+        const results = [];
+        function assert(cond, msg) {
+            results.push((cond ? '✅ PASS: ' : '❌ FAIL: ') + msg);
+            if (!cond) console.error('FAIL: ' + msg);
+        }
+
+        try {
+            // ==========================================
+            // TEST 1: STテーブルでの特殊勤務検証（早3, 遅1, E2, 8時のエラーが一切出ないこと）
+            // ==========================================
+            const mockStStaff = [];
+            for (let i = 0; i < 16; i++) {
+                const floor = i < 4 ? '1F' : (i < 8 ? '2F' : (i < 12 ? '3F' : '南'));
+                mockStStaff.push({
+                    id: i + 1,
+                    name: `ST ${String(i + 1).padStart(2, '0')}`,
+                    floor: floor,
+                    isUnused: false,
+                    canSched: (i % 4 === 0 || i % 4 === 1),
+                    prevDays: ['○', '○', '休', '○', '○'],
+                    days: new Array(28).fill('')
+                });
+            }
+            const stScheduler = new ShiftScheduler(mockStStaff, {
+                standardHolidays: 8,
+                dates: Array.from({ length: 28 }, (_, d) => ({ m: 4, day: d + 1, wIdx: d % 7, weekday: ['日','月','火','水','木','金','土'][d % 7] })),
+                isST: true
+            });
+            const stBaseRes = stScheduler.solveBaseSchedule();
+            assert(stBaseRes.success === true, 'ST基本勤務表生成成功');
+            const stSpecRes = stScheduler.assignSpecialDutiesToGrid();
+            assert(stSpecRes.success === true, 'ST特殊勤務割当成功');
+
+            // ST検証: 早3, 遅1, E2, 8時のエラーが0件であること
+            const stValidation = validateScheduleGrid(stScheduler.grid, stScheduler.staffList, {
+                dates: stScheduler.dates,
+                standardHolidays: 8,
+                isFinal: true,
+                isST: true
+            });
+            const stSpecialErrors = stValidation.errors.filter(e => e.includes('早番') || e.includes('遅番') || e.includes('イブニング') || e.includes('8時開始'));
+            assert(stSpecialErrors.length === 0, 'STテーブルで早番3名・遅番1名・E2名・8時1名のエラーが0件（完全スキップ）: ' + JSON.stringify(stSpecialErrors));
+
+            // ==========================================
+            // TEST 2: ハヤ・オソ・イブが早・遅・Eとしてカウントされず、〇としてカウントされること
+            // ==========================================
+            const testStaff = [{
+                id: 1,
+                name: 'テストスタッフ',
+                isUnused: false,
+                prevDays: ['○', '○', '○', '○', '○'],
+                days: ['ハヤ', 'オソ', 'イブ', '早', '遅', 'E', '休', '休']
+            }];
+            while (testStaff[0].days.length < 28) testStaff[0].days.push('○');
+
+            const poSched = new ShiftScheduler(testStaff, {
+                standardHolidays: 8,
+                dates: Array.from({ length: 28 }, (_, d) => ({ m: 4, day: d + 1, wIdx: d % 7 })),
+                isST: false
+            });
+            for (let d = 0; d < 28; d++) {
+                poSched.grid[0][d].symbol = testStaff[0].days[d];
+            }
+            const poStats = poSched.calculateStats();
+            // 1日目(ハヤ): earlyは0、normalは1
+            assert(poStats.daily[0].early === 0, '1日目(ハヤ)のearlyカウントが0名');
+            assert(poStats.daily[0].normal === 1, '1日目(ハヤ)のnormalカウントが1名');
+            // 2日目(オソ): lateは0、normalは1
+            assert(poStats.daily[1].late === 0, '2日目(オソ)のlateカウントが0名');
+            assert(poStats.daily[1].normal === 1, '2日目(オソ)のnormalカウントが1名');
+            // 3日目(イブ): eveは0、normalは1
+            assert(poStats.daily[2].eve === 0, '3日目(イブ)のeveカウントが0名');
+            assert(poStats.daily[2].normal === 1, '3日目(イブ)のnormalカウントが1名');
+            // 4日目(早): earlyは1
+            assert(poStats.daily[3].early === 1, '4日目(早)のearlyカウントが1名');
+            // 5日目(遅): lateは1
+            assert(poStats.daily[4].late === 1, '5日目(遅)のlateカウントが1名');
+            // 6日目(E): eveは1
+            assert(poStats.daily[5].eve === 1, '6日目(E)のeveカウントが1名');
+
+            // 個人統計: early=1, late=1, eve=1 (ハヤ・オソ・イブは含めない)
+            const pStat = poStats.staffStats[0];
+            assert(pStat.early === 1, `個人統計 earlyが1回 (実測: ${pStat.early})`);
+            assert(pStat.late === 1, `個人統計 lateが1回 (実測: ${pStat.late})`);
+            assert(pStat.eve === 1, `個人統計 eveが1回 (実測: ${pStat.eve})`);
+
+            // ==========================================
+            // TEST 3: ST実数がPOテーブルのPT・OT配分均等化に反映されること
+            // ==========================================
+            const stDailyWork = new Array(28).fill(2.0); // 毎日STが2名出勤
+            stDailyWork[0] = 4.0; // 1日目だけSTが4名出勤
+            const poStaffWithST = [];
+            for (let s = 0; s < 48; s++) {
+                poStaffWithST.push({
+                    id: s + 1,
+                    name: `スタッフ ${String(s + 1).padStart(2, '0')}`,
+                    isUnused: false,
+                    section: s < 12 ? 'PT A' : (s < 24 ? 'PT B' : (s < 36 ? 'OT A' : 'OT B')),
+                    prevDays: ['○', '○', '休', '○', '○'],
+                    days: new Array(28).fill('')
+                });
+            }
+            const schedWithST = new ShiftScheduler(poStaffWithST, {
+                standardHolidays: 8,
+                dates: Array.from({ length: 28 }, (_, d) => ({ m: 4, day: d + 1, wIdx: d % 7 })),
+                isST: false,
+                stDailyWork: stDailyWork
+            });
+            const baseWithST = schedWithST.solveBaseSchedule();
+            assert(baseWithST.success === true, 'ST実数考慮の基本勤務表生成成功');
+            const statsWithST = schedWithST.calculateStats();
+            assert(statsWithST.daily[0].sectionWork['ST'] === 4.0, '1日目のST実数が4.0名');
+            assert(statsWithST.daily[1].sectionWork['ST'] === 2.0, '2日目のST実数が2.0名');
+            // 1日目はSTが多いため、PT・OTの出勤人数が他の平日より抑制されて均等化されているか
+            console.log('1日目 PT/OT実数:', statsWithST.daily[0].realWork, '2日目 PT/OT実数:', statsWithST.daily[1].realWork);
+            assert(statsWithST.daily[0].realWork > 0, '1日目のフロア全体実数が計算されている');
+
+            // ==========================================
+            // TEST 4: 南病棟のセクション名（PT 2, PT 3, OT 2, OT 3）平準化
+            // ==========================================
+            const southStaff = [];
+            for (let s = 0; s < 12; s++) {
+                southStaff.push({
+                    id: s + 1,
+                    name: `南スタッフ ${s + 1}`,
+                    isUnused: false,
+                    section: s < 3 ? 'PT 2' : (s < 6 ? 'PT 3' : (s < 9 ? 'OT 2' : 'OT 3')),
+                    prevDays: ['○', '○', '休', '○', '○'],
+                    days: new Array(28).fill('')
+                });
+            }
+            const southSched = new ShiftScheduler(southStaff, {
+                standardHolidays: 8,
+                dates: Array.from({ length: 28 }, (_, d) => ({ m: 4, day: d + 1, wIdx: d % 7 })),
+                isST: false
+            });
+            const southRes = southSched.solveBaseSchedule();
+            assert(southRes.success === true, '南病棟セクション（PT 2/3, OT 2/3）基本勤務表生成成功');
+            const southStats = southSched.calculateStats();
+            assert(southStats.daily[0].sectionWork['PT 2'] !== undefined, '南病棟 PT 2 の集計が存在する');
+            assert(southStats.daily[0].sectionWork['PT 3'] !== undefined, '南病棟 PT 3 の集計が存在する');
+
+        } catch (err) {
+            results.push('❌ CRITICAL EXCEPTION: ' + err.message + ' ' + err.stack);
+        }
+
+        const resEl = document.getElementById('testResults');
+        resEl.innerHTML = '<pre>' + results.join('\n') + '</pre>';
+        console.log('ALL_REV64_TEST_RESULTS:\n' + results.join('\n'));
+    })();
+    </script>
+
+</body></html>

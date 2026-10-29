@@ -1,0 +1,102 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <title>Master Detail Verification</title>
+</head>
+<body>
+    <div id="testRes"></div>
+    <div style="display:none;">
+        <input type="text" id="termStartDate" value="2026-04-01">
+        <select id="standardHolidaySelect"><option value="8.0" selected>8.0</option></select>
+        <table>
+            <thead id="checkTableHead"></thead>
+            <tbody id="checkTableBody"></tbody>
+            <tfoot id="checkTableFoot"></tfoot>
+        </table>
+        <div id="checkTitleDisplay"></div>
+    </div>
+
+    <script>
+    window.APP_CONFIG = {
+        deptId: 'master',
+        deptName: 'マスター統括',
+        floor: '統合'
+    };
+
+    // テスト用モックデータ保存
+    const termKey = '2026-04-01';
+    const mock1f = {
+        staffList: [
+            { id: 1, name: 'テストPT1', floor: '1F', section: 'PT A', isUnused: false, days: ['休', '', '', ''] },
+            { id: 2, name: 'テストPT2', floor: '1F', section: 'PT A', isUnused: false, days: ['', '', '', ''] }
+        ],
+        outputGrid: [
+            // 1日目: 希望休(isFixed:true), 2日目: 自動公休(isFixed:false), 3日目: 自動出勤(isFixed:false)
+            [{ symbol: '休', isFixed: true }, { symbol: '休', isFixed: false }, { symbol: '○', isFixed: false }],
+            // 1日目: 自動出勤(isFixed:false), 2日目: 自動公休(isFixed:false), 3日目: 自動出勤(isFixed:false)
+            [{ symbol: '○', isFixed: false }, { symbol: '休', isFixed: false }, { symbol: '○', isFixed: false }]
+        ],
+        dayOffsets: new Array(28).fill(0)
+    };
+    localStorage.setItem(`shift_schedule_1f_term_${termKey}`, JSON.stringify(mock1f));
+    </script>
+    <script src="solver.js?v=20261029_rev65"></script>
+    <script src="app.js?v=20261029_rev65"></script>
+    <script>
+    window.addEventListener('load', () => {
+        setTimeout(() => {
+            const results = [];
+            function assert(cond, msg) {
+                results.push((cond ? '✅ PASS: ' : '❌ FAIL: ') + msg);
+                if (!cond) console.error('FAIL: ' + msg);
+            }
+
+            try {
+                // マスタービュー描画
+                renderMasterIntegrationView();
+
+                const tbody = document.getElementById('checkTableBody');
+                assert(tbody !== null, 'checkTableBody exists');
+
+                // 1. 集計行が存在すること
+                const html = tbody.innerHTML;
+                assert(html.includes('集計'), '集計行が存在する');
+                assert(html.includes('出勤人数合計'), '出勤人数合計が存在する');
+                assert(html.includes('実数合計'), '実数合計が存在する');
+
+                // 2. 詳細行の検証
+                const detailRows = tbody.querySelectorAll('.master-detail-1f');
+                assert(detailRows.length >= 2, '1階の詳細行が2件以上存在する: ' + detailRows.length);
+
+                // テストPT1 (days: ['休', '', '', ''])
+                // 1日目: 希望休 -> fixed-cell & #dc2626
+                const row1Cells = detailRows[0].querySelectorAll('td');
+                // col 0: 階(PT A), col 1: 氏名(テストPT1), col 2: 1日目, col 3: 2日目
+                const cellDay1 = row1Cells[2];
+                const cellDay2 = row1Cells[3];
+
+                assert(cellDay1.classList.contains('fixed-cell'), 'テストPT1の1日目(希望休)は fixed-cell である');
+                assert(cellDay1.style.color.includes('220, 38, 38') || cellDay1.style.color === '#dc2626', 'テストPT1の1日目(希望休)は赤字である: ' + cellDay1.style.color);
+
+                assert(!cellDay2.classList.contains('fixed-cell'), 'テストPT1の2日目(自動生成休)は fixed-cell ではない');
+                assert(cellDay2.style.color.includes('51, 65, 85') || cellDay2.style.color === '#334155', 'テストPT1の2日目(自動生成休)は黒字である: ' + cellDay2.style.color);
+
+                // テストPT2 (days: ['', '', '', ''])
+                // 2日目: 自動公休 -> fixed-cell ではなく黒字
+                const row2Cells = detailRows[1].querySelectorAll('td');
+                const p2CellDay2 = row2Cells[3];
+                assert(!p2CellDay2.classList.contains('fixed-cell'), 'テストPT2の2日目(自動生成休)は fixed-cell ではない');
+                assert(p2CellDay2.style.color.includes('51, 65, 85') || p2CellDay2.style.color === '#334155', 'テストPT2の2日目(自動生成休)は黒字である: ' + p2CellDay2.style.color);
+
+            } catch (e) {
+                results.push('❌ CRITICAL: ' + e.message);
+            }
+
+            const el = document.getElementById('testRes');
+            el.innerHTML = '<pre>' + results.join('\n') + '</pre>';
+        }, 300);
+    });
+    </script>
+</body>
+</html>

@@ -964,7 +964,8 @@ document.addEventListener('DOMContentLoaded', () => {
                     standardHolidays: stdVal,
                     dates: term.dates,
                     dayOffsets: [...dayOffsets],
-                    isST: isST
+                    isST: isST,
+                    stDailyWork: getLinkedSTDailyWork()
                 });
                 scheduler.grid = data.outputGrid.map(row => {
                     const rCopy = Array.isArray(row) ? row.map(c => ({ ...c })) : [];
@@ -1584,6 +1585,7 @@ document.addEventListener('DOMContentLoaded', () => {
         if (!thead || !tbody) return;
 
         const term = getTermInfo();
+        const isSouth = (currentFloor === '南' || appConfig.deptId === 'south');
 
         let headHtml = `
             <tr>
@@ -1612,16 +1614,16 @@ document.addEventListener('DOMContentLoaded', () => {
                 <th class="remarks-col" rowspan="2" title="委員会等のメモ（ExcelのAG列と自動連携）" style="background:#f8fafc; color:#1e293b; min-width:220px; max-width:320px;">備考（メモ）</th>
             `;
         } else {
-            // 通常PT/OTテーブルヘッダー
+            // 通常PT/OTテーブルヘッダー（南病棟はPT 2/3, OT 2/3と表記）
             headHtml += `
                 <th class="flag-col" rowspan="2" title="8時開始可能か（1〜9番のみON）">8時<br>可</th>
                 <th class="flag-col" rowspan="2" title="早番不可">早<br>不可</th>
                 <th class="flag-col" rowspan="2" title="遅番不可">遅<br>不可</th>
                 <th class="flag-col" rowspan="2" title="イブニング不可">E<br>不可</th>
-                <th class="flag-col" rowspan="2" title="PT A セクション（この中で出勤平均化）" style="background:#e0e7ff; color:#3730a3;">PT<br>A</th>
-                <th class="flag-col" rowspan="2" title="PT B セクション（この中で出勤平均化）" style="background:#ede9fe; color:#5b21b6;">PT<br>B</th>
-                <th class="flag-col" rowspan="2" title="OT A セクション（この中で出勤平均化）" style="background:#fae8ff; color:#86198f;">OT<br>A</th>
-                <th class="flag-col" rowspan="2" title="OT B セクション（この中で出勤平均化）" style="background:#fce7f3; color:#9d174d;">OT<br>B</th>
+                <th class="flag-col" rowspan="2" title="${isSouth ? 'PT 2 セクション' : 'PT A セクション（この中で出勤平均化）'}" style="background:#e0e7ff; color:#3730a3;">PT<br>${isSouth ? '2' : 'A'}</th>
+                <th class="flag-col" rowspan="2" title="${isSouth ? 'PT 3 セクション' : 'PT B セクション（この中で出勤平均化）'}" style="background:#ede9fe; color:#5b21b6;">PT<br>${isSouth ? '3' : 'B'}</th>
+                <th class="flag-col" rowspan="2" title="${isSouth ? 'OT 2 セクション' : 'OT A セクション（この中で出勤平均化）'}" style="background:#fae8ff; color:#86198f;">OT<br>${isSouth ? '2' : 'A'}</th>
+                <th class="flag-col" rowspan="2" title="${isSouth ? 'OT 3 セクション' : 'OT B セクション（この中で出勤平均化）'}" style="background:#fce7f3; color:#9d174d;">OT<br>${isSouth ? '3' : 'B'}</th>
                 <th class="flag-col" rowspan="2" title="スケ可（毎日2名以上必要・○のみ）" style="background:#e0f2fe; color:#0369a1;">スケ<br>可</th>
                 <th class="flag-col" rowspan="2" title="係長（基本平日5連勤、不在時主任1名以上出勤）" style="background:#fef3c7; color:#92400e;">係長</th>
                 <th class="flag-col" rowspan="2" title="主任（係長不在時に1名以上出勤）" style="background:#fef9c3; color:#854d0e;">主任</th>
@@ -1795,26 +1797,26 @@ document.addEventListener('DOMContentLoaded', () => {
                         </label>
                     </td>
                     <td class="flag-col" style="background:#eef2ff;">
-                        <label class="toggle-switch" title="PT A セクション">
-                            <input type="checkbox" ${staff.section === 'PT A' ? 'checked' : ''} data-section="PT A" data-s="${sIdx}">
+                        <label class="toggle-switch" title="${isSouth ? 'PT 2 セクション' : 'PT A セクション'}">
+                            <input type="checkbox" ${(staff.section === 'PT A' || (isSouth && (staff.section === 'PT 2' || staff.section === 'PT A'))) ? 'checked' : ''} data-section="${isSouth ? 'PT 2' : 'PT A'}" data-s="${sIdx}">
                             <span class="toggle-slider"></span>
                         </label>
                     </td>
                     <td class="flag-col" style="background:#f5f3ff;">
-                        <label class="toggle-switch" title="PT B セクション">
-                            <input type="checkbox" ${staff.section === 'PT B' ? 'checked' : ''} data-section="PT B" data-s="${sIdx}">
+                        <label class="toggle-switch" title="${isSouth ? 'PT 3 セクション' : 'PT B セクション'}">
+                            <input type="checkbox" ${(staff.section === 'PT B' || (isSouth && (staff.section === 'PT 3' || staff.section === 'PT B'))) ? 'checked' : ''} data-section="${isSouth ? 'PT 3' : 'PT B'}" data-s="${sIdx}">
                             <span class="toggle-slider"></span>
                         </label>
                     </td>
                     <td class="flag-col" style="background:#faf5ff;">
-                        <label class="toggle-switch" title="OT A セクション">
-                            <input type="checkbox" ${staff.section === 'OT A' ? 'checked' : ''} data-section="OT A" data-s="${sIdx}">
+                        <label class="toggle-switch" title="${isSouth ? 'OT 2 セクション' : 'OT A セクション'}">
+                            <input type="checkbox" ${(staff.section === 'OT A' || (isSouth && (staff.section === 'OT 2' || staff.section === 'OT A'))) ? 'checked' : ''} data-section="${isSouth ? 'OT 2' : 'OT A'}" data-s="${sIdx}">
                             <span class="toggle-slider"></span>
                         </label>
                     </td>
                     <td class="flag-col" style="background:#fdf2f8;">
-                        <label class="toggle-switch" title="OT B セクション">
-                            <input type="checkbox" ${staff.section === 'OT B' ? 'checked' : ''} data-section="OT B" data-s="${sIdx}">
+                        <label class="toggle-switch" title="${isSouth ? 'OT 3 セクション' : 'OT B セクション'}">
+                            <input type="checkbox" ${(staff.section === 'OT B' || (isSouth && (staff.section === 'OT 3' || staff.section === 'OT B'))) ? 'checked' : ''} data-section="${isSouth ? 'OT 3' : 'OT B'}" data-s="${sIdx}">
                             <span class="toggle-slider"></span>
                         </label>
                     </td>
@@ -1873,10 +1875,11 @@ document.addEventListener('DOMContentLoaded', () => {
         });
 
         // ★「1階」「2階」「3階」「南」のテーブルの最下部にSTのスタッフ名と勤務を確認できるように表示
+        // ★ 重大修正: 列数をヘッダー（52列: 1+1+5+28+17）と完全に一致させ、列ズレ・列幅肥大化を完全防止！
         if (!isST && currentFloor && linkedStStaffData && linkedStStaffData.staffList && linkedStStaffData.staffList.length > 0) {
             bodyHtml += `
                 <tr style="background:#f0fdf4; border-top: 3px solid #10b981;">
-                    <th colspan="${NUM_DAYS + 11}" style="text-align:left; padding:8px 12px; font-size:0.85rem; font-weight:800; color:#065f46; letter-spacing:0.03em;">
+                    <th colspan="${NUM_DAYS + 24}" style="text-align:left; padding:8px 12px; font-size:0.85rem; font-weight:800; color:#065f46; letter-spacing:0.03em;">
                         🌿 【${currentFloor} 所属 STスタッフ（参照表示・ST専用テーブルで作成済み）】
                     </th>
                 </tr>
@@ -1884,11 +1887,6 @@ document.addEventListener('DOMContentLoaded', () => {
 
             linkedStStaffData.staffList.forEach((st, stIdx) => {
                 const rowData = linkedStStaffData.grid[stIdx] || [];
-                let stWorkCount = 0;
-                let stOffCount = 0;
-                let stPaidCount = 0;
-                let stRefCount = 0;
-                let stEarlyCount = 0;
 
                 bodyHtml += `<tr style="background:#f8fafc; color:#334155; opacity:0.95;">`;
                 bodyHtml += `<td class="sticky-col-1 font-mono" style="background:#f0fdf4; color:#047857; font-weight:800;">ST-${stIdx + 1}</td>`;
@@ -1898,19 +1896,23 @@ document.addEventListener('DOMContentLoaded', () => {
                     <span style="font-size:0.65rem; background:#dcfce7; color:#15803d; padding:1px 5px; border-radius:3px; margin-left:4px; font-weight:700;">${st.floor}</span>
                 </td>`;
 
+                // 前5日間（空セル5列）
+                for (let p = 0; p < 5; p++) {
+                    bodyHtml += `<td class="prev-col-cell text-center" style="background:#f0fdf4; color:#94a3b8; font-size:0.8rem;">-</td>`;
+                }
+
+                // 当ターム 1日〜28日
                 for (let d = 0; d < NUM_DAYS; d++) {
                     const c = rowData[d] || { symbol: '' };
                     const sym = c.symbol ? c.symbol.replace(/[◦•･◯〇●]/g, '○') : '';
                     const thickCls = ((d + 1) % 7 === 0) ? 'border-thick-right' : '';
 
-                    if (sym === '休') stOffCount++;
-                    else if (sym === '有') stPaidCount++;
-                    else if (sym && sym.includes('リフ')) stRefCount++;
-                    else if (sym === '早') { stEarlyCount++; stWorkCount += (st.isHalf ? 0.5 : 1); }
-                    else if (isWorkSymbol(sym)) { stWorkCount += (st.isHalf ? 0.5 : 1); }
-
                     // ★ 事前固定希望（本人が希望入力した枠）のみ赤字・太字（fixed-cell）！自動生成された公休等は通常文字
-                    const isCellFixed = !!(c.isFixed || (st.days && st.days[d] && st.days[d] === sym));
+                    const originalWish = (st.days && st.days[d]) ? st.days[d] : '';
+                    const isCellFixed = !!(
+                        (originalWish !== '' && originalWish === sym) ||
+                        (c && c.isFixed && originalWish !== '')
+                    );
                     const cellCls = isCellFixed ? 'day-cell fixed-cell' : 'day-cell auto-cell';
                     const cellTitle = isCellFixed
                         ? `STスタッフ（事前固定希望）: ${escapeHtmlText(st.name)} / ${sym}`
@@ -1919,17 +1921,9 @@ document.addEventListener('DOMContentLoaded', () => {
                     bodyHtml += `<td class="${thickCls} ${cellCls}" style="text-align:center; font-size:0.85rem; background:#f0fdf4;" title="${cellTitle}">${sym}</td>`;
                 }
 
-                bodyHtml += `
-                    <td style="text-align:center; font-weight:700; background:#f0fdf4; color:#1e293b;">${stWorkCount}</td>
-                    <td style="text-align:center; font-weight:700; background:#f0fdf4; color:#1e293b;">${stOffCount}</td>
-                    <td style="text-align:center; font-weight:800; background:#f0fdf4; color:#1e293b;">${stPaidCount}</td>
-                    <td style="text-align:center; font-weight:600; background:#f0fdf4; color:#1e293b;">${stRefCount}</td>
-                    <td style="text-align:center; font-weight:600; background:#f0fdf4; color:#d97706;">${stEarlyCount}</td>
-                    <td style="text-align:center; color:#94a3b8; background:#f0fdf4;">-</td>
-                    <td style="text-align:center; color:#94a3b8; background:#f0fdf4;">-</td>
-                    <td style="text-align:center; color:#94a3b8; background:#f0fdf4;">-</td>
-                    <td style="font-size:0.78rem; color:#64748b; background:#f0fdf4; text-align:left; padding:2px 8px;">ST専用テーブル連携（参照のみ）</td>
-                </tr>`;
+                // 右側フラグ列（17列分）
+                bodyHtml += `<td class="flag-col" colspan="17" style="background:#f0fdf4; color:#065f46; font-size:0.75rem; text-align:left; padding:2px 8px; font-weight:600;">ST専用テーブル連携（参照のみ）</td>`;
+                bodyHtml += `</tr>`;
             });
         }
 
@@ -3265,7 +3259,8 @@ document.addEventListener('DOMContentLoaded', () => {
                         dayOffsets: [...dayOffsets],
                         isST: isST,
                         stChiefWorkingDays: stCoverage.chiefDays,
-                        stSubChiefWorkingDays: stCoverage.subChiefDays
+                        stSubChiefWorkingDays: stCoverage.subChiefDays,
+                        stDailyWork: getLinkedSTDailyWork()
                     });
                     const result = scheduler.solveBaseSchedule();
 
@@ -3363,7 +3358,8 @@ document.addEventListener('DOMContentLoaded', () => {
                         dayOffsets: [...dayOffsets],
                         isST: isST,
                         stChiefWorkingDays: stCoverage3.chiefDays,
-                        stSubChiefWorkingDays: stCoverage3.subChiefDays
+                        stSubChiefWorkingDays: stCoverage3.subChiefDays,
+                        stDailyWork: getLinkedSTDailyWork()
                     });
                     const baseResult = lastScheduler.solveBaseSchedule();
                     if (!baseResult.success) {
@@ -3396,7 +3392,8 @@ document.addEventListener('DOMContentLoaded', () => {
                         standardHolidays: stdHolidayVal,
                         dates: getTermInfo().dates,
                         dayOffsets: [...dayOffsets],
-                        isST: isST
+                        isST: isST,
+                        stDailyWork: getLinkedSTDailyWork()
                     });
                     const reBase = freshScheduler.solveBaseSchedule({ force: true });
                     if (reBase && reBase.grid) {
@@ -3534,6 +3531,26 @@ document.addEventListener('DOMContentLoaded', () => {
             console.warn('ST連携データ読み込み警告:', e);
             linkedStStaffData = null;
         }
+    }
+
+    // ★ ST所属スタッフの日別出勤実数を取得（PT・OTの配分均等化に反映用）
+    function getLinkedSTDailyWork() {
+        if (!linkedStStaffData || !linkedStStaffData.staffList || !linkedStStaffData.grid) return null;
+        const stWork = new Array(NUM_DAYS).fill(0);
+        linkedStStaffData.staffList.forEach((st, idx) => {
+            if (st.isUnused) return;
+            const row = linkedStStaffData.grid[idx] || [];
+            for (let d = 0; d < NUM_DAYS; d++) {
+                const c = row[d] || { symbol: '' };
+                const sym = (c && typeof c === 'object') ? c.symbol : (c || '');
+                if (isWorkSymbol(sym) && sym !== '研' && sym !== '張') {
+                    stWork[d] += (st.isHalf ? 0.5 : 1.0);
+                } else if (sym === '○/休' || sym === '休/○' || sym === '○/有' || sym === '有/○') {
+                    stWork[d] += 0.5;
+                }
+            }
+        });
+        return stWork;
     }
 
     // 出力テーブル描画（画像3のメリハリある罫線と「※/※※～※/※※勤務表」タイトルを反映）
@@ -3760,7 +3777,11 @@ document.addEventListener('DOMContentLoaded', () => {
                     else if (isWorkSymbol(sym)) { stWorkCount += (st.isHalf ? 0.5 : 1); }
 
                     // ★ 事前固定希望（本人が希望入力した枠）のみ赤字・太字（fixed-cell）！自動生成された公休等は通常文字
-                    const isCellFixed = !!(c.isFixed || (st.days && st.days[d] && st.days[d] === sym));
+                    const originalWish = (st.days && st.days[d]) ? st.days[d] : '';
+                    const isCellFixed = !!(
+                        (originalWish !== '' && originalWish === sym) ||
+                        (c && c.isFixed && originalWish !== '')
+                    );
                     const cellCls = isCellFixed ? 'day-cell fixed-cell' : 'day-cell auto-cell';
                     const cellTitle = isCellFixed
                         ? `STスタッフ（事前固定希望）: ${escapeHtmlText(st.name)} / ${sym}`
@@ -3830,7 +3851,7 @@ document.addEventListener('DOMContentLoaded', () => {
                         } else if (sym === '○/休' || sym === '休/○' || sym === '○/有' || sym === '有/○') {
                             dReal[d] += 0.5;
                         }
-                        if (sym === '早' || sym === 'ハヤ') {
+                        if (sym === '早') {
                             dEarly[d]++;
                         }
                     }
@@ -3956,14 +3977,17 @@ document.addEventListener('DOMContentLoaded', () => {
         }
         footHtml += `<td style="font-weight:700; color:#1e293b;">${totalRealSum}</td><td colspan="8" style="color:#94a3b8;">-</td></tr>`;
 
-        // ★ セクション別出勤人数（PT A, OT A, PT B, OT B, ST）
+        // ★ セクション別出勤人数（PT A/2, OT A/2, PT B/3, OT B/3, ST）
+        const isSouthSec = (currentFloor === '南' || appConfig.deptId === 'south');
         const secList = [
-            { name: 'PT A', label: 'PT A 出勤', cls: 'foot-sec-pt-a', color: '#ea580c' },
-            { name: 'OT A', label: 'OT A 出勤', cls: 'foot-sec-ot-a', color: '#ea580c' },
-            { name: 'PT B', label: 'PT B 出勤', cls: 'foot-sec-pt-b', color: '#1d4ed8' },
-            { name: 'OT B', label: 'OT B 出勤', cls: 'foot-sec-ot-b', color: '#1d4ed8' },
+            { name: isSouthSec ? 'PT 2' : 'PT A', label: isSouthSec ? 'PT 2 出勤' : 'PT A 出勤', cls: 'foot-sec-pt-a', color: '#ea580c' },
+            { name: isSouthSec ? 'OT 2' : 'OT A', label: isSouthSec ? 'OT 2 出勤' : 'OT A 出勤', cls: 'foot-sec-ot-a', color: '#ea580c' },
+            { name: isSouthSec ? 'PT 3' : 'PT B', label: isSouthSec ? 'PT 3 出勤' : 'PT B 出勤', cls: 'foot-sec-pt-b', color: '#1d4ed8' },
+            { name: isSouthSec ? 'OT 3' : 'OT B', label: isSouthSec ? 'OT 3 出勤' : 'OT B 出勤', cls: 'foot-sec-ot-b', color: '#1d4ed8' },
             { name: 'ST',   label: 'ST 出勤',   cls: 'foot-sec-st',   color: '#ec4899' }
         ];
+
+        const linkedStWorkArr = getLinkedSTDailyWork();
 
         secList.forEach(sec => {
             footHtml += `
@@ -3973,12 +3997,28 @@ document.addEventListener('DOMContentLoaded', () => {
             let secTotalSum = 0;
             for (let d = 0; d < NUM_DAYS; d++) {
                 const dStat = stats.daily[d];
-                const secVal = (dStat.sectionWork && dStat.sectionWork[sec.name] !== undefined)
-                    ? dStat.sectionWork[sec.name]
-                    : 0;
+                let secVal = 0;
+                if (sec.name === 'ST') {
+                    if (dStat.sectionWork && dStat.sectionWork['ST'] !== undefined && dStat.sectionWork['ST'] > 0) {
+                        secVal = dStat.sectionWork['ST'];
+                    } else if (linkedStWorkArr && linkedStWorkArr[d] !== undefined) {
+                        secVal = linkedStWorkArr[d];
+                    }
+                } else {
+                    secVal = (dStat.sectionWork && dStat.sectionWork[sec.name] !== undefined)
+                        ? dStat.sectionWork[sec.name]
+                        : 0;
+                    // 南病棟のエイリアス互換 (PT 2 <-> PT A, etc.)
+                    if (secVal === 0 && dStat.sectionWork) {
+                        if (sec.name === 'PT 2' && dStat.sectionWork['PT A']) secVal = dStat.sectionWork['PT A'];
+                        else if (sec.name === 'PT 3' && dStat.sectionWork['PT B']) secVal = dStat.sectionWork['PT B'];
+                        else if (sec.name === 'OT 2' && dStat.sectionWork['OT A']) secVal = dStat.sectionWork['OT A'];
+                        else if (sec.name === 'OT 3' && dStat.sectionWork['OT B']) secVal = dStat.sectionWork['OT B'];
+                    }
+                }
                 secTotalSum += secVal;
                 const thickCls = ((d + 1) % 7 === 0) ? 'border-thick-right' : '';
-                footHtml += `<td class="${thickCls}" style="color:${sec.color}; font-weight:800;">${secVal > 0 ? secVal : '-'}</td>`;
+                footHtml += `<td class="${thickCls}" style="color:${sec.color}; font-weight:800;">${secVal > 0 ? secVal : (sec.name === 'ST' ? '0' : '-')}</td>`;
             }
             footHtml += `<td style="font-weight:800; color:${sec.color};">${secTotalSum}</td><td colspan="8" style="color:#94a3b8;">-</td></tr>`;
         });
@@ -4074,8 +4114,16 @@ document.addEventListener('DOMContentLoaded', () => {
             { id: '1f', floorKey: '1F', label: '1階', bg: '#f0f8ff', headerBg: '#e0f2fe', border: '#bae6fd', badgeColor: '#0369a1' },
             { id: '2f', floorKey: '2F', label: '2階', bg: '#fff8f0', headerBg: '#ffedd5', border: '#fed7aa', badgeColor: '#c2410c' },
             { id: '3f', floorKey: '3F', label: '3階', bg: '#f2fcf5', headerBg: '#dcfce7', border: '#bbf7d0', badgeColor: '#15803d' },
-            { id: 'south', floorKey: '南', label: '南階', bg: '#faf5ff', headerBg: '#f3e8ff', border: '#e9d5ff', badgeColor: '#7e22ce' }
+            { id: 'south', floorKey: '南', label: '南', bg: '#faf5ff', headerBg: '#f3e8ff', border: '#e9d5ff', badgeColor: '#7e22ce' }
         ];
+
+        // 全フロア合算集計用配列
+        const grandTotal = new Array(numDays).fill(0);
+        const grandReal = new Array(numDays).fill(0);
+        const grandEarly = new Array(numDays).fill(0);
+        const grandLate = new Array(numDays).fill(0);
+        const grandEve = new Array(numDays).fill(0);
+        const grandH8 = new Array(numDays).fill(0);
 
         // 1. 各階およびSTの保存データをLocalStorageから読み込み
         const floorDataMap = {};
@@ -4148,11 +4196,12 @@ document.addEventListener('DOMContentLoaded', () => {
                         if (staff.isUnused) continue;
                         const cell = fGrid[s] ? fGrid[s][d] : null;
                         const sym = (cell && typeof cell === 'object') ? cell.symbol : (cell || '');
-                        if (sym === '早' || sym === 'ハヤ') { earlyCount++; realCount += (staff.isHalf ? 0.5 : 1.0); }
-                        else if (sym === '遅' || sym === 'オソ') { lateCount++; realCount += (staff.isHalf ? 0.5 : 1.0); }
-                        else if (sym === 'E' || sym === 'イブ') { eveCount++; realCount += (staff.isHalf ? 0.5 : 1.0); }
+                        // ★ ハヤ・オソ・イブは特殊勤務カウントから除外、通常出勤（〇）としてカウント
+                        if (sym === '早') { earlyCount++; realCount += (staff.isHalf ? 0.5 : 1.0); }
+                        else if (sym === '遅') { lateCount++; realCount += (staff.isHalf ? 0.5 : 1.0); }
+                        else if (sym === 'E') { eveCount++; realCount += (staff.isHalf ? 0.5 : 1.0); }
                         else if (sym === '8時') { h8Count++; realCount += (staff.isHalf ? 0.5 : 1.0); }
-                        else if (sym === '○' || sym === '出' || sym === '研' || sym === '張') { realCount += (staff.isHalf ? 0.5 : 1.0); }
+                        else if (sym === '○' || sym === '出' || sym === '研' || sym === '張' || sym === 'ハヤ' || sym === 'オソ' || sym === 'イブ') { realCount += (staff.isHalf ? 0.5 : 1.0); }
                         else if (sym === '○/休' || sym === '休/○' || sym === '○/有' || sym === '有/○') { realCount += 0.5; }
                     }
                 }
@@ -4162,8 +4211,8 @@ document.addEventListener('DOMContentLoaded', () => {
                     const st = floorStStaff[si];
                     const cell = floorStGrid[si] ? floorStGrid[si][d] : null;
                     const sym = (cell && typeof cell === 'object') ? cell.symbol : (cell || '');
-                    if (sym === '早' || sym === 'ハヤ') { earlyCount++; realCount += (st.isHalf ? 0.5 : 1.0); }
-                    else if (sym === '○' || sym === '出' || sym === '研' || sym === '張') { realCount += (st.isHalf ? 0.5 : 1.0); }
+                    if (sym === '早') { earlyCount++; realCount += (st.isHalf ? 0.5 : 1.0); }
+                    else if (sym === '○' || sym === '出' || sym === '研' || sym === '張' || sym === 'ハヤ' || sym === 'オソ' || sym === 'イブ') { realCount += (st.isHalf ? 0.5 : 1.0); }
                     else if (sym === '○/休' || sym === '休/○' || sym === '○/有' || sym === '有/○') { realCount += 0.5; }
                 }
 
@@ -4174,6 +4223,14 @@ document.addEventListener('DOMContentLoaded', () => {
                 dailyH8.push(h8Count);
                 const displayTotal = realCount > 0 ? (realCount + (offset > 0 ? offset : 0)) : 0;
                 dailyTotal.push(displayTotal);
+
+                // 全フロア合算に加算
+                grandTotal[d] += displayTotal;
+                grandReal[d] += realCount;
+                grandEarly[d] += earlyCount;
+                grandLate[d] += lateCount;
+                grandEve[d] += eveCount;
+                grandH8[d] += h8Count;
             }
 
             // テーブルヘッダー1: 日付ヘッダー
@@ -4328,17 +4385,35 @@ document.addEventListener('DOMContentLoaded', () => {
                     const thickCls = ((d + 1) % 7 === 0) ? 'border-thick-right' : '';
                     const cell = item.gridRow ? item.gridRow[d] : null;
                     const sym = (cell && typeof cell === 'object') ? (cell.symbol || '') : (cell || '');
+                    
+                    // ★ 事前固定希望（本人が希望入力した枠）のみ赤字！
+                    // 自動生成された公休（休）や通常勤務（○）は通常文字色（黒字）
+                    const originalWish = (s.days && s.days[d]) ? s.days[d] : '';
+                    const isCellFixed = !!(
+                        (originalWish !== '' && originalWish === sym) ||
+                        (cell && typeof cell === 'object' && cell.isFixed && originalWish !== '')
+                    );
+
                     let color = '#334155';
                     let bg = '#ffffff';
-                    if (sym === '休') { color = '#dc2626'; bg = '#fef2f2'; }
-                    else if (sym === '有') { color = '#b45309'; bg = '#fffbeb'; }
-                    else if (sym === '早' || sym === 'ハヤ') { color = '#c2410c'; bg = '#fff7ed'; }
-                    else if (sym === '遅' || sym === 'オソ') { color = '#0369a1'; bg = '#f0f9ff'; }
-                    else if (sym === 'E' || sym === 'イブ') { color = '#7e22ce'; bg = '#faf5ff'; }
-                    else if (sym === '8時') { color = '#15803d'; bg = '#f0fdf4'; }
-                    else if (sym.startsWith('上') || sym.startsWith('下')) { color = '#be185d'; bg = '#fdf2f8'; }
 
-                    html += `<td class="${thickCls}" style="background:${bg}; color:${color}; font-weight:700; border-bottom:1px solid #e2e8f0;">${sym}</td>`;
+                    if (isCellFixed) {
+                        color = '#dc2626'; // 本人が希望した枠のみ赤字
+                    } else {
+                        // 希望以外（システム自動生成された勤務・公休）は通常色（休は黒字）
+                        if (sym === '休') { color = '#334155'; bg = '#ffffff'; }
+                        else if (sym === '有') { color = '#b45309'; bg = '#fffbeb'; }
+                        else if (sym === '早' || sym === 'ハヤ') { color = '#c2410c'; bg = '#fff7ed'; }
+                        else if (sym === '遅' || sym === 'オソ') { color = '#0369a1'; bg = '#f0f9ff'; }
+                        else if (sym === 'E' || sym === 'イブ') { color = '#7e22ce'; bg = '#faf5ff'; }
+                        else if (sym === '8時') { color = '#15803d'; bg = '#f0fdf4'; }
+                        else if (sym.startsWith('上') || sym.startsWith('下')) { color = '#be185d'; bg = '#fdf2f8'; }
+                    }
+
+                    const fixedCls = isCellFixed ? 'fixed-cell' : 'auto-cell';
+                    const titleText = isCellFixed ? '🔒 事前固定希望枠（赤字）' : 'システム自動配置';
+
+                    html += `<td class="${thickCls} ${fixedCls}" title="${titleText}" style="background:${bg}; color:${color}; font-weight:700; border-bottom:1px solid #e2e8f0; text-align:center;">${sym}</td>`;
                 }
                 html += `<td style="background:#ffffff;"></td></tr>`;
             });
@@ -4346,6 +4421,61 @@ document.addEventListener('DOMContentLoaded', () => {
             // フロア間の仕切り余白行
             html += `<tr style="height:12px; background:#f8fafc;"><td colspan="${numDays + 3}" style="border:none; background:#f8fafc;"></td></tr>`;
         });
+
+        // ★ ユーザー指示 (添付5): 南の下に全フロア合算「集計」を記載（出勤人数合計・実数合計・早・遅・E・8時）
+        html += `<tr style="background:#f1f5f9; font-weight:700; border-top: 3px solid #334155;">
+            <th class="sticky-col-1" rowspan="6" style="background:#e2e8f0; color:#1e293b; font-size:1.1rem; font-weight:900; vertical-align:middle; text-align:center; border-right:1px solid #cbd5e1;">集計</th>
+            <td class="sticky-col-2" style="background:#f8fafc; color:#0f172a; border-right:2px solid #475569; font-weight:800; font-size:0.9rem;">出勤人数合計</td>`;
+        for (let d = 0; d < numDays; d++) {
+            const thickCls = ((d + 1) % 7 === 0) ? 'border-thick-right' : '';
+            html += `<td class="${thickCls}" style="background:#f8fafc; color:#0f172a; font-weight:800; font-size:0.95rem; border-bottom:1px solid #cbd5e1; text-align:center;">${grandTotal[d]}</td>`;
+        }
+        html += `<td style="background:#f8fafc;"></td></tr>`;
+
+        // 実数合計
+        html += `<tr style="background:#f8fafc; font-weight:700;">
+            <td class="sticky-col-2" style="background:#f8fafc; color:#0369a1; border-right:2px solid #475569; font-weight:800; font-size:0.9rem;">実数合計</td>`;
+        for (let d = 0; d < numDays; d++) {
+            const thickCls = ((d + 1) % 7 === 0) ? 'border-thick-right' : '';
+            html += `<td class="${thickCls}" style="background:#f8fafc; color:#0369a1; font-weight:800; font-size:0.95rem; border-bottom:1px solid #cbd5e1; text-align:center;">${Number(grandReal[d].toFixed(1))}</td>`;
+        }
+        html += `<td style="background:#f8fafc;"></td></tr>`;
+
+        // 早
+        html += `<tr style="background:#f8fafc; font-weight:700;">
+            <td class="sticky-col-2" style="background:#f8fafc; color:#ea580c; border-right:2px solid #475569; font-weight:700;">早</td>`;
+        for (let d = 0; d < numDays; d++) {
+            const thickCls = ((d + 1) % 7 === 0) ? 'border-thick-right' : '';
+            html += `<td class="${thickCls}" style="background:#f8fafc; color:#ea580c; font-weight:700; border-bottom:1px solid #cbd5e1; text-align:center;">${grandEarly[d]}</td>`;
+        }
+        html += `<td style="background:#f8fafc;"></td></tr>`;
+
+        // 遅
+        html += `<tr style="background:#f8fafc; font-weight:700;">
+            <td class="sticky-col-2" style="background:#f8fafc; color:#0284c7; border-right:2px solid #475569; font-weight:700;">遅</td>`;
+        for (let d = 0; d < numDays; d++) {
+            const thickCls = ((d + 1) % 7 === 0) ? 'border-thick-right' : '';
+            html += `<td class="${thickCls}" style="background:#f8fafc; color:#0284c7; font-weight:700; border-bottom:1px solid #cbd5e1; text-align:center;">${grandLate[d]}</td>`;
+        }
+        html += `<td style="background:#f8fafc;"></td></tr>`;
+
+        // E
+        html += `<tr style="background:#f8fafc; font-weight:700;">
+            <td class="sticky-col-2" style="background:#f8fafc; color:#7c3aed; border-right:2px solid #475569; font-weight:700;">E</td>`;
+        for (let d = 0; d < numDays; d++) {
+            const thickCls = ((d + 1) % 7 === 0) ? 'border-thick-right' : '';
+            html += `<td class="${thickCls}" style="background:#f8fafc; color:#7c3aed; font-weight:700; border-bottom:1px solid #cbd5e1; text-align:center;">${grandEve[d]}</td>`;
+        }
+        html += `<td style="background:#f8fafc;"></td></tr>`;
+
+        // 8時
+        html += `<tr style="background:#f8fafc; font-weight:700; border-bottom:3px solid #334155;">
+            <td class="sticky-col-2" style="background:#f8fafc; color:#059669; border-right:2px solid #475569; font-weight:700;">8時</td>`;
+        for (let d = 0; d < numDays; d++) {
+            const thickCls = ((d + 1) % 7 === 0) ? 'border-thick-right' : '';
+            html += `<td class="${thickCls}" style="background:#f8fafc; color:#059669; font-weight:700; border-bottom:1px solid #cbd5e1; text-align:center;">${grandH8[d]}</td>`;
+        }
+        html += `<td style="background:#f8fafc;"></td></tr>`;
 
         checkTbody.innerHTML = html;
 
@@ -5082,9 +5212,9 @@ document.addEventListener('DOMContentLoaded', () => {
             const fOff = `=COUNTIF(${rng},"休")+0.5*(COUNTIF(${rng},"○/休")+COUNTIF(${rng},"〇/休")+COUNTIF(${rng},"休/○")+COUNTIF(${rng},"休/〇"))`;
             const fPaid = `=COUNTIF(${rng},"有")+0.5*(COUNTIF(${rng},"○/有")+COUNTIF(${rng},"〇/有")+COUNTIF(${rng},"有/○")+COUNTIF(${rng},"有/〇"))`;
             const fRef = `=COUNTIF(${rng},"上1")+COUNTIF(${rng},"上2")+COUNTIF(${rng},"上3")+COUNTIF(${rng},"上4")+COUNTIF(${rng},"上5")+COUNTIF(${rng},"下1")+COUNTIF(${rng},"下2")+COUNTIF(${rng},"下3")`;
-            const fEarly = `=COUNTIF(${rng},"早")+COUNTIF(${rng},"ハヤ")`;
-            const fLate = `=COUNTIF(${rng},"遅")+COUNTIF(${rng},"オソ")`;
-            const fEve = `=COUNTIF(${rng},"E")+COUNTIF(${rng},"イブ")`;
+            const fEarly = `=COUNTIF(${rng},"早")`;
+            const fLate = `=COUNTIF(${rng},"遅")`;
+            const fEve = `=COUNTIF(${rng},"E")`;
             const fH8 = `=COUNTIF(${rng},"8時")`;
 
             tableHtml += `    <td style="width:105px; height:33px; font-weight:bold; ${borderThin} ${rowBottom} text-align:center;">${fWork}</td>
@@ -5226,7 +5356,7 @@ document.addEventListener('DOMContentLoaded', () => {
         for (let d = 0; d < NUM_DAYS; d++) {
             const col = getExcelColName(d + 1);
             const rightBorder = ((d + 1) === NUM_DAYS) ? borderThickR : (((d + 1) % 7 === 0) ? borderMediumR : '');
-            const fEarly = `=COUNTIF(INDIRECT("${col}$4:${col}"&(ROW()-8)),"早")+COUNTIF(INDIRECT("${col}$4:${col}"&(ROW()-8)),"ハヤ")`;
+            const fEarly = `=COUNTIF(INDIRECT("${col}$4:${col}"&(ROW()-8)),"早")`;
             tableHtml += `    <td style="width:115px; min-width:115px; max-width:115px; height:38px; color:#334155; font-weight:bold; ${borderThin} ${rightBorder} border-bottom:0.5pt solid #cbd5e1; text-align:center;">${fEarly}</td>\n`;
         }
         tableHtml += `    <td style="width:105px; height:38px; color:#334155; font-weight:bold; ${borderThin} border-bottom:0.5pt solid #cbd5e1; text-align:center;">=SUM(B${earlyRowIdx}:AC${earlyRowIdx})</td>
@@ -5242,7 +5372,7 @@ document.addEventListener('DOMContentLoaded', () => {
         for (let d = 0; d < NUM_DAYS; d++) {
             const col = getExcelColName(d + 1);
             const rightBorder = ((d + 1) === NUM_DAYS) ? borderThickR : (((d + 1) % 7 === 0) ? borderMediumR : '');
-            const fLate = `=COUNTIF(INDIRECT("${col}$4:${col}"&(ROW()-9)),"遅")+COUNTIF(INDIRECT("${col}$4:${col}"&(ROW()-9)),"オソ")`;
+            const fLate = `=COUNTIF(INDIRECT("${col}$4:${col}"&(ROW()-9)),"遅")`;
             tableHtml += `    <td style="width:115px; min-width:115px; max-width:115px; height:38px; color:#334155; font-weight:bold; ${borderThin} ${rightBorder} border-bottom:0.5pt solid #cbd5e1; text-align:center;">${fLate}</td>\n`;
         }
         tableHtml += `    <td style="width:105px; height:38px; color:#334155; font-weight:bold; ${borderThin} border-bottom:0.5pt solid #cbd5e1; text-align:center;">=SUM(B${lateRowIdx}:AC${lateRowIdx})</td>
@@ -5258,7 +5388,7 @@ document.addEventListener('DOMContentLoaded', () => {
         for (let d = 0; d < NUM_DAYS; d++) {
             const col = getExcelColName(d + 1);
             const rightBorder = ((d + 1) === NUM_DAYS) ? borderThickR : (((d + 1) % 7 === 0) ? borderMediumR : '');
-            const fEve = `=COUNTIF(INDIRECT("${col}$4:${col}"&(ROW()-10)),"E")+COUNTIF(INDIRECT("${col}$4:${col}"&(ROW()-10)),"イブ")`;
+            const fEve = `=COUNTIF(INDIRECT("${col}$4:${col}"&(ROW()-10)),"E")`;
             tableHtml += `    <td style="width:115px; min-width:115px; max-width:115px; height:38px; color:#334155; font-weight:bold; ${borderThin} ${rightBorder} border-bottom:0.5pt solid #cbd5e1; text-align:center;">${fEve}</td>\n`;
         }
         tableHtml += `    <td style="width:105px; height:38px; color:#334155; font-weight:bold; ${borderThin} border-bottom:0.5pt solid #cbd5e1; text-align:center;">=SUM(B${eveRowIdx}:AC${eveRowIdx})</td>
@@ -5319,7 +5449,8 @@ document.addEventListener('DOMContentLoaded', () => {
                     standardHolidays: stdVal,
                     dates: term.dates,
                     dayOffsets: [...dayOffsets],
-                    isST: isST
+                    isST: isST,
+                    stDailyWork: getLinkedSTDailyWork()
                 });
                 gridToCopy = scheduler.grid;
                 statsToCopy = scheduler.calculateStats();
@@ -5893,8 +6024,8 @@ document.addEventListener('DOMContentLoaded', () => {
         const url = URL.createObjectURL(blob);
         const link = document.createElement('a');
         link.setAttribute('href', url);
-        const termLabel = term.badgeText || `${term.first.m}月${term.first.day}日～${term.last.m}月${term.last.day}日`;
-        link.setAttribute('download', `【${termLabel}】ST希望勤務入力シート.xlsx`);
+        // ★ ユーザー指示: ST用空白シートファイル名は「ST4月1日～4月28日スタッフ希望勤務入力シート.xlsx」
+        link.setAttribute('download', `ST${term.first.m}月${term.first.day}日～${term.last.m}月${term.last.day}日スタッフ希望勤務入力シート.xlsx`);
         document.body.appendChild(link);
         link.click();
         setTimeout(() => {
@@ -6563,7 +6694,8 @@ document.addEventListener('DOMContentLoaded', () => {
                     standardHolidays: stdHolidayVal,
                     dates: term.dates,
                     dayOffsets: [...dayOffsets],
-                    isST: isST
+                    isST: isST,
+                    stDailyWork: getLinkedSTDailyWork()
                 });
             }
 
@@ -6708,7 +6840,8 @@ document.addEventListener('DOMContentLoaded', () => {
                     standardHolidays: stdVal,
                     dates: term.dates,
                     dayOffsets: [...dayOffsets],
-                    isST: isST
+                    isST: isST,
+                    stDailyWork: getLinkedSTDailyWork()
                 });
                 gridToExport = scheduler.grid;
                 statsToExport = scheduler.calculateStats();
@@ -6933,9 +7066,9 @@ document.addEventListener('DOMContentLoaded', () => {
             const fOff = `COUNTIF(${rng},&quot;休&quot;)+0.5*(COUNTIF(${rng},&quot;○/休&quot;)+COUNTIF(${rng},&quot;〇/休&quot;)+COUNTIF(${rng},&quot;休/○&quot;)+COUNTIF(${rng},&quot;休/〇&quot;))`;
             const fPaid = `COUNTIF(${rng},&quot;有&quot;)+0.5*(COUNTIF(${rng},&quot;○/有&quot;)+COUNTIF(${rng},&quot;〇/有&quot;)+COUNTIF(${rng},&quot;有/○&quot;)+COUNTIF(${rng},&quot;有/〇&quot;))`;
             const fRef = makeRefHolidayFormulaXml(rng);
-            const fEarly = `COUNTIF(${rng},&quot;早&quot;)+COUNTIF(${rng},&quot;ハヤ&quot;)`;
-            const fLate = `COUNTIF(${rng},&quot;遅&quot;)+COUNTIF(${rng},&quot;オソ&quot;)`;
-            const fEve = `COUNTIF(${rng},&quot;E&quot;)+COUNTIF(${rng},&quot;イブ&quot;)`;
+            const fEarly = `COUNTIF(${rng},&quot;早&quot;)`;
+            const fLate = `COUNTIF(${rng},&quot;遅&quot;)`;
+            const fEve = `COUNTIF(${rng},&quot;E&quot;)`;
             const fH8 = `COUNTIF(${rng},&quot;8時&quot;)`;
 
             sheet1 += `\n      <c r="${colWork}${r}" s="8"><f>${fWork}</f><v>0</v></c>
@@ -7008,9 +7141,9 @@ document.addEventListener('DOMContentLoaded', () => {
             sheet1 += `\n    </row>`;
         }
 
-        renderSpecialRow(endRow + 3, '早番 (早/ハヤ)', 10, ['早', 'ハヤ']);
-        renderSpecialRow(endRow + 4, '遅番 (遅/オソ)', 11, ['遅', 'オソ']);
-        renderSpecialRow(endRow + 5, 'イブニング (E/イブ)', 12, ['E', 'イブ']);
+        renderSpecialRow(endRow + 3, '早番 (早)', 10, ['早']);
+        renderSpecialRow(endRow + 4, '遅番 (遅)', 11, ['遅']);
+        renderSpecialRow(endRow + 5, 'イブニング (E)', 12, ['E']);
         renderSpecialRow(endRow + 6, '8:00 (8時)', 13, ['8時']);
 
         // 専従人数

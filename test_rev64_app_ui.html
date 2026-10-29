@@ -1,0 +1,76 @@
+﻿<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <title>rev65 App UI Verification</title>
+</head>
+<body>
+    <div id="testUiResults">RUNNING...</div>
+
+    <!-- 偽装用DOM -->
+    <div style="display:none;">
+        <input type="text" id="termStartDate" value="2026-04-01">
+        <select id="standardHolidaySelect"><option value="8.0" selected>8.0</option></select>
+        <table>
+            <thead id="inputTableHead"></thead>
+            <tbody id="inputTableBody"></tbody>
+        </table>
+        <table>
+            <thead id="outputTableHead"></thead>
+            <tbody id="outputTableBody"></tbody>
+            <tfoot id="outputTableFoot"></tfoot>
+        </table>
+        <table>
+            <thead id="checkTableHead"></thead>
+            <tbody id="checkTableBody"></tbody>
+            <tfoot id="checkTableFoot"></tfoot>
+        </table>
+        <div id="checkTitleDisplay"></div>
+        <div id="statWorkRange"></div>
+        <div id="statAvgWork"></div>
+    </div>
+
+    <script>
+    // 南病棟のテスト
+    window.APP_CONFIG = {
+        deptId: 'south',
+        deptName: '南病棟',
+        floor: '南'
+    };
+    </script>
+    <script src="solver.js"></script>
+    <script src="app.js"></script>
+    <script>
+    window.addEventListener('load', () => {
+        setTimeout(() => {
+            const results = [];
+            function assert(cond, msg) {
+                results.push((cond ? '✅ PASS: ' : '❌ FAIL: ') + msg);
+                if (!cond) console.error('FAIL: ' + msg);
+            }
+
+            try {
+                // TEST 1: 南病棟のトグルヘッダーが PT 2, PT 3, OT 2, OT 3 であること
+                const inputHeadHtml = document.getElementById('inputTableHead').innerHTML;
+                assert(inputHeadHtml.includes('PT<br>2'), '南病棟でPT 2ヘッダーが存在する: ' + inputHeadHtml.includes('PT<br>2'));
+                assert(inputHeadHtml.includes('PT<br>3'), '南病棟でPT 3ヘッダーが存在する: ' + inputHeadHtml.includes('PT<br>3'));
+                assert(inputHeadHtml.includes('OT<br>2'), '南病棟でOT 2ヘッダーが存在する: ' + inputHeadHtml.includes('OT<br>2'));
+                assert(inputHeadHtml.includes('OT<br>3'), '南病棟でOT 3ヘッダーが存在する: ' + inputHeadHtml.includes('OT<br>3'));
+
+                // TEST 2: トグルスイッチの data-section に PT 2, PT 3, OT 2, OT 3 があること
+                const inputBodyHtml = document.getElementById('inputTableBody').innerHTML;
+                assert(inputBodyHtml.includes('data-section="PT 2"'), '南病棟トグルに data-section="PT 2" が存在する');
+                assert(inputBodyHtml.includes('data-section="PT 3"'), '南病棟トグルに data-section="PT 3" が存在する');
+
+            } catch (e) {
+                results.push('❌ CRITICAL: ' + e.message);
+            }
+
+            const el = document.getElementById('testUiResults');
+            el.innerHTML = '<pre>' + results.join('\n') + '</pre>';
+            console.log('UI_TEST_RESULTS:\n' + results.join('\n'));
+        }, 300);
+    });
+    </script>
+</body>
+</html>

@@ -1,0 +1,88 @@
+﻿<!DOCTYPE html>
+<html lang="ja"><head>
+    <meta charset="UTF-8">
+    <title>Rev64 App UI Verification</title>
+</head>
+<body>
+    <div id="testUiResults"><pre>❌ FAIL: 南病棟でPT 2ヘッダーが存在する
+❌ FAIL: 南病棟でPT 3ヘッダーが存在する
+❌ FAIL: 南病棟でOT 2ヘッダーが存在する
+❌ FAIL: 南病棟でOT 3ヘッダーが存在する</pre></div>
+
+    <!-- 偽装用DOM -->
+    <div style="display:none;">
+        <input type="text" id="termStartDate" value="2026-04-01">
+        <select id="standardHolidaySelect"><option value="8.0" selected="">8.0</option></select>
+        <table>
+            <thead id="inputTableHead"></thead>
+            <tbody id="inputTableBody"></tbody>
+        </table>
+        <table>
+            <thead id="outputTableHead"></thead>
+            <tbody id="outputTableBody"></tbody>
+            <tfoot id="outputTableFoot"></tfoot>
+        </table>
+        <table>
+            <thead id="checkTableHead"></thead>
+            <tbody id="checkTableBody"></tbody>
+            <tfoot id="checkTableFoot"></tfoot>
+        </table>
+        <div id="checkTitleDisplay"></div>
+        <div id="statWorkRange"></div>
+        <div id="statAvgWork"></div>
+    </div>
+
+    <script>
+    // 南病棟のテスト
+    window.APP_CONFIG = {
+        deptId: 'south',
+        deptName: '南病棟',
+        floor: '南'
+    };
+    </script>
+    <script src="solver.js"></script>
+    <script src="app.js"></script>
+    <script>
+    (function() {
+        const results = [];
+        function assert(cond, msg) {
+            results.push((cond ? '✅ PASS: ' : '❌ FAIL: ') + msg);
+            if (!cond) console.error('FAIL: ' + msg);
+        }
+
+        try {
+            // TEST 1: 南病棟のトグルヘッダーが PT 2, PT 3, OT 2, OT 3 であること
+            const inputHeadHtml = document.getElementById('inputTableHead').innerHTML;
+            assert(inputHeadHtml.includes('PT<br>2'), '南病棟でPT 2ヘッダーが存在する');
+            assert(inputHeadHtml.includes('PT<br>3'), '南病棟でPT 3ヘッダーが存在する');
+            assert(inputHeadHtml.includes('OT<br>2'), '南病棟でOT 2ヘッダーが存在する');
+            assert(inputHeadHtml.includes('OT<br>3'), '南病棟でOT 3ヘッダーが存在する');
+
+            // TEST 2: 1階病棟モードでST参照行の列数検証
+            window.APP_CONFIG = { deptId: '1f', deptName: '1階病棟', floor: '1F' };
+            // STのダミーデータをLocalStorageに投入
+            const stData = {
+                staffList: [
+                    { id: 1, name: 'ST 01', floor: '1F', isUnused: false, days: ['休', '○', '早', '○'] },
+                    { id: 2, name: 'ST 02', floor: '1F', isUnused: false, days: ['○', '早', '休', '○'] }
+                ],
+                outputGrid: [
+                    [{ symbol: '休' }, { symbol: '○' }, { symbol: '早' }, { symbol: '○' }],
+                    [{ symbol: '○' }, { symbol: '早' }, { symbol: '休' }, { symbol: '○' }]
+                ]
+            };
+            localStorage.setItem('shift_schedule_st_term_2026-04-01', JSON.stringify(stData));
+
+            // 再描画
+            location.reload; // ここでは関数を直接テスト
+
+        } catch (e) {
+            results.push('❌ CRITICAL: ' + e.message);
+        }
+
+        const el = document.getElementById('testUiResults');
+        el.innerHTML = '<pre>' + results.join('\n') + '</pre>';
+    })();
+    </script>
+
+</body></html>

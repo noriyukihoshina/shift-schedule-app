@@ -1,4 +1,4 @@
-﻿/* 勤務表作成システム - スタイルシート */
+/* 勤務表作成システム - スタイルシート */
 
 :root {
     --primary: #2563eb;
@@ -376,6 +376,8 @@ thead th.sticky-col-2 {
 .flag-col {
     width: 42px;
     min-width: 42px;
+    max-width: 48px;
+    text-align: center;
 }
 
 /* セルスタイル */
