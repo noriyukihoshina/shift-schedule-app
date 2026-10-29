@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>勤務予定表 自動作成システム - マスターテーブル</title>
-    <link rel="stylesheet" href="style.css?v=20261029_rev66">
+    <link rel="stylesheet" href="style.css?v=20261029_rev67">
 </head>
 <body class="theme-master">
 
@@ -21,6 +21,9 @@
             </span>
             <button type="button" id="manualCloudSyncBtn" title="クラウド上の最新データ（別PCでの変更内容）を今すぐ読み込みます" style="background: rgba(255,255,255,0.15); color: #ffffff; border: 1px solid rgba(255,255,255,0.35); padding: 4px 10px; border-radius: 9999px; font-size: 0.78rem; font-weight: 700; cursor: pointer; display: inline-flex; align-items: center; gap: 4px;">
                 🔄 最新同期
+            </button>
+            <button type="button" class="global-print-btn no-print" onclick="window.print()" title="" style="background: #2563eb; color: #ffffff; border: 1px solid #1d4ed8; padding: 4px 14px; border-radius: 9999px; font-size: 0.82rem; font-weight: 700; cursor: pointer; display: inline-flex; align-items: center; gap: 4px; box-shadow: 0 1px 2px rgba(0,0,0,0.1);">
+                🖨️ 印刷
             </button>
         </div>
     </header>
@@ -676,8 +679,8 @@
             theme: 'theme-master'
         };
     </script>
-    <script src="solver.js?v=20261029_rev66"></script>
-    <script src="app.js?v=20261029_rev66"></script>
+    <script src="solver.js?v=20261029_rev67"></script>
+    <script src="app.js?v=20261029_rev67"></script>
 </body>
 </html>
 

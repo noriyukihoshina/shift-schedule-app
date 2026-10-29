@@ -1211,3 +1211,65 @@ body.theme-south thead th.sticky-col-2 {
     background-color: #e9d5ff !important;
 }
 
+/* =========================================================================
+   印刷用スタイル (@media print)
+   ========================================================================= */
+@media print {
+    body {
+        background: #ffffff !important;
+        color: #000000 !important;
+        font-size: 9pt !important;
+        margin: 0 !important;
+        padding: 0 !important;
+    }
+
+    /* 印刷時に非表示にする要素 */
+    .app-header,
+    .tab-container,
+    .toolbar-card,
+    .dept-nav-container,
+    .btn,
+    button,
+    .no-print,
+    .modal-overlay,
+    #toastContainer {
+        display: none !important;
+    }
+
+    /* メインコンテンツ・テーブル全幅表示 */
+    .main-content,
+    .tab-panel.active,
+    .table-container {
+        display: block !important;
+        width: 100% !important;
+        margin: 0 !important;
+        padding: 0 !important;
+        overflow: visible !important;
+        box-shadow: none !important;
+        border: none !important;
+    }
+
+    table {
+        width: 100% !important;
+        border-collapse: collapse !important;
+        page-break-inside: auto;
+    }
+
+    tr {
+        page-break-inside: avoid;
+        page-break-after: auto;
+    }
+
+    th, td {
+        border: 1px solid #94a3b8 !important;
+        font-size: 8pt !important;
+        padding: 2px 3px !important;
+    }
+
+    .sticky-col-1,
+    .sticky-col-2 {
+        position: static !important;
+    }
+}
+
+

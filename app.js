@@ -1973,45 +1973,6 @@ document.addEventListener('DOMContentLoaded', () => {
                         <input type="text" class="staff-remarks-input" data-s="${sIdx}" value="${escapeHtmlText(staff.remarks || '')}" placeholder="委員会・用事等のメモ" style="width:100%; border:1px solid #cbd5e1; border-radius:3px; padding:2px 6px; font-size:0.78rem; background:white;">
                     </td>
                 `;
-            } else if (isLife) {
-                // ★ 生活期テーブル専用行セル（訪問・通所・Cl1・Cl2・管理・ハ1〜ハ南、0、0.5）
-                const lifeSecs = ['訪問', '通所', 'Cl1', 'Cl2', '管理', 'ハ1', 'ハ2', 'ハ3', 'ハ南'];
-                lifeSecs.forEach(secName => {
-                    bodyHtml += `
-                        <td class="flag-col" style="background:#f8fafc;">
-                            <label class="toggle-switch" title="${secName}">
-                                <input type="checkbox" ${staff.lifeSection === secName ? 'checked' : ''} data-life-section="${secName}" data-s="${sIdx}">
-                                <span class="toggle-slider"></span>
-                            </label>
-                        </td>
-                    `;
-                });
-                bodyHtml += `
-                    <td class="flag-col" style="background:#fae8ff;">
-                        <label class="toggle-switch" title="0（実数計算で0人換算）">
-                            <input type="checkbox" ${staff.isZeroCount ? 'checked' : ''} data-flag="isZeroCount" data-s="${sIdx}">
-                            <span class="toggle-slider"></span>
-                        </label>
-                    </td>
-                    <td class="flag-col" style="background:#f3e8ff;">
-                        <label class="toggle-switch" title="0.5（実数計算で0.5人換算）">
-                            <input type="checkbox" ${staff.isHalf ? 'checked' : ''} data-flag="isHalf" data-s="${sIdx}">
-                            <span class="toggle-slider"></span>
-                        </label>
-                    </td>
-                    <td class="flag-col" style="background:#fef2e2;">
-                        <label class="toggle-switch" title="6連勤可">
-                            <input type="checkbox" ${staff.allow6Consec ? 'checked' : ''} data-flag="allow6Consec" data-s="${sIdx}">
-                            <span class="toggle-slider danger-slider"></span>
-                        </label>
-                    </td>
-                    <td class="flag-col" style="background:#f8fafc; padding:2px;">
-                        <input type="text" class="staff-prevname-input" data-s="${sIdx}" value="${escapeHtmlText(staff.prevName || '')}" placeholder="旧姓" style="width:100%; border:1px solid #cbd5e1; border-radius:3px; padding:2px 4px; font-size:0.75rem; text-align:center;">
-                    </td>
-                    <td class="remarks-col" style="padding:2px 4px;">
-                        <input type="text" class="staff-remarks-input" data-s="${sIdx}" value="${escapeHtmlText(staff.remarks || '')}" placeholder="メモ" style="width:100%; border:1px solid #cbd5e1; border-radius:3px; padding:2px 6px; font-size:0.78rem; background:white;">
-                    </td>
-                `;
             }
 
             bodyHtml += `</tr>`;
@@ -4408,15 +4369,22 @@ document.addEventListener('DOMContentLoaded', () => {
 
         floorConfigs.forEach((fc, fIdx) => {
             const fData = floorDataMap[fc.id];
-            const fStaffList = (fData && Array.isArray(fData.staffList)) ? fData.staffList : [];
+            const rawStaffList = (fData && Array.isArray(fData.staffList)) ? fData.staffList : [];
+            // ★ 生活期テーブルのセクション（訪問、通所、Cl1、Cl2、管理）はマスターテーブルに記載しない
+            const fStaffList = rawStaffList.filter(s => {
+                const sec = s.lifeSection || s.section || '';
+                return !['訪問', '通所', 'Cl1', 'Cl2', '管理'].includes(sec);
+            });
             const fGrid = (fData && Array.isArray(fData.outputGrid)) ? fData.outputGrid : null;
             const fOffsets = (fData && Array.isArray(fData.dayOffsets)) ? fData.dayOffsets : createDefaultDayOffsets(term.dates);
 
-            // 所属STスタッフの抽出
+            // 所属STスタッフの抽出（生活期スタッフ除外）
             const floorStStaff = [];
             const floorStGrid = [];
             if (stData && Array.isArray(stData.staffList)) {
                 stData.staffList.forEach((st, sIdx) => {
+                    const sec = st.lifeSection || st.section || '';
+                    if (['訪問', '通所', 'Cl1', 'Cl2', '管理'].includes(sec)) return;
                     if (!st.isUnused && (st.floor === fc.floorKey || (st.floor && st.floor.includes(fc.floorKey)))) {
                         floorStStaff.push(st);
                         if (stData.outputGrid && stData.outputGrid[sIdx]) {
@@ -4500,7 +4468,17 @@ document.addEventListener('DOMContentLoaded', () => {
                 const thickCls = ((d + 1) % 7 === 0) ? 'border-thick-right' : '';
                 html += `<th class="${thickCls}" style="background:${fc.headerBg}; font-size:0.78rem; padding:4px 2px; color:#1e293b; border-bottom:1px solid ${fc.border};">${di.m}月${di.day}日</th>`;
             }
-            html += `<th style="background:${fc.headerBg}; color:${fc.badgeColor}; min-width:160px; max-width:260px; font-size:0.8rem; text-align:center; border-bottom:1px solid ${fc.border};">備考（メモ）</th></tr>`;
+            html += `
+                <th title="出勤日数" style="background:${fc.headerBg}; color:#1e293b; border-bottom:1px solid ${fc.border}; width:38px; min-width:38px; text-align:center; font-size:0.75rem;">出勤</th>
+                <th title="公休日数" style="background:${fc.headerBg}; color:#1e293b; border-bottom:1px solid ${fc.border}; width:38px; min-width:38px; text-align:center; font-size:0.75rem;">公休</th>
+                <th title="有給休暇日数" style="background:${fc.headerBg}; color:#1e293b; border-bottom:1px solid ${fc.border}; width:38px; min-width:38px; text-align:center; font-size:0.75rem; font-weight:800;">有休</th>
+                <th title="リフレッシュ休暇日数" style="background:${fc.headerBg}; color:#1e293b; border-bottom:1px solid ${fc.border}; width:38px; min-width:38px; text-align:center; font-size:0.75rem;">リフ</th>
+                <th title="早番回数" style="background:${fc.headerBg}; color:#1e293b; border-bottom:1px solid ${fc.border}; width:32px; min-width:32px; text-align:center; font-size:0.75rem;">早</th>
+                <th title="遅番回数" style="background:${fc.headerBg}; color:#1e293b; border-bottom:1px solid ${fc.border}; width:32px; min-width:32px; text-align:center; font-size:0.75rem;">遅</th>
+                <th title="イブニング回数" style="background:${fc.headerBg}; color:#1e293b; border-bottom:1px solid ${fc.border}; width:32px; min-width:32px; text-align:center; font-size:0.75rem;">E</th>
+                <th title="8時開始回数" style="background:${fc.headerBg}; color:#1e293b; border-bottom:1px solid ${fc.border}; width:32px; min-width:32px; text-align:center; font-size:0.75rem;">8時</th>
+                <th style="background:${fc.headerBg}; color:${fc.badgeColor}; min-width:160px; max-width:260px; font-size:0.8rem; text-align:center; border-bottom:1px solid ${fc.border};">備考（メモ）</th>
+            </tr>`;
 
             // テーブルヘッダー2: 曜日ヘッダー
             html += `<tr style="background:${fc.headerBg}; font-weight:700;">
@@ -4513,7 +4491,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 const wBg = di.wIdx === 5 ? '#eff6ff' : ((di.wIdx === 6 || di.isHoliday) ? '#fef2f2' : fc.headerBg);
                 html += `<th class="${thickCls}" style="background:${wBg}; color:${wColor}; font-size:0.8rem; padding:2px; border-bottom:1px solid ${fc.border};">${di.weekday}</th>`;
             }
-            html += `<th style="background:${fc.headerBg};"></th></tr>`;
+            html += `<th colspan="9" style="background:${fc.headerBg}; border-bottom:1px solid ${fc.border};"></th></tr>`;
 
             // サマリー行1: ±補正 (5行目相当)
             html += `<tr style="background:${fc.bg}; font-weight:700;">
@@ -4526,7 +4504,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 const offColor = off > 0 ? '#15803d' : (off < 0 ? '#dc2626' : '#64748b');
                 html += `<td class="${thickCls}" style="background:${fc.bg}; color:${offColor}; font-weight:700; border-bottom:1px solid ${fc.border};">${offText}</td>`;
             }
-            html += `<td style="background:${fc.bg};"></td></tr>`;
+            html += `<td colspan="9" style="background:${fc.bg};"></td></tr>`;
 
             // サマリー行2: 出勤人数合計 (6行目相当) ★ご要望: 集計はグレー背景に！
             html += `<tr style="background:#f1f5f9; font-weight:700;">
@@ -4535,7 +4513,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 const thickCls = ((d + 1) % 7 === 0) ? 'border-thick-right' : '';
                 html += `<td class="${thickCls}" style="background:#f1f5f9; color:#0f172a; font-weight:800; border-bottom:1px solid #cbd5e1; text-align:center;">${dailyTotal[d]}</td>`;
             }
-            html += `<td style="background:#f1f5f9;"></td></tr>`;
+            html += `<td colspan="9" style="background:#f1f5f9;"></td></tr>`;
 
             // サマリー行3: 実数合計 (7行目相当) ★ご要望: 集計はグレー背景に！
             html += `<tr style="background:#e2e8f0; font-weight:700;">
@@ -4544,7 +4522,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 const thickCls = ((d + 1) % 7 === 0) ? 'border-thick-right' : '';
                 html += `<td class="${thickCls}" style="background:#e2e8f0; color:#0369a1; font-weight:800; border-bottom:1px solid #cbd5e1; text-align:center;">${dailyReal[d]}</td>`;
             }
-            html += `<td style="background:#e2e8f0;"></td></tr>`;
+            html += `<td colspan="9" style="background:#e2e8f0;"></td></tr>`;
 
             // サマリー行4: 早 (8行目相当)
             html += `<tr style="background:${fc.bg}; font-weight:600;">
@@ -4553,7 +4531,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 const thickCls = ((d + 1) % 7 === 0) ? 'border-thick-right' : '';
                 html += `<td class="${thickCls}" style="background:${fc.bg}; color:#ea580c; font-weight:700; border-bottom:1px solid ${fc.border};">${dailyEarly[d]}</td>`;
             }
-            html += `<td style="background:${fc.bg};"></td></tr>`;
+            html += `<td colspan="9" style="background:${fc.bg};"></td></tr>`;
 
             // サマリー行5: 遅 (9行目相当)
             html += `<tr style="background:${fc.bg}; font-weight:600;">
@@ -4562,7 +4540,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 const thickCls = ((d + 1) % 7 === 0) ? 'border-thick-right' : '';
                 html += `<td class="${thickCls}" style="background:${fc.bg}; color:#0284c7; font-weight:700; border-bottom:1px solid ${fc.border};">${dailyLate[d]}</td>`;
             }
-            html += `<td style="background:${fc.bg};"></td></tr>`;
+            html += `<td colspan="9" style="background:${fc.bg};"></td></tr>`;
 
             // サマリー行6: E (10行目相当)
             html += `<tr style="background:${fc.bg}; font-weight:600;">
@@ -4571,7 +4549,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 const thickCls = ((d + 1) % 7 === 0) ? 'border-thick-right' : '';
                 html += `<td class="${thickCls}" style="background:${fc.bg}; color:#7c3aed; font-weight:700; border-bottom:1px solid ${fc.border};">${dailyEve[d]}</td>`;
             }
-            html += `<td style="background:${fc.bg};"></td></tr>`;
+            html += `<td colspan="9" style="background:${fc.bg};"></td></tr>`;
 
             // サマリー行7: 8時 (11行目相当)
             html += `<tr style="background:${fc.bg}; font-weight:600;">
@@ -4580,7 +4558,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 const thickCls = ((d + 1) % 7 === 0) ? 'border-thick-right' : '';
                 html += `<td class="${thickCls}" style="background:${fc.bg}; color:#059669; font-weight:700; border-bottom:1px solid ${fc.border};">${dailyH8[d]}</td>`;
             }
-            html += `<td style="background:${fc.bg};"></td></tr>`;
+            html += `<td colspan="9" style="background:${fc.bg};"></td></tr>`;
 
             // サマリー行8: 「！表示する」トグルボタン行 (12行目相当)
             html += `<tr style="background:${fc.bg}; border-bottom: 2px solid ${fc.border};">
@@ -4593,7 +4571,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 const thickCls = ((d + 1) % 7 === 0) ? 'border-thick-right' : '';
                 html += `<td class="${thickCls}" style="background:${fc.bg}; border-bottom:2px solid ${fc.border};"></td>`;
             }
-            html += `<td style="background:${fc.bg};"></td></tr>`;
+            html += `<td colspan="9" style="background:${fc.bg};"></td></tr>`;
 
             // 詳細行群: デフォルト非表示、並び順: PTA → PTB → OTA → OTB → ST
             const orderedStaffList = [];
@@ -4626,7 +4604,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 html += `<tr class="master-detail-row master-detail-${fc.id}" style="display:none; background:#ffffff;">
                     <td class="sticky-col-1" style="background:#f8fafc; color:#64748b; font-size:0.75rem; text-align:center; border-right:1px solid #cbd5e1;">-</td>
                     <td class="sticky-col-2" style="background:#ffffff; color:#94a3b8; font-size:0.8rem; text-align:left; border-right:2px solid #475569; padding-left:8px;">※${fc.label}のデータは未保存です（${fc.label}テーブルで保存すると集約表示されます）</td>
-                    <td colspan="${numDays + 1}" style="background:#ffffff; color:#94a3b8; font-size:0.8rem; text-align:center; border-bottom:1px solid #e2e8f0;">-</td>
+                    <td colspan="${numDays + 9}" style="background:#ffffff; color:#94a3b8; font-size:0.8rem; text-align:center; border-bottom:1px solid #e2e8f0;">-</td>
                 </tr>`;
             }
 
@@ -4655,29 +4633,74 @@ document.addEventListener('DOMContentLoaded', () => {
                     let color = '#334155';
                     let bg = '#ffffff';
 
-                    if (isCellFixed) {
-                        color = '#dc2626'; // 本人が希望した枠のみ赤字
-                    } else {
-                        // 希望以外（システム自動生成された勤務・公休）は通常色（休は黒字）
-                        if (sym === '休') { color = '#334155'; bg = '#ffffff'; }
-                        else if (sym === '有') { color = '#b45309'; bg = '#fffbeb'; }
-                        else if (sym === '早' || sym === 'ハヤ') { color = '#c2410c'; bg = '#fff7ed'; }
-                        else if (sym === '遅' || sym === 'オソ') { color = '#0369a1'; bg = '#f0f9ff'; }
-                        else if (sym === 'E' || sym === 'イブ') { color = '#7e22ce'; bg = '#faf5ff'; }
-                        else if (sym === '8時') { color = '#15803d'; bg = '#f0fdf4'; }
-                        else if (sym.startsWith('上') || sym.startsWith('下')) { color = '#be185d'; bg = '#fdf2f8'; }
+                // ★ 勤務の右端に「出勤・公休などのスタッフ毎の集計」を計算
+                let sWork = 0, sOff = 0, sPaid = 0, sRef = 0, sEarly = 0, sLate = 0, sEve = 0, sH8 = 0;
+                const isZero = !!(s.isZeroCount || s.lifeSection === '管理' || s.lifeSection === 'Cl1');
+                const isHalf = !!s.isHalf;
+
+                for (let d = 0; d < numDays; d++) {
+                    const cell = item.gridRow ? item.gridRow[d] : null;
+                    const sym = (cell && typeof cell === 'object') ? (cell.symbol || '') : (cell || '');
+                    if (!sym) continue;
+
+                    if (sym === '休') {
+                        sOff++;
+                    } else if (sym === '有') {
+                        sPaid++;
+                    } else if (sym.includes('リフ') || sym.startsWith('上') || sym.startsWith('下')) {
+                        sRef++;
+                    } else if (sym === '早' || sym === 'ハヤ') {
+                        if (sym === '早') sEarly++;
+                        if (!isZero) sWork += (isHalf ? 0.5 : 1.0);
+                    } else if (sym === '遅' || sym === 'オソ') {
+                        if (sym === '遅') sLate++;
+                        if (!isZero) sWork += (isHalf ? 0.5 : 1.0);
+                    } else if (sym === 'E' || sym === 'イブ') {
+                        if (sym === 'E') sEve++;
+                        if (!isZero) sWork += (isHalf ? 0.5 : 1.0);
+                    } else if (sym === '8時') {
+                        sH8++;
+                        if (!isZero) sWork += (isHalf ? 0.5 : 1.0);
+                    } else if (isWorkSymbol(sym)) {
+                        if (!isZero) sWork += (isHalf ? 0.5 : 1.0);
+                    } else if (sym === '○/休' || sym === '休/○' || sym === '○/有' || sym === '有/○') {
+                        if (!isZero) sWork += 0.5;
+                        if (sym.includes('休')) sOff += 0.5;
+                        if (sym.includes('有')) sPaid += 0.5;
                     }
+
+                    // ★ ご要望: 特殊勤務などに色が付いているが不要（白背景・通常文字、事前希望のみ赤字保持）
+                    const originalWish = (s.days && s.days[d]) ? s.days[d] : '';
+                    const isCellFixed = !!(
+                        (originalWish !== '' && originalWish === sym) ||
+                        (cell && typeof cell === 'object' && cell.isFixed && originalWish !== '')
+                    );
+
+                    const color = isCellFixed ? '#dc2626' : '#334155';
+                    const bg = '#ffffff';
 
                     const fixedCls = isCellFixed ? 'fixed-cell' : 'auto-cell';
                     const titleText = isCellFixed ? '🔒 事前固定希望枠（赤字）' : 'システム自動配置';
 
                     html += `<td class="${thickCls} ${fixedCls}" title="${titleText}" style="background:${bg}; color:${color}; font-weight:700; border-bottom:1px solid #e2e8f0; text-align:center;">${sym}</td>`;
                 }
-                html += `<td class="remarks-cell" style="background:#ffffff; color:#475569; font-size:0.78rem; text-align:left; padding:2px 8px; border-bottom:1px solid #e2e8f0; white-space:normal; word-break:break-all;">${escapeHtmlText(s.remarks || '')}</td></tr>`;
+
+                // 勤務の右端に出勤・公休などのスタッフ毎の集計を記載
+                html += `
+                    <td class="stat-cell" style="font-weight:700; text-align:center; background:#ffffff; color:#1e293b; border-bottom:1px solid #e2e8f0; font-size:0.8rem;">${Number(sWork.toFixed(1))}</td>
+                    <td class="stat-cell" style="font-weight:700; text-align:center; background:#ffffff; color:#1e293b; border-bottom:1px solid #e2e8f0; font-size:0.8rem;">${Number(sOff.toFixed(1))}</td>
+                    <td class="stat-cell" style="font-weight:800; text-align:center; background:#ffffff; color:#1e293b; border-bottom:1px solid #e2e8f0; font-size:0.8rem;">${Number(sPaid.toFixed(1))}</td>
+                    <td class="stat-cell" style="font-weight:600; text-align:center; background:#ffffff; color:#1e293b; border-bottom:1px solid #e2e8f0; font-size:0.8rem;">${Number(sRef.toFixed(1))}</td>
+                    <td class="stat-cell" style="font-weight:600; text-align:center; background:#ffffff; color:#334155; border-bottom:1px solid #e2e8f0; font-size:0.8rem;">${sEarly}</td>
+                    <td class="stat-cell" style="font-weight:600; text-align:center; background:#ffffff; color:#334155; border-bottom:1px solid #e2e8f0; font-size:0.8rem;">${item.isST ? '-' : sLate}</td>
+                    <td class="stat-cell" style="font-weight:600; text-align:center; background:#ffffff; color:#334155; border-bottom:1px solid #e2e8f0; font-size:0.8rem;">${item.isST ? '-' : sEve}</td>
+                    <td class="stat-cell" style="font-weight:600; text-align:center; background:#ffffff; color:#334155; border-bottom:1px solid #e2e8f0; font-size:0.8rem;">${item.isST ? '-' : sH8}</td>
+                    <td class="remarks-cell" style="background:#ffffff; color:#475569; font-size:0.78rem; text-align:left; padding:2px 8px; border-bottom:1px solid #e2e8f0; white-space:normal; word-break:break-all;">${escapeHtmlText(s.remarks || '')}</td>
+                </tr>`;
             });
 
             // フロア間の仕切り余白行
-            html += `<tr style="height:12px; background:#f8fafc;"><td colspan="${numDays + 3}" style="border:none; background:#f8fafc;"></td></tr>`;
+            html += `<tr style="height:12px; background:#f8fafc;"><td colspan="${numDays + 11}" style="border:none; background:#f8fafc;"></td></tr>`;
         });
 
         // ★ ユーザー指示 (添付5): 南の下に全フロア合算「集計」を記載（出勤人数合計・実数合計・早・遅・E・8時）
@@ -4688,7 +4711,7 @@ document.addEventListener('DOMContentLoaded', () => {
             const thickCls = ((d + 1) % 7 === 0) ? 'border-thick-right' : '';
             html += `<td class="${thickCls}" style="background:#f8fafc; color:#0f172a; font-weight:800; font-size:0.95rem; border-bottom:1px solid #cbd5e1; text-align:center;">${grandTotal[d]}</td>`;
         }
-        html += `<td style="background:#f8fafc;"></td></tr>`;
+        html += `<td colspan="9" style="background:#f8fafc;"></td></tr>`;
 
         // 実数合計
         html += `<tr style="background:#f8fafc; font-weight:700;">
@@ -4697,7 +4720,7 @@ document.addEventListener('DOMContentLoaded', () => {
             const thickCls = ((d + 1) % 7 === 0) ? 'border-thick-right' : '';
             html += `<td class="${thickCls}" style="background:#f8fafc; color:#0369a1; font-weight:800; font-size:0.95rem; border-bottom:1px solid #cbd5e1; text-align:center;">${Number(grandReal[d].toFixed(1))}</td>`;
         }
-        html += `<td style="background:#f8fafc;"></td></tr>`;
+        html += `<td colspan="9" style="background:#f8fafc;"></td></tr>`;
 
         // 早
         html += `<tr style="background:#f8fafc; font-weight:700;">
@@ -4706,7 +4729,7 @@ document.addEventListener('DOMContentLoaded', () => {
             const thickCls = ((d + 1) % 7 === 0) ? 'border-thick-right' : '';
             html += `<td class="${thickCls}" style="background:#f8fafc; color:#ea580c; font-weight:700; border-bottom:1px solid #cbd5e1; text-align:center;">${grandEarly[d]}</td>`;
         }
-        html += `<td style="background:#f8fafc;"></td></tr>`;
+        html += `<td colspan="9" style="background:#f8fafc;"></td></tr>`;
 
         // 遅
         html += `<tr style="background:#f8fafc; font-weight:700;">
@@ -4715,7 +4738,7 @@ document.addEventListener('DOMContentLoaded', () => {
             const thickCls = ((d + 1) % 7 === 0) ? 'border-thick-right' : '';
             html += `<td class="${thickCls}" style="background:#f8fafc; color:#0284c7; font-weight:700; border-bottom:1px solid #cbd5e1; text-align:center;">${grandLate[d]}</td>`;
         }
-        html += `<td style="background:#f8fafc;"></td></tr>`;
+        html += `<td colspan="9" style="background:#f8fafc;"></td></tr>`;
 
         // E
         html += `<tr style="background:#f8fafc; font-weight:700;">
@@ -4724,7 +4747,7 @@ document.addEventListener('DOMContentLoaded', () => {
             const thickCls = ((d + 1) % 7 === 0) ? 'border-thick-right' : '';
             html += `<td class="${thickCls}" style="background:#f8fafc; color:#7c3aed; font-weight:700; border-bottom:1px solid #cbd5e1; text-align:center;">${grandEve[d]}</td>`;
         }
-        html += `<td style="background:#f8fafc;"></td></tr>`;
+        html += `<td colspan="9" style="background:#f8fafc;"></td></tr>`;
 
         // 8時
         html += `<tr style="background:#f8fafc; font-weight:700; border-bottom:3px solid #334155;">
@@ -4733,7 +4756,7 @@ document.addEventListener('DOMContentLoaded', () => {
             const thickCls = ((d + 1) % 7 === 0) ? 'border-thick-right' : '';
             html += `<td class="${thickCls}" style="background:#f8fafc; color:#059669; font-weight:700; border-bottom:1px solid #cbd5e1; text-align:center;">${grandH8[d]}</td>`;
         }
-        html += `<td style="background:#f8fafc;"></td></tr>`;
+        html += `<td colspan="9" style="background:#f8fafc;"></td></tr>`;
 
         checkTbody.innerHTML = html;
 
