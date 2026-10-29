@@ -1212,6 +1212,29 @@ body.theme-south thead th.sticky-col-2 {
 }
 
 /* =========================================================================
+   ST参照行: 全テーマ（1f, 2f, 3f, south, life, master等）に関わらずST専用カラーを最優先適用
+   ========================================================================= */
+tr.st-linked-row,
+tr.st-linked-row td,
+tr.st-linked-row .sticky-col-1,
+tr.st-linked-row .sticky-col-2,
+body.theme-1f tr.st-linked-row .sticky-col-1,
+body.theme-1f tr.st-linked-row .sticky-col-2,
+body.theme-2f tr.st-linked-row .sticky-col-1,
+body.theme-2f tr.st-linked-row .sticky-col-2,
+body.theme-3f tr.st-linked-row .sticky-col-1,
+body.theme-3f tr.st-linked-row .sticky-col-2,
+body.theme-south tr.st-linked-row .sticky-col-1,
+body.theme-south tr.st-linked-row .sticky-col-2,
+body.theme-life tr.st-linked-row .sticky-col-1,
+body.theme-life tr.st-linked-row .sticky-col-2,
+body.theme-master tr.st-linked-row .sticky-col-1,
+body.theme-master tr.st-linked-row .sticky-col-2 {
+    background-color: #fff5f8 !important;
+    color: #9d174d !important;
+}
+
+/* =========================================================================
    印刷用スタイル (@media print)
    ========================================================================= */
 @media print {

@@ -4946,11 +4946,18 @@ class ShiftScheduler {
                     staffWorkAmt = 0.5;
                 }
 
-                if (staffWorkAmt > 0 && !isExcludedFromWork) {
+                // ★ セクション別出勤実数の集計（時短0.5スタッフや0カウントを正確に反映）
+                let staffRealAmt = 0;
+                if (!staff.isZeroCount && !isExcludedFromWork) {
+                    const factor = staff.isHalf ? 0.5 : 1.0;
+                    staffRealAmt = staffWorkAmt * factor;
+                }
+
+                if (staffRealAmt > 0) {
                     if (sec in sectionWork) {
-                        sectionWork[sec] += staffWorkAmt;
+                        sectionWork[sec] += staffRealAmt;
                     } else {
-                        sectionWork['その他'] += staffWorkAmt;
+                        sectionWork['その他'] += staffRealAmt;
                     }
                 }
             }

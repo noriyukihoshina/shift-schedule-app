@@ -2065,7 +2065,7 @@ document.addEventListener('DOMContentLoaded', () => {
             bodyHtml += `
                 <tr style="background:#fce7f3; border-top: 3px solid #db2777;">
                     <th colspan="${NUM_DAYS + 24}" style="text-align:left; padding:8px 12px; font-size:0.85rem; font-weight:800; color:#9d174d; letter-spacing:0.03em;">
-                        🌸 【${currentFloor} 所属 STスタッフ（参照表示・ST専用テーブルで作成済み）】
+                        【${currentFloor} 所属 STスタッフ（参照表示・ST専用テーブルで作成済み）】
                     </th>
                 </tr>
             `;
@@ -2073,9 +2073,9 @@ document.addEventListener('DOMContentLoaded', () => {
             linkedStStaffData.staffList.forEach((st, stIdx) => {
                 const rowData = linkedStStaffData.grid[stIdx] || [];
 
-                bodyHtml += `<tr style="background:#fff5f8; color:#334155; opacity:0.95;">`;
-                bodyHtml += `<td class="sticky-col-1 font-mono" style="background:#fff5f8; color:#9d174d; font-weight:800;">ST-${stIdx + 1}</td>`;
-                bodyHtml += `<td class="sticky-col-2 border-thick-right" style="background:#fff5f8; font-weight:700; text-align:left; padding-left:8px;">
+                bodyHtml += `<tr class="st-linked-row" style="background:#fff5f8 !important; color:#334155; opacity:0.95;">`;
+                bodyHtml += `<td class="sticky-col-1 font-mono" style="background:#fff5f8 !important; color:#9d174d !important; font-weight:800;">ST-${stIdx + 1}</td>`;
+                bodyHtml += `<td class="sticky-col-2 border-thick-right" style="background:#fff5f8 !important; color:#9d174d !important; font-weight:700; text-align:left; padding-left:8px;">
                     ${escapeHtmlText(st.name)}
                     ${st.prevName ? `<span style="font-size:0.7rem; color:#64748b;">(${escapeHtmlText(st.prevName)})</span>` : ''}
                     <span style="font-size:0.65rem; background:#fbcfe8; color:#9d174d; padding:1px 5px; border-radius:3px; margin-left:4px; font-weight:700;">${st.floor}</span>
@@ -3844,15 +3844,15 @@ document.addEventListener('DOMContentLoaded', () => {
         if (!linkedStStaffData || !linkedStStaffData.staffList || !linkedStStaffData.grid) return null;
         const stWork = new Array(NUM_DAYS).fill(0);
         linkedStStaffData.staffList.forEach((st, idx) => {
-            if (st.isUnused) return;
+            if (st.isUnused || st.isZeroCount) return;
             const row = linkedStStaffData.grid[idx] || [];
             for (let d = 0; d < NUM_DAYS; d++) {
                 const c = row[d] || { symbol: '' };
                 const sym = (c && typeof c === 'object') ? c.symbol : (c || '');
                 if (isWorkSymbol(sym) && sym !== '研' && sym !== '張') {
                     stWork[d] += (st.isHalf ? 0.5 : 1.0);
-                } else if (sym === '○/休' || sym === '休/○' || sym === '○/有' || sym === '有/○') {
-                    stWork[d] += 0.5;
+                } else if (sym === '○/休' || sym === '休/○' || sym === '○/有' || sym === '有/○' || sym === '〇/休' || sym === '休/〇' || sym === '〇/有' || sym === '有/〇') {
+                    stWork[d] += (st.isHalf ? 0.25 : 0.5);
                 }
             }
         });
@@ -4098,7 +4098,7 @@ document.addEventListener('DOMContentLoaded', () => {
             bodyHtml += `
                 <tr style="background:${stThemeHeaderBg}; border-top: 3px solid ${stThemeBorder};">
                     <th colspan="${NUM_DAYS + 11}" style="text-align:left; padding:8px 12px; font-size:0.85rem; font-weight:800; color:${stThemeTextColor}; letter-spacing:0.03em;">
-                        🌸 【${currentFloor} 所属 STスタッフ（参照表示・ST専用テーブルで作成済み）】
+                        【${currentFloor} 所属 STスタッフ（参照表示・ST専用テーブルで作成済み）】
                     </th>
                 </tr>
             `;
@@ -4111,9 +4111,9 @@ document.addEventListener('DOMContentLoaded', () => {
                 let stRefCount = 0;
                 let stEarlyCount = 0;
 
-                bodyHtml += `<tr style="background:${stThemeBg}; color:#334155; opacity:0.95;">`;
-                bodyHtml += `<td class="sticky-col-1 font-mono" style="background:${stThemeBg}; color:${stThemeTextColor}; font-weight:800;">ST-${stIdx + 1}</td>`;
-                bodyHtml += `<td class="sticky-col-2 border-thick-right" style="background:${stThemeBg}; font-weight:700; text-align:left; padding-left:8px;">
+                bodyHtml += `<tr class="st-linked-row" style="background:${stThemeBg} !important; color:#334155; opacity:0.95;">`;
+                bodyHtml += `<td class="sticky-col-1 font-mono" style="background:${stThemeBg} !important; color:${stThemeTextColor} !important; font-weight:800;">ST-${stIdx + 1}</td>`;
+                bodyHtml += `<td class="sticky-col-2 border-thick-right" style="background:${stThemeBg} !important; color:${stThemeTextColor} !important; font-weight:700; text-align:left; padding-left:8px;">
                     ${escapeHtmlText(st.name)}
                     ${st.prevName ? `<span style="font-size:0.7rem; color:#64748b;">(${escapeHtmlText(st.prevName)})</span>` : ''}
                     <span style="font-size:0.65rem; background:${stThemeBadgeBg}; color:${stThemeTextColor}; padding:1px 5px; border-radius:3px; margin-left:4px; font-weight:700;">${st.floor}</span>
@@ -4372,9 +4372,11 @@ document.addEventListener('DOMContentLoaded', () => {
                 }
                 secTotalSum += secVal;
                 const thickCls = ((d + 1) % 7 === 0) ? 'border-thick-right' : '';
-                footHtml += `<td class="${thickCls}" style="color:${sec.color}; font-weight:800;">${secVal > 0 ? secVal : (sec.name === 'ST' ? '0' : '-')}</td>`;
+                const displayVal = secVal > 0 ? (secVal % 1 === 0 ? secVal : secVal.toFixed(1)) : (sec.name === 'ST' ? '0' : '-');
+                footHtml += `<td class="${thickCls}" style="color:${sec.color}; font-weight:800;">${displayVal}</td>`;
             }
-            footHtml += `<td style="font-weight:800; color:${sec.color};">${secTotalSum}</td><td colspan="8" style="color:#94a3b8;">-</td></tr>`;
+            const displayTotal = secTotalSum % 1 === 0 ? secTotalSum : secTotalSum.toFixed(1);
+            footHtml += `<td style="font-weight:800; color:${sec.color};">${displayTotal}</td><td colspan="8" style="color:#94a3b8;">-</td></tr>`;
         });
 
         // 早番
