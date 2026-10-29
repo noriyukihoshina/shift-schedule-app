@@ -4617,56 +4617,42 @@ document.addEventListener('DOMContentLoaded', () => {
                     <td class="sticky-col-1" style="background:${secBadgeBg}; color:${secBadgeColor}; font-size:0.75rem; font-weight:700; text-align:center; border-right:1px solid #cbd5e1;">${item.sec}</td>
                     <td class="sticky-col-2" style="background:#ffffff; font-weight:600; text-align:left; border-right:2px solid #475569; padding-left:8px;">${escapeHtmlText(s.name)}</td>`;
 
-                for (let d = 0; d < numDays; d++) {
-                    const thickCls = ((d + 1) % 7 === 0) ? 'border-thick-right' : '';
-                    const cell = item.gridRow ? item.gridRow[d] : null;
-                    const sym = (cell && typeof cell === 'object') ? (cell.symbol || '') : (cell || '');
-                    
-                    // ★ 事前固定希望（本人が希望入力した枠）のみ赤字！
-                    // 自動生成された公休（休）や通常勤務（○）は通常文字色（黒字）
-                    const originalWish = (s.days && s.days[d]) ? s.days[d] : '';
-                    const isCellFixed = !!(
-                        (originalWish !== '' && originalWish === sym) ||
-                        (cell && typeof cell === 'object' && cell.isFixed && originalWish !== '')
-                    );
-
-                    let color = '#334155';
-                    let bg = '#ffffff';
-
                 // ★ 勤務の右端に「出勤・公休などのスタッフ毎の集計」を計算
                 let sWork = 0, sOff = 0, sPaid = 0, sRef = 0, sEarly = 0, sLate = 0, sEve = 0, sH8 = 0;
                 const isZero = !!(s.isZeroCount || s.lifeSection === '管理' || s.lifeSection === 'Cl1');
                 const isHalf = !!s.isHalf;
 
                 for (let d = 0; d < numDays; d++) {
+                    const thickCls = ((d + 1) % 7 === 0) ? 'border-thick-right' : '';
                     const cell = item.gridRow ? item.gridRow[d] : null;
                     const sym = (cell && typeof cell === 'object') ? (cell.symbol || '') : (cell || '');
-                    if (!sym) continue;
-
-                    if (sym === '休') {
-                        sOff++;
-                    } else if (sym === '有') {
-                        sPaid++;
-                    } else if (sym.includes('リフ') || sym.startsWith('上') || sym.startsWith('下')) {
-                        sRef++;
-                    } else if (sym === '早' || sym === 'ハヤ') {
-                        if (sym === '早') sEarly++;
-                        if (!isZero) sWork += (isHalf ? 0.5 : 1.0);
-                    } else if (sym === '遅' || sym === 'オソ') {
-                        if (sym === '遅') sLate++;
-                        if (!isZero) sWork += (isHalf ? 0.5 : 1.0);
-                    } else if (sym === 'E' || sym === 'イブ') {
-                        if (sym === 'E') sEve++;
-                        if (!isZero) sWork += (isHalf ? 0.5 : 1.0);
-                    } else if (sym === '8時') {
-                        sH8++;
-                        if (!isZero) sWork += (isHalf ? 0.5 : 1.0);
-                    } else if (isWorkSymbol(sym)) {
-                        if (!isZero) sWork += (isHalf ? 0.5 : 1.0);
-                    } else if (sym === '○/休' || sym === '休/○' || sym === '○/有' || sym === '有/○') {
-                        if (!isZero) sWork += 0.5;
-                        if (sym.includes('休')) sOff += 0.5;
-                        if (sym.includes('有')) sPaid += 0.5;
+                    
+                    if (sym) {
+                        if (sym === '休') {
+                            sOff++;
+                        } else if (sym === '有') {
+                            sPaid++;
+                        } else if (sym.includes('リフ') || sym.startsWith('上') || sym.startsWith('下')) {
+                            sRef++;
+                        } else if (sym === '早' || sym === 'ハヤ') {
+                            if (sym === '早') sEarly++;
+                            if (!isZero) sWork += (isHalf ? 0.5 : 1.0);
+                        } else if (sym === '遅' || sym === 'オソ') {
+                            if (sym === '遅') sLate++;
+                            if (!isZero) sWork += (isHalf ? 0.5 : 1.0);
+                        } else if (sym === 'E' || sym === 'イブ') {
+                            if (sym === 'E') sEve++;
+                            if (!isZero) sWork += (isHalf ? 0.5 : 1.0);
+                        } else if (sym === '8時') {
+                            sH8++;
+                            if (!isZero) sWork += (isHalf ? 0.5 : 1.0);
+                        } else if (isWorkSymbol(sym)) {
+                            if (!isZero) sWork += (isHalf ? 0.5 : 1.0);
+                        } else if (sym === '○/休' || sym === '休/○' || sym === '○/有' || sym === '有/○') {
+                            if (!isZero) sWork += 0.5;
+                            if (sym.includes('休')) sOff += 0.5;
+                            if (sym.includes('有')) sPaid += 0.5;
+                        }
                     }
 
                     // ★ ご要望: 特殊勤務などに色が付いているが不要（白背景・通常文字、事前希望のみ赤字保持）
