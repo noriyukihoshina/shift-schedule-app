@@ -618,6 +618,10 @@ class ShiftScheduler {
             ? [...options.stDailyEarly]
             : null;
         this.stFloorFtCount = typeof options.stFloorFtCount === 'number' ? options.stFloorFtCount : 0;
+        // ★ 生活期テーブルからのハ応援実数（ハ1→1F, ハ2→2F, ハ3→3F, ハ南→南）
+        this.lifeDailyWork = (Array.isArray(options.lifeDailyWork) && options.lifeDailyWork.length === this.numDays)
+            ? [...options.lifeDailyWork]
+            : null;
         this.initGrid();
     }
 
@@ -696,6 +700,9 @@ class ShiftScheduler {
             }
             if (this.stDailyWork && this.stDailyWork[d]) {
                 base += this.stDailyWork[d];
+            }
+            if (this.lifeDailyWork && this.lifeDailyWork[d]) {
+                base += this.lifeDailyWork[d];
             }
         }
         return base;
@@ -5025,6 +5032,9 @@ class ShiftScheduler {
 
             // 実数合計の計算 (案B: 出勤実働 - 増員分。マイナス/減員時は実数変更なし)
             let realWorkBase = stWorkAmt;
+            if (this.lifeDailyWork && this.lifeDailyWork[d]) {
+                realWorkBase += this.lifeDailyWork[d];
+            }
             for (let s = 0; s < this.numStaff; s++) {
                 if (this.staffList[s].isUnused) continue;
                 const staff = this.staffList[s];
