@@ -1414,7 +1414,9 @@ document.addEventListener('DOMContentLoaded', () => {
                 days: [...s.days]
             })),
             startDate: document.getElementById('termStartDate')?.value || currentWorkingStartDate,
-            outputGrid: (lastSolveResult && lastSolveResult.grid) ? lastSolveResult.grid.map(row => row.map(c => ({ ...c }))) : null
+            outputGrid: (lastSolveResult && lastSolveResult.grid) ? lastSolveResult.grid.map(row => row.map(c => ({ ...c }))) : null,
+            stTermJson: localStorage.getItem(`shift_schedule_st_term_${document.getElementById('termStartDate')?.value || currentWorkingStartDate || '2026-04-01'}`),
+            lifeTermJson: localStorage.getItem(`shift_schedule_life_term_${document.getElementById('termStartDate')?.value || currentWorkingStartDate || '2026-04-01'}`)
         };
     }
 
@@ -1538,11 +1540,35 @@ document.addEventListener('DOMContentLoaded', () => {
                 }
             });
         }
+        // STおよび生活期ハ連携データの復元
+        const curTermDate = document.getElementById('termStartDate')?.value || currentWorkingStartDate || '2026-04-01';
+        if (state.stTermJson !== undefined) {
+            if (state.stTermJson) {
+                localStorage.setItem(`shift_schedule_st_term_${curTermDate}`, state.stTermJson);
+            } else {
+                localStorage.removeItem(`shift_schedule_st_term_${curTermDate}`);
+            }
+            if (typeof loadLinkedSTData === 'function') loadLinkedSTData();
+        }
+        if (state.lifeTermJson !== undefined) {
+            if (state.lifeTermJson) {
+                localStorage.setItem(`shift_schedule_life_term_${curTermDate}`, state.lifeTermJson);
+            } else {
+                localStorage.removeItem(`shift_schedule_life_term_${curTermDate}`);
+            }
+            if (typeof loadLinkedLifeData === 'function') loadLinkedLifeData();
+        }
+
         // 出力シートの復元
         if (state.outputGrid && lastSolveResult) {
             lastSolveResult.grid = state.outputGrid.map(row => row.map(c => ({ ...c })));
             if (lastScheduler) {
                 lastScheduler.grid = lastSolveResult.grid;
+                if (typeof getLinkedSTDailyWork === 'function') lastScheduler.stDailyWork = getLinkedSTDailyWork();
+                if (typeof getLinkedSTDailyEarly === 'function') lastScheduler.stDailyEarly = getLinkedSTDailyEarly();
+                if (typeof getLinkedSTDailyLate === 'function') lastScheduler.stDailyLate = getLinkedSTDailyLate();
+                if (typeof getLinkedSTDailyEve === 'function') lastScheduler.stDailyEve = getLinkedSTDailyEve();
+                if (typeof getLinkedLifeDailyWork === 'function') lastScheduler.lifeDailyWork = getLinkedLifeDailyWork();
                 const newStats = lastScheduler.calculateStats();
                 lastSolveResult.stats = newStats;
                 renderOutputTable(lastSolveResult.grid, newStats);
@@ -4556,7 +4582,7 @@ document.addEventListener('DOMContentLoaded', () => {
                         ? `STスタッフ（事前固定希望）: ${escapeHtmlText(st.name)} / ${sym}`
                         : `STスタッフ（自動配置）: ${escapeHtmlText(st.name)} / ${sym}`;
 
-                    bodyHtml += `<td class="${thickCls} ${cellCls}" style="text-align:center; font-size:0.85rem; background:${stThemeBg};" title="${cellTitle}">${sym}</td>`;
+                    bodyHtml += `<td class="${thickCls} ${cellCls} editable-st-cell" data-is-st="1" data-st-id="${st.id}" data-st-idx="${stIdx}" data-d="${d}" style="text-align:center; font-size:0.85rem; background:${stThemeBg}; cursor:pointer;" title="${cellTitle}">${sym}</td>`;
                 }
 
                 bodyHtml += `
@@ -4568,7 +4594,7 @@ document.addEventListener('DOMContentLoaded', () => {
                     <td style="text-align:center; color:#94a3b8; background:${stThemeBg};">-</td>
                     <td style="text-align:center; color:#94a3b8; background:${stThemeBg};">-</td>
                     <td style="text-align:center; color:#94a3b8; background:${stThemeBg};">-</td>
-                    <td style="font-size:0.78rem; color:#64748b; background:${stThemeBg}; text-align:left; padding:2px 8px;">ST専用テーブル連携（参照のみ）</td>
+                    <td style="font-size:0.78rem; color:#64748b; background:${stThemeBg}; text-align:left; padding:2px 8px;">ST専用テーブル連携（クリックで修正可能）</td>
                 </tr>`;
             });
         }
@@ -4578,8 +4604,8 @@ document.addEventListener('DOMContentLoaded', () => {
             const haBadgeLabel = (currentFloor === '1F' ? 'ハ1' : (currentFloor === '2F' ? 'ハ2' : (currentFloor === '3F' ? 'ハ3' : 'ハ南')));
             bodyHtml += `
                 <tr style="background:#ecfdf5; border-top: 3px solid #10b981;">
-                    <th colspan="${NUM_DAYS + 24}" style="text-align:left; padding:8px 12px; font-size:0.85rem; font-weight:800; color:#065f46; letter-spacing:0.03em;">
-                        【${currentFloor} 応援】ハーフマン (${haBadgeLabel} / 生活期テーブル連携・参照のみ)
+                    <th colspan="${NUM_DAYS + 11}" style="text-align:left; padding:8px 12px; font-size:0.85rem; font-weight:800; color:#065f46; letter-spacing:0.03em;">
+                        【${currentFloor} 応援】ハーフマン (${haBadgeLabel} / 生活期テーブル連携・クリックで修正可能)
                     </th>
                 </tr>
             `;
@@ -4595,13 +4621,7 @@ document.addEventListener('DOMContentLoaded', () => {
                     <span style="font-size:0.65rem; background:#d1fae5; color:#065f46; padding:1px 5px; border-radius:3px; margin-left:4px; font-weight:700;">${st.haSection || haBadgeLabel}</span>
                 </td>`;
 
-                // 前5日間（空セル5列）
-                for (let pi = 0; pi < 5; pi++) {
-                    const thickCls = (pi === 4) ? 'border-thick-right' : '';
-                    bodyHtml += `<td class="${thickCls}" style="background:#f8fafc; color:#cbd5e1; text-align:center;">-</td>`;
-                }
-
-                // 28日間の勤務セル
+                // 28日間の勤務セル（※前5日間の列は出力テーブルには不要！初日d=0から28日目d=27まで正確に対応）
                 let haWorkCount = 0;
                 let haOffCount = 0;
                 let haPaidCount = 0;
@@ -4630,7 +4650,7 @@ document.addEventListener('DOMContentLoaded', () => {
                     const cellCls = isCellFixed ? 'day-cell fixed-cell' : 'day-cell auto-cell';
                     const cellTitle = `ハーフマン応援（生活期連携）: ${escapeHtmlText(st.name)} / ${sym}`;
 
-                    bodyHtml += `<td class="${thickCls} ${cellCls}" style="text-align:center; font-size:0.85rem; background:#f0fdf4;" title="${cellTitle}">${sym}</td>`;
+                    bodyHtml += `<td class="${thickCls} ${cellCls} editable-ha-cell" data-is-ha="1" data-ha-id="${st.id || ''}" data-ha-idx="${stIdx}" data-d="${d}" style="text-align:center; font-size:0.85rem; background:#f0fdf4; cursor:pointer;" title="${cellTitle}">${sym}</td>`;
                 }
 
                 bodyHtml += `
@@ -4642,7 +4662,7 @@ document.addEventListener('DOMContentLoaded', () => {
                     <td style="text-align:center; color:#94a3b8; background:#f0fdf4;">-</td>
                     <td style="text-align:center; color:#94a3b8; background:#f0fdf4;">-</td>
                     <td style="text-align:center; color:#94a3b8; background:#f0fdf4;">-</td>
-                    <td style="font-size:0.78rem; color:#059669; background:#f0fdf4; text-align:left; padding:2px 8px;">生活期テーブル応援連携（実数0.5加算）</td>
+                    <td style="font-size:0.78rem; color:#059669; background:#f0fdf4; text-align:left; padding:2px 8px;">生活期テーブル応援連携（実数0.5加算・クリックで修正可能）</td>
                 </tr>`;
             });
         }
@@ -4805,28 +4825,7 @@ document.addEventListener('DOMContentLoaded', () => {
             <td style="font-weight:600; color:#334155; background:transparent;">${totalH8Sum}</td>
         </tr>`;
 
-        // 2行目: 実数合計（リハビリ実働人数: 出勤人数合計 - 加減枠 + 生活期ハ応援実数0.5）
-        const linkedLifeWorkArr = (!isST && !isLife) ? getLinkedLifeDailyWork() : null;
-        const totalRealSum = stats.daily.reduce((sum, dStat, dIdx) => {
-            const baseReal = dStat.realWork !== undefined ? dStat.realWork : dStat.totalWork;
-            const haVal = (linkedLifeWorkArr && linkedLifeWorkArr[dIdx]) ? linkedLifeWorkArr[dIdx] : 0;
-            return sum + baseReal + haVal;
-        }, 0);
-        footHtml += `
-            <tr style="background:#f8fafc; font-weight:bold;">
-                <th class="sticky-col-1" colspan="2" style="color:#1e293b;" title="行事等の出勤加減枠を除いた実際のリハビリ業務稼働人数（生活期ハ応援+0.5合算含む）">実数合計</th>
-        `;
-        for (let d = 0; d < NUM_DAYS; d++) {
-            const dStat = stats.daily[d];
-            const thickCls = ((d + 1) % 7 === 0) ? 'border-thick-right' : '';
-            const baseReal = dStat.realWork !== undefined ? dStat.realWork : dStat.totalWork;
-            const haVal = (linkedLifeWorkArr && linkedLifeWorkArr[d]) ? linkedLifeWorkArr[d] : 0;
-            const real = Number((baseReal + haVal).toFixed(2));
-            footHtml += `<td class="${thickCls}" style="vertical-align:middle; font-weight:800; color:#1e293b; font-size:0.95rem;">${real}</td>`;
-        }
-        footHtml += `<td style="font-weight:700; color:#1e293b;">${Number(totalRealSum.toFixed(1))}</td><td colspan="8" style="color:#94a3b8;">-</td></tr>`;
-
-        // ★ セクション別出勤人数（PT A/2, OT A/2, PT B/3, OT B/3, ST, ﾊｰﾌﾏﾝ出勤）
+        // ★ セクション別出勤人数リストの定義（PT A/2, OT A/2, PT B/3, OT B/3, ST, ﾊｰﾌﾏﾝ出勤）
         const isSouthSec = (currentFloor === '南' || appConfig.deptId === 'south');
         const secList = [
             { name: isSouthSec ? 'PT 2' : 'PT A', label: isSouthSec ? 'PT 2 出勤' : 'PT A 出勤', cls: 'foot-sec-pt-a', color: '#ea580c' },
@@ -4841,19 +4840,18 @@ document.addEventListener('DOMContentLoaded', () => {
             secList.push({ name: 'HA', label: 'ﾊｰﾌﾏﾝ出勤', cls: 'foot-sec-ha', color: '#059669' });
         }
 
+        const linkedLifeWorkArr = (!isST && !isLife) ? getLinkedLifeDailyWork() : null;
         const linkedStWorkArr = getLinkedSTDailyWork();
 
+        // 各セクションの各日出勤実数を算出
+        const secDailyMap = {};
         secList.forEach(sec => {
-            footHtml += `
-                <tr class="${sec.cls}" style="font-weight:700; font-size:0.82rem; background:transparent;">
-                    <th class="sticky-col-1" colspan="2" style="color:${sec.color};">${sec.label}</th>
-            `;
-            let secTotalSum = 0;
+            secDailyMap[sec.name] = new Array(NUM_DAYS).fill(0);
             for (let d = 0; d < NUM_DAYS; d++) {
                 const dStat = stats.daily[d];
                 let secVal = 0;
                 if (sec.name === 'ST') {
-                    if (dStat.sectionWork && dStat.sectionWork['ST'] !== undefined && dStat.sectionWork['ST'] > 0) {
+                    if (dStat && dStat.sectionWork && dStat.sectionWork['ST'] !== undefined && dStat.sectionWork['ST'] > 0) {
                         secVal = dStat.sectionWork['ST'];
                     } else if (linkedStWorkArr && linkedStWorkArr[d] !== undefined) {
                         secVal = linkedStWorkArr[d];
@@ -4861,17 +4859,56 @@ document.addEventListener('DOMContentLoaded', () => {
                 } else if (sec.name === 'HA') {
                     secVal = (linkedLifeWorkArr && linkedLifeWorkArr[d] !== undefined) ? linkedLifeWorkArr[d] : 0;
                 } else {
-                    secVal = (dStat.sectionWork && dStat.sectionWork[sec.name] !== undefined)
+                    secVal = (dStat && dStat.sectionWork && dStat.sectionWork[sec.name] !== undefined)
                         ? dStat.sectionWork[sec.name]
                         : 0;
                     // 南病棟のエイリアス互換 (PT 2 <-> PT A, etc.)
-                    if (secVal === 0 && dStat.sectionWork) {
+                    if (secVal === 0 && dStat && dStat.sectionWork) {
                         if (sec.name === 'PT 2' && dStat.sectionWork['PT A']) secVal = dStat.sectionWork['PT A'];
                         else if (sec.name === 'PT 3' && dStat.sectionWork['PT B']) secVal = dStat.sectionWork['PT B'];
                         else if (sec.name === 'OT 2' && dStat.sectionWork['OT A']) secVal = dStat.sectionWork['OT A'];
                         else if (sec.name === 'OT 3' && dStat.sectionWork['OT B']) secVal = dStat.sectionWork['OT B'];
                     }
                 }
+                secDailyMap[sec.name][d] = secVal;
+            }
+        });
+
+        // 2行目: 実数合計（PT・OT・ST・ハーフマンの実数合計から増員加減枠をオフセットした値）
+        // ★ 添付3対応: 各セクションの実数を足した合計と「実数合計」が100%完全に一致するように計算
+        const calculatedDailyReal = new Array(NUM_DAYS).fill(0);
+        for (let d = 0; d < NUM_DAYS; d++) {
+            const dStat = stats.daily[d];
+            const offset = (dayOffsets && dayOffsets[d] !== undefined) ? dayOffsets[d] : ((dStat && dStat.offset) ? dStat.offset : 0);
+            let secSum = 0;
+            secList.forEach(sec => {
+                secSum += secDailyMap[sec.name][d];
+            });
+            const realAfterOffset = (offset > 0) ? Math.max(0, secSum - offset) : secSum;
+            calculatedDailyReal[d] = Number(realAfterOffset.toFixed(2));
+        }
+        const totalRealSum = calculatedDailyReal.reduce((sum, v) => sum + v, 0);
+
+        footHtml += `
+            <tr style="background:#f8fafc; font-weight:bold;">
+                <th class="sticky-col-1" colspan="2" style="color:#1e293b;" title="各セクション（PT・OT・ST・ハーフマン）の出勤実数合計（増員枠オフセット反映）">実数合計</th>
+        `;
+        for (let d = 0; d < NUM_DAYS; d++) {
+            const thickCls = ((d + 1) % 7 === 0) ? 'border-thick-right' : '';
+            const real = calculatedDailyReal[d];
+            footHtml += `<td class="${thickCls}" style="vertical-align:middle; font-weight:800; color:#1e293b; font-size:0.95rem;">${real}</td>`;
+        }
+        footHtml += `<td style="font-weight:700; color:#1e293b;">${Number(totalRealSum.toFixed(1))}</td><td colspan="8" style="color:#94a3b8;">-</td></tr>`;
+
+        // ★ セクション別出勤人数（PT A/2, OT A/2, PT B/3, OT B/3, ST, ﾊｰﾌﾏﾝ出勤）の描画
+        secList.forEach(sec => {
+            footHtml += `
+                <tr class="${sec.cls}" style="font-weight:700; font-size:0.82rem; background:transparent;">
+                    <th class="sticky-col-1" colspan="2" style="color:${sec.color};">${sec.label}</th>
+            `;
+            let secTotalSum = 0;
+            for (let d = 0; d < NUM_DAYS; d++) {
+                const secVal = secDailyMap[sec.name][d];
                 secTotalSum += secVal;
                 const thickCls = ((d + 1) % 7 === 0) ? 'border-thick-right' : '';
                 const displayVal = secVal > 0 ? (secVal % 1 === 0 ? secVal : secVal.toFixed(1)) : (sec.name === 'ST' || sec.name === 'HA' ? '0' : '-');
@@ -5478,6 +5515,62 @@ document.addEventListener('DOMContentLoaded', () => {
                 orderedStaffList.push({ staff: st, sec: 'ST', gridRow: gridRow, isST: true });
             });
 
+            // ★ 添付2要件: ST最下端の下にハーフマン（生活期ハ応援）の出勤を表示（記号パレットで修正可能に）
+            const haDef = haFloorDefs.find(d => d.flId === fc.id);
+            if (haDef) {
+                let haStaffFound = false;
+                baseLifeStaff.forEach((st, idx) => {
+                    if (st.isUnused || st.isZeroCount) return;
+                    const matches = (st.haSection === haDef.target || (haDef.target === 'ハ4' && st.haSection === 'ハ南'));
+                    if (!matches) return;
+                    haStaffFound = true;
+                    const rawRow = (lifeData && lifeData.outputGrid && lifeData.outputGrid[idx]) ? lifeData.outputGrid[idx] : null;
+                    const row = [];
+                    for (let d = 0; d < numDays; d++) {
+                        let cellVal = rawRow ? rawRow[d] : null;
+                        let sym = (cellVal && typeof cellVal === 'object') ? (cellVal.symbol || '') : (cellVal || '');
+                        if (!sym && st.days && st.days[d]) sym = st.days[d];
+                        if (!sym) {
+                            const dInfo = (term && term.dates && term.dates[d]) ? term.dates[d] : null;
+                            const wDay = dInfo ? dInfo.weekday : (d % 7 === 5 ? '土' : (d % 7 === 6 ? '日' : '月'));
+                            sym = haDef.isWeekendOff ? ((wDay === '土' || wDay === '日') ? '休' : '○') : ((wDay === '日') ? '休' : '○');
+                        }
+                        const isFixed = (cellVal && typeof cellVal === 'object') ? !!cellVal.isFixed : false;
+                        row.push({ symbol: sym, isFixed: isFixed });
+                    }
+                    orderedStaffList.push({
+                        staff: st,
+                        sec: 'ﾊｰﾌﾏﾝ',
+                        gridRow: row,
+                        isST: false,
+                        isHa: true,
+                        lifeStaffIdx: idx
+                    });
+                });
+                if (!haStaffFound) {
+                    const dummyStaff = {
+                        id: (haDef.target === 'ハ1' ? 41 : (haDef.target === 'ハ2' ? 42 : (haDef.target === 'ハ3' ? 43 : 44))),
+                        name: `ハーフマン (${haDef.target})`,
+                        haSection: haDef.target
+                    };
+                    const row = [];
+                    for (let d = 0; d < numDays; d++) {
+                        const dInfo = (term && term.dates && term.dates[d]) ? term.dates[d] : null;
+                        const wDay = dInfo ? dInfo.weekday : (d % 7 === 5 ? '土' : (d % 7 === 6 ? '日' : '月'));
+                        const sym = haDef.isWeekendOff ? ((wDay === '土' || wDay === '日') ? '休' : '○') : ((wDay === '日') ? '休' : '○');
+                        row.push({ symbol: sym, isFixed: false });
+                    }
+                    orderedStaffList.push({
+                        staff: dummyStaff,
+                        sec: 'ﾊｰﾌﾏﾝ',
+                        gridRow: row,
+                        isST: false,
+                        isHa: true,
+                        lifeStaffIdx: -1
+                    });
+                }
+            }
+
             if (orderedStaffList.length === 0) {
                 html += `<tr class="master-detail-row master-detail-${fc.id}" style="display:none; background:#ffffff;">
                     <td class="sticky-col-1" style="background:#f8fafc; color:#64748b; font-size:0.75rem; text-align:center; border-right:1px solid #cbd5e1;">-</td>
@@ -5488,8 +5581,8 @@ document.addEventListener('DOMContentLoaded', () => {
 
             orderedStaffList.forEach(item => {
                 const s = item.staff;
-                const secBadgeBg = item.sec === 'PT A' ? '#e0e7ff' : (item.sec === 'PT B' ? '#ede9fe' : (item.sec === 'OT A' ? '#fae8ff' : (item.sec === 'OT B' ? '#fce7f3' : (item.isST ? '#fdf2f8' : '#f1f5f9'))));
-                const secBadgeColor = item.sec === 'PT A' ? '#3730a3' : (item.sec === 'PT B' ? '#5b21b6' : (item.sec === 'OT A' ? '#86198f' : (item.sec === 'OT B' ? '#9d174d' : (item.isST ? '#be185d' : '#475569'))));
+                const secBadgeBg = item.sec === 'PT A' ? '#e0e7ff' : (item.sec === 'PT B' ? '#ede9fe' : (item.sec === 'OT A' ? '#fae8ff' : (item.sec === 'OT B' ? '#fce7f3' : (item.isST ? '#fdf2f8' : (item.isHa ? '#d1fae5' : '#f1f5f9')))));
+                const secBadgeColor = item.sec === 'PT A' ? '#3730a3' : (item.sec === 'PT B' ? '#5b21b6' : (item.sec === 'OT A' ? '#86198f' : (item.sec === 'OT B' ? '#9d174d' : (item.isST ? '#be185d' : (item.isHa ? '#065f46' : '#475569')))));
 
                 html += `<tr class="master-detail-row master-detail-${fc.id}" style="display:none; background:#ffffff;">
                     <td class="sticky-col-1" style="background:${secBadgeBg}; color:${secBadgeColor}; font-size:0.75rem; font-weight:700; text-align:center; border-right:1px solid #cbd5e1;">${item.sec}</td>
@@ -5550,7 +5643,7 @@ document.addEventListener('DOMContentLoaded', () => {
                     const fixedCls = isCellFixed ? 'fixed-cell' : 'auto-cell';
                     const titleText = isCellFixed ? '🔒 事前固定希望枠（赤字・クリックで修正可能）' : 'システム自動配置（クリックで修正可能）';
 
-                    html += `<td class="${thickCls} ${fixedCls} master-editable-cell" data-floor="${fc.id}" data-is-st="${item.isST ? '1' : '0'}" data-staff-id="${s.id || ''}" data-staff-name="${escapeHtmlText(s.name)}" data-day="${d}" title="${titleText}" style="background:${bg}; color:${color}; font-weight:700; border-bottom:1px solid #e2e8f0; text-align:center; cursor:pointer;">${sym}</td>`;
+                    html += `<td class="${thickCls} ${fixedCls} master-editable-cell" data-floor="${fc.id}" data-is-st="${item.isST ? '1' : '0'}" data-is-ha="${item.isHa ? '1' : '0'}" data-ha-idx="${item.lifeStaffIdx !== undefined ? item.lifeStaffIdx : -1}" data-staff-id="${s.id || ''}" data-staff-name="${escapeHtmlText(s.name)}" data-day="${d}" title="${titleText}" style="background:${bg}; color:${color}; font-weight:700; border-bottom:1px solid #e2e8f0; text-align:center; cursor:pointer;">${sym}</td>`;
                 }
 
                 // 勤務の右端に出勤・公休などのスタッフ毎の集計を記載
@@ -5590,6 +5683,7 @@ document.addEventListener('DOMContentLoaded', () => {
             const dailyPtb = new Array(numDays).fill(0);
             const dailyOtb = new Array(numDays).fill(0);
             const dailyStWork = new Array(numDays).fill(0);
+            const dailyHaWork = (lifeHaDataMap[fc.id] && Array.isArray(lifeHaDataMap[fc.id])) ? [...lifeHaDataMap[fc.id]] : new Array(numDays).fill(0);
 
             orderedStaffList.forEach(item => {
                 const s = item.staff;
@@ -5597,7 +5691,16 @@ document.addEventListener('DOMContentLoaded', () => {
                 for (let d = 0; d < numDays; d++) {
                     const cell = item.gridRow ? item.gridRow[d] : null;
                     const sym = (cell && typeof cell === 'object') ? (cell.symbol || '') : (cell || '');
-                    if (isWorkSymbol(sym) && sym !== '研' && sym !== '張') {
+                    if (item.isHa) {
+                        // ハ応援スタッフの出勤実数集計（出勤0.5、半勤0.25）
+                        if (isWorkSymbol(sym) && sym !== '研' && sym !== '張') {
+                            dailyHaWork[d] = 0.5;
+                        } else if (sym === '○/休' || sym === '休/○' || sym === '○/有' || sym === '有/○' || sym === '〇/休' || sym === '休/〇' || sym === '〇/有' || sym === '有/〇') {
+                            dailyHaWork[d] = 0.25;
+                        } else if (sym === '休' || sym === '有' || sym.includes('リフ') || sym.startsWith('上') || sym.startsWith('下')) {
+                            dailyHaWork[d] = 0;
+                        }
+                    } else if (isWorkSymbol(sym) && sym !== '研' && sym !== '張') {
                         if (item.isST) {
                             dailyStWork[d] += (s.isHalf ? 0.5 : 1.0);
                         } else {
@@ -5627,6 +5730,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 { label: `${secPtb} 出勤`, vals: dailyPtb, color: '#1d4ed8', bg: '#f5f8ff', bold: false },
                 { label: `${secOtb} 出勤`, vals: dailyOtb, color: '#1d4ed8', bg: '#f5f8ff', bold: false },
                 { label: 'ST 出勤', vals: dailyStWork, color: '#db2777', bg: '#fdf2f8', bold: false },
+                { label: 'ﾊｰﾌﾏﾝ出勤', vals: dailyHaWork, color: '#059669', bg: '#f0fdf4', bold: false },
                 { label: '早番', vals: dailyEarly, color: '#ea580c', bg: '#fff7ed', bold: true },
                 { label: '遅番', vals: dailyLate, color: '#0284c7', bg: '#f0f9ff', bold: true },
                 { label: 'E', vals: dailyEve, color: '#7c3aed', bg: '#faf5ff', bold: true },
@@ -5757,20 +5861,60 @@ document.addEventListener('DOMContentLoaded', () => {
 
                 const floorId = cell.dataset.floor;
                 const isStCell = (cell.dataset.isSt === '1');
+                const isHaCell = (cell.dataset.isHa === '1');
                 const staffId = cell.dataset.staffId;
                 const staffName = cell.dataset.staffName;
+                const haIdx = parseInt(cell.dataset.haIdx, 10);
                 const dayIdx = parseInt(cell.dataset.day, 10);
 
                 const curStartDate = document.getElementById('termStartDate')?.value || currentWorkingStartDate || '2026-04-01';
-                const targetKey = isStCell ? `shift_schedule_st_term_${curStartDate}` : `shift_schedule_${floorId}_term_${curStartDate}`;
+                const targetKey = isHaCell
+                    ? `shift_schedule_life_term_${curStartDate}`
+                    : (isStCell ? `shift_schedule_st_term_${curStartDate}` : `shift_schedule_${floorId}_term_${curStartDate}`);
 
                 try {
-                    const raw = localStorage.getItem(targetKey);
-                    if (!raw) return;
-                    const fData = JSON.parse(raw);
+                    let raw = localStorage.getItem(targetKey);
+                    let fData = null;
+                    if (raw) {
+                        try { fData = JSON.parse(raw); } catch (e) {}
+                    }
+                    if (!fData && isHaCell) {
+                        // 生活期データ未保存時のフォールバック初期構築
+                        let baseStaff = [];
+                        try {
+                            const rawM = localStorage.getItem('shift_schedule_life_staff_master');
+                            if (rawM) baseStaff = JSON.parse(rawM);
+                        } catch (e) {}
+                        if (!baseStaff || baseStaff.length === 0) {
+                            baseStaff = [
+                                { id: 41, name: '生活期 ハ1', haSection: 'ハ1', isUnused: false },
+                                { id: 42, name: '生活期 ハ2', haSection: 'ハ2', isUnused: false },
+                                { id: 43, name: '生活期 ハ3', haSection: 'ハ3', isUnused: false },
+                                { id: 44, name: '生活期 ハ4', haSection: 'ハ4', isUnused: false }
+                            ];
+                        }
+                        fData = {
+                            staffList: baseStaff,
+                            outputGrid: baseStaff.map(() => new Array(numDays).fill(null).map(() => ({ symbol: '', isFixed: false })))
+                        };
+                        raw = JSON.stringify(fData);
+                    }
                     if (!fData || !Array.isArray(fData.staffList)) return;
 
-                    const stIdx = fData.staffList.findIndex(st => (staffId && String(st.id) === String(staffId)) || st.name === staffName);
+                    let stIdx = -1;
+                    if (isHaCell) {
+                        if (haIdx >= 0 && fData.staffList[haIdx]) {
+                            stIdx = haIdx;
+                        } else {
+                            stIdx = fData.staffList.findIndex(st => (staffId && String(st.id) === String(staffId)) || st.name === staffName || (st.haSection && staffName.includes(st.haSection)));
+                        }
+                        if (stIdx === -1) {
+                            fData.staffList.push({ id: staffId || 41, name: staffName, isUnused: false });
+                            stIdx = fData.staffList.length - 1;
+                        }
+                    } else {
+                        stIdx = fData.staffList.findIndex(st => (staffId && String(st.id) === String(staffId)) || st.name === staffName);
+                    }
                     if (stIdx === -1) return;
 
                     if (!fData.outputGrid) fData.outputGrid = [];
@@ -5867,11 +6011,169 @@ document.addEventListener('DOMContentLoaded', () => {
         updateUndoRedoUI();
     }
 
+    // ★ 添付1要件: 修正作業エリア／最終チェックでのSTセル直接修正
+    function handleStCellEdit(cell) {
+        const stId = cell.dataset.stId;
+        const stIdx = parseInt(cell.dataset.stIdx, 10);
+        const d = parseInt(cell.dataset.d, 10);
+        let newSym = currentOutputSelectedSymbol;
+        const activePaletteBtn = document.querySelector('.output-palette-btn.selected, .check-palette-btn.selected');
+        if (activePaletteBtn && activePaletteBtn.dataset.sym !== undefined) {
+            newSym = activePaletteBtn.dataset.sym;
+        }
+        if (newSym === 'CLEAR') newSym = '';
+
+        const curStartDate = document.getElementById('termStartDate')?.value || currentWorkingStartDate || '2026-04-01';
+        const stKey = `shift_schedule_st_term_${curStartDate}`;
+        let stData = null;
+        try {
+            const raw = localStorage.getItem(stKey);
+            if (raw) stData = JSON.parse(raw);
+        } catch (e) {}
+
+        if (!stData) {
+            stData = {
+                staffList: (linkedStStaffData && linkedStStaffData.staffList) ? linkedStStaffData.staffList : [],
+                outputGrid: (linkedStStaffData && linkedStStaffData.grid) ? linkedStStaffData.grid : []
+            };
+        }
+
+        let targetIdx = -1;
+        if (stData.staffList && Array.isArray(stData.staffList)) {
+            targetIdx = stData.staffList.findIndex(s => (stId && String(s.id) === String(stId)));
+        }
+        if (targetIdx === -1) targetIdx = stIdx;
+
+        if (!stData.outputGrid) stData.outputGrid = [];
+        if (!stData.outputGrid[targetIdx]) {
+            stData.outputGrid[targetIdx] = new Array(NUM_DAYS).fill(null).map(() => ({ symbol: '', isFixed: false }));
+        }
+
+        const curCell = stData.outputGrid[targetIdx][d];
+        const oldSym = (curCell && typeof curCell === 'object') ? (curCell.symbol || '') : (curCell || '');
+        const isFixed = (curCell && typeof curCell === 'object') ? !!curCell.isFixed : false;
+
+        if (newSym === 'P') {
+            pushHistory();
+            stData.outputGrid[targetIdx][d] = { symbol: oldSym || '○', isFixed: !isFixed };
+            localStorage.setItem(stKey, JSON.stringify(stData));
+            loadLinkedSTData();
+            renderOutputTable(lastSolveResult ? lastSolveResult.grid : [], lastSolveResult ? lastSolveResult.stats : null);
+            showToast(`🛡️ STスタッフの保護を${!isFixed ? '設定' : '解除'}しました`);
+            return;
+        }
+
+        if (oldSym === newSym) return;
+
+        pushHistory();
+        stData.outputGrid[targetIdx][d] = { symbol: newSym, isFixed: isFixed };
+        localStorage.setItem(stKey, JSON.stringify(stData));
+        loadLinkedSTData();
+        if (lastScheduler) {
+            lastScheduler.stDailyWork = getLinkedSTDailyWork();
+            lastScheduler.stDailyHeadCount = getLinkedSTDailyHeadCount();
+            lastScheduler.stDailyFtWork = getLinkedSTDailyFtWork();
+            lastScheduler.stDailyEarly = getLinkedSTDailyEarly();
+            lastScheduler.stDailyLate = getLinkedSTDailyLate();
+            lastScheduler.stDailyEve = getLinkedSTDailyEve();
+            lastScheduler.stFloorFtCount = getLinkedSTFloorFtCount();
+            const newStats = lastScheduler.calculateStats();
+            if (lastSolveResult) lastSolveResult.stats = newStats;
+            renderOutputTable(lastSolveResult ? lastSolveResult.grid : [], newStats);
+            renderStatsDashboard(newStats);
+        } else {
+            renderOutputTable(lastSolveResult ? lastSolveResult.grid : [], lastSolveResult ? lastSolveResult.stats : null);
+        }
+        showToast(`✏️ STスタッフの勤務を「${newSym || '消去'}」に修正しました`);
+    }
+
+    // ★ 添付1要件: 修正作業エリア／最終チェックでのハーフマンセル直接修正
+    function handleHaCellEdit(cell) {
+        const haId = cell.dataset.haId;
+        const haIdx = parseInt(cell.dataset.haIdx, 10);
+        const d = parseInt(cell.dataset.d, 10);
+        let newSym = currentOutputSelectedSymbol;
+        const activePaletteBtn = document.querySelector('.output-palette-btn.selected, .check-palette-btn.selected');
+        if (activePaletteBtn && activePaletteBtn.dataset.sym !== undefined) {
+            newSym = activePaletteBtn.dataset.sym;
+        }
+        if (newSym === 'CLEAR') newSym = '';
+
+        const curStartDate = document.getElementById('termStartDate')?.value || currentWorkingStartDate || '2026-04-01';
+        const lifeKey = `shift_schedule_life_term_${curStartDate}`;
+        let lifeData = null;
+        try {
+            const raw = localStorage.getItem(lifeKey);
+            if (raw) lifeData = JSON.parse(raw);
+        } catch (e) {}
+
+        if (!lifeData) {
+            lifeData = {
+                staffList: (linkedLifeStaffData && linkedLifeStaffData.staffList) ? linkedLifeStaffData.staffList : [],
+                outputGrid: (linkedLifeStaffData && linkedLifeStaffData.grid) ? linkedLifeStaffData.grid : []
+            };
+        }
+
+        let targetIdx = -1;
+        if (lifeData.staffList && Array.isArray(lifeData.staffList)) {
+            targetIdx = lifeData.staffList.findIndex(s => (haId && String(s.id) === String(haId)));
+        }
+        if (targetIdx === -1) targetIdx = haIdx;
+
+        if (!lifeData.outputGrid) lifeData.outputGrid = [];
+        if (!lifeData.outputGrid[targetIdx]) {
+            lifeData.outputGrid[targetIdx] = new Array(NUM_DAYS).fill(null).map(() => ({ symbol: '', isFixed: false }));
+        }
+
+        const curCell = lifeData.outputGrid[targetIdx][d];
+        const oldSym = (curCell && typeof curCell === 'object') ? (curCell.symbol || '') : (curCell || '');
+        const isFixed = (curCell && typeof curCell === 'object') ? !!curCell.isFixed : false;
+
+        if (newSym === 'P') {
+            pushHistory();
+            lifeData.outputGrid[targetIdx][d] = { symbol: oldSym || '○', isFixed: !isFixed };
+            localStorage.setItem(lifeKey, JSON.stringify(lifeData));
+            loadLinkedLifeData();
+            renderOutputTable(lastSolveResult ? lastSolveResult.grid : [], lastSolveResult ? lastSolveResult.stats : null);
+            showToast(`🛡️ ハーフマンの保護を${!isFixed ? '設定' : '解除'}しました`);
+            return;
+        }
+
+        if (oldSym === newSym) return;
+
+        pushHistory();
+        lifeData.outputGrid[targetIdx][d] = { symbol: newSym, isFixed: isFixed };
+        localStorage.setItem(lifeKey, JSON.stringify(lifeData));
+        loadLinkedLifeData();
+        if (lastScheduler) {
+            lastScheduler.lifeDailyWork = getLinkedLifeDailyWork();
+            const newStats = lastScheduler.calculateStats();
+            if (lastSolveResult) lastSolveResult.stats = newStats;
+            renderOutputTable(lastSolveResult ? lastSolveResult.grid : [], newStats);
+            renderStatsDashboard(newStats);
+        } else {
+            renderOutputTable(lastSolveResult ? lastSolveResult.grid : [], lastSolveResult ? lastSolveResult.stats : null);
+        }
+        showToast(`✏️ ハーフマンの勤務を「${newSym || '消去'}」に修正しました`);
+    }
+
     // 出力シートおよびチェックシートでのセルクリックによる手動調整イベント
     function attachOutputTableEvents() {
         document.querySelectorAll('#outputTableBody .day-cell, #checkTableBody .day-cell').forEach(cell => {
             cell.style.cursor = 'pointer';
             cell.addEventListener('click', () => {
+                // ★ STスタッフセルの修正（記号パレットでの直接修正）
+                if (cell.dataset.isSt === '1') {
+                    handleStCellEdit(cell);
+                    return;
+                }
+
+                // ★ ハーフマンセルの修正（記号パレットでの直接修正）
+                if (cell.dataset.isHa === '1') {
+                    handleHaCellEdit(cell);
+                    return;
+                }
+
                 const s = parseInt(cell.dataset.s, 10);
                 const d = parseInt(cell.dataset.d, 10);
                 if (!lastSolveResult || !lastSolveResult.grid) return;
