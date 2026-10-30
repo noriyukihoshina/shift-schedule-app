@@ -607,9 +607,36 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     async function pullStateFromCloud(isInitialBoot = false, showToastMsg = false) {
+        if (typeof window !== 'undefined' && window.location && window.location.protocol === 'file:') {
+            if (isMaster) renderMasterIntegrationView();
+            return false;
+        }
         try {
             const deptId = (appConfig && appConfig.deptId) ? appConfig.deptId : 'master';
             setCloudStatusBadge('syncing', '☁️ クラウド同期中...');
+
+            // ★ マスターテーブルの場合: 全病棟(1f, 2f, 3f, south, st)の最新クラウドデータも一括取得してLocalStorageを最新化！
+            if (isMaster) {
+                const subDepts = ['1f', '2f', '3f', 'south', 'st'];
+                await Promise.allSettled(subDepts.map(async subId => {
+                    try {
+                        const r = await fetch(`/api/cloud_sync?deptId=${encodeURIComponent(subId)}&t=${Date.now()}`, { cache: 'no-store' });
+                        if (!r.ok) return;
+                        const j = await r.json();
+                        const subCloud = j && (j.cloudState || j.data);
+                        if (subCloud && subCloud.terms && typeof subCloud.terms === 'object') {
+                            Object.keys(subCloud.terms).forEach(tDate => {
+                                if (subCloud.terms[tDate]) {
+                                    window.localStorage.setItem(`shift_schedule_${subId}_term_${tDate}`, JSON.stringify(subCloud.terms[tDate]));
+                                }
+                            });
+                        }
+                    } catch (e) {
+                        // オフラインまたは通信失敗時はローカルキャッシュをそのまま維持
+                    }
+                }));
+            }
+
             const resp = await fetch(`/api/cloud_sync?deptId=${encodeURIComponent(deptId)}&t=${Date.now()}`, {
                 method: 'GET',
                 cache: 'no-store'
@@ -618,6 +645,7 @@ document.addEventListener('DOMContentLoaded', () => {
             if (!resp.ok) {
                 isCloudInitialSyncDone = true;
                 setCloudStatusBadge('local');
+                if (isMaster) renderMasterIntegrationView();
                 return false;
             }
 
@@ -625,6 +653,7 @@ document.addEventListener('DOMContentLoaded', () => {
             if (!resJson || !resJson.ok) {
                 isCloudInitialSyncDone = true;
                 setCloudStatusBadge('local');
+                if (isMaster) renderMasterIntegrationView();
                 return false;
             }
 
@@ -633,11 +662,13 @@ document.addEventListener('DOMContentLoaded', () => {
             if (!resJson.exists) {
                 isCloudInitialSyncDone = true;
                 await pushStateToCloud(true);
+                if (isMaster) renderMasterIntegrationView();
                 return true;
             }
             if (!resJson.cloudState) {
                 isCloudInitialSyncDone = true;
                 setCloudStatusBadge('local');
+                if (isMaster) renderMasterIntegrationView();
                 return false;
             }
 
@@ -700,6 +731,9 @@ document.addEventListener('DOMContentLoaded', () => {
             } finally {
                 isRestoringFromCloud = false;
                 isCloudInitialSyncDone = true;
+                if (isMaster) {
+                    renderMasterIntegrationView();
+                }
             }
 
             setCloudStatusBadge('synced');
@@ -711,6 +745,9 @@ document.addEventListener('DOMContentLoaded', () => {
             isRestoringFromCloud = false;
             isCloudInitialSyncDone = true;
             setCloudStatusBadge('local');
+            if (isMaster) {
+                renderMasterIntegrationView();
+            }
             return false;
         }
     }
@@ -2877,7 +2914,7 @@ document.addEventListener('DOMContentLoaded', () => {
             // ★ インラインスタイルが存在していても確実に強制表示/非表示を同期切り替え！
             panel.style.display = isActive ? 'block' : 'none';
         });
-        if (isMaster && tabId === 'checkTab') {
+        if (isMaster && (tabId === 'checkTab' || tabId === 'statsTab')) {
             renderMasterIntegrationView();
         }
         saveCurrentTermToStorage(); // ★ アクティブタブ状態も自動保存
@@ -3876,7 +3913,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 if (isWorkSymbol(sym) && sym !== '研' && sym !== '張') {
                     stHead[d] += 1.0; // ★ 0.5トグルONでも出勤人数は1！
                 } else if (sym === '○/休' || sym === '休/○' || sym === '○/有' || sym === '有/○' || sym === '〇/休' || sym === '休/〇' || sym === '〇/有' || sym === '有/〇') {
-                    stHead[d] += 0.5;
+                    stHead[d] += (st.isHalf ? 0.25 : 0.5);
                 }
             }
         });
@@ -4408,10 +4445,28 @@ document.addEventListener('DOMContentLoaded', () => {
             <tr style="background:transparent; font-weight:600; font-size:0.85rem;">
                 <th class="sticky-col-1" colspan="2" style="color:#334155;">早番</th>
         `;
+        const linkedStEarlyArr = (isSouth || appConfig.deptId === 'south') ? getLinkedSTDailyEarly() : null;
         for (let d = 0; d < NUM_DAYS; d++) {
             const dStat = stats.daily[d];
             const thickCls = ((d + 1) % 7 === 0) ? 'border-thick-right' : '';
-            footHtml += `<td class="${thickCls}" data-d="${d}" data-footer-stat="early" style="color:#334155; font-weight:700;">${dStat.early}</td>`;
+            let earlyVal = dStat.early;
+            const currentGrid = grid || (lastSolveResult && lastSolveResult.grid);
+            if (isSouth || appConfig.deptId === 'south') {
+                let poEarly = 0;
+                if (currentGrid && Array.isArray(currentGrid)) {
+                    currentGrid.forEach((row, sIdx) => {
+                        if (staffList[sIdx] && staffList[sIdx].isUnused) return;
+                        const c = row[d];
+                        const sym = (c && typeof c === 'object') ? c.symbol : c;
+                        if (sym === '早') poEarly++;
+                    });
+                } else {
+                    poEarly = dStat.early;
+                }
+                const stEarlyCount = (linkedStEarlyArr && linkedStEarlyArr[d]) ? linkedStEarlyArr[d] : 0;
+                earlyVal = poEarly + stEarlyCount;
+            }
+            footHtml += `<td class="${thickCls}" data-d="${d}" data-footer-stat="early" style="color:#334155; font-weight:700;">${earlyVal}</td>`;
         }
         footHtml += `<td colspan="8" style="color:#94a3b8;">-</td></tr>`;
 
@@ -4504,6 +4559,14 @@ document.addEventListener('DOMContentLoaded', () => {
         const grandLate = new Array(numDays).fill(0);
         const grandEve = new Array(numDays).fill(0);
         const grandH8 = new Array(numDays).fill(0);
+
+        // ★ マスターテーブル「勤務分析・平準化ダッシュボード」用の全フロアスタッフ統計集計用
+        const allMasterStaffStats = [];
+        const allRefSyms = ['上1', '上2', '上3', '上4', '上5', '下1', '下2', '下3'];
+        const masterRefBreakdownMap = {};
+        allRefSyms.forEach(sym => {
+            masterRefBreakdownMap[sym] = { symbol: sym, days: 0, staffSet: new Set() };
+        });
 
         // 1. 各階およびSTの保存データをLocalStorageから読み込み
         const floorDataMap = {};
@@ -4821,6 +4884,10 @@ document.addEventListener('DOMContentLoaded', () => {
                             sPaid++;
                         } else if (sym.includes('リフ') || sym.startsWith('上') || sym.startsWith('下')) {
                             sRef++;
+                            if (allRefSyms.includes(sym)) {
+                                masterRefBreakdownMap[sym].days += 1.0;
+                                masterRefBreakdownMap[sym].staffSet.add(s.id || s.name);
+                            }
                         } else if (sym === '早' || sym === 'ハヤ') {
                             if (sym === '早') sEarly++;
                             if (!isZero) sWork += 1.0;
@@ -4836,7 +4903,7 @@ document.addEventListener('DOMContentLoaded', () => {
                         } else if (isWorkSymbol(sym)) {
                             if (!isZero) sWork += 1.0;
                         } else if (sym === '○/休' || sym === '休/○' || sym === '○/有' || sym === '有/○') {
-                            if (!isZero) sWork += 0.5;
+                            if (!isZero) sWork += (isHalf ? 0.25 : 0.5);
                             if (sym.includes('休')) sOff += 0.5;
                             if (sym.includes('有')) sPaid += 0.5;
                         }
@@ -4870,6 +4937,17 @@ document.addEventListener('DOMContentLoaded', () => {
                     <td class="stat-cell" style="font-weight:600; text-align:center; background:#ffffff; color:#334155; border-bottom:1px solid #e2e8f0; font-size:0.8rem;">${item.isST ? '-' : sH8}</td>
                     <td class="remarks-cell" style="background:#ffffff; color:#475569; font-size:0.78rem; text-align:left; padding:2px 8px; border-bottom:1px solid #e2e8f0; white-space:normal; word-break:break-all;">${escapeHtmlText(s.remarks || '')}</td>
                 </tr>`;
+
+                allMasterStaffStats.push({
+                    staff: s,
+                    isUnused: false,
+                    paidDays: sPaid,
+                    refDays: sRef,
+                    early: sEarly,
+                    late: sLate,
+                    eve: sEve,
+                    h8: sH8
+                });
             });
 
             // フロア間の仕切り余白行
@@ -4946,6 +5024,41 @@ document.addEventListener('DOMContentLoaded', () => {
                 btn.style.background = isCurrentlyHidden ? '#f1f5f9' : '#ffffff';
             });
         });
+
+        // ★ マスターテーブル「📈 勤務分析・平準化ダッシュボード」に全館統合統計を反映！
+        const masterRefBreakdown = [];
+        allRefSyms.forEach(sym => {
+            const item = masterRefBreakdownMap[sym];
+            if (item && item.days > 0) {
+                masterRefBreakdown.push({
+                    symbol: item.symbol,
+                    days: item.days,
+                    staffCount: item.staffSet.size
+                });
+            }
+        });
+
+        const masterDaily = [];
+        for (let d = 0; d < numDays; d++) {
+            masterDaily.push({
+                day: d + 1,
+                totalWork: grandTotal[d],
+                realWork: Number(grandReal[d].toFixed(1)),
+                early: grandEarly[d],
+                late: grandLate[d],
+                eve: grandEve[d],
+                h8: grandH8[d],
+                sectionWork: { 'ST': 1 } // 二重加算防止フラグ
+            });
+        }
+
+        const masterStats = {
+            daily: masterDaily,
+            staffStats: allMasterStaffStats,
+            refBreakdown: masterRefBreakdown
+        };
+
+        renderStatsDashboard(masterStats);
     }
 
     // 出力シートおよびチェックシートでのセルクリックによる手動調整イベント
@@ -5223,7 +5336,9 @@ document.addEventListener('DOMContentLoaded', () => {
         const workRangeEl = document.getElementById('statWorkRange');
         const avgWorkEl = document.getElementById('statAvgWork');
         let stNote = '';
-        if (!isST && currentFloor && linkedStStaffData && linkedStStaffData.staffList && linkedStStaffData.staffList.length > 0) {
+        if (isMaster) {
+            stNote = ` <span style="font-size:0.75rem; color:#1e40af; font-weight:700;">(全フロア 1階・2階・3階・南・ST 統合)</span>`;
+        } else if (!isST && currentFloor && linkedStStaffData && linkedStStaffData.staffList && linkedStStaffData.staffList.length > 0) {
             stNote = ` <span style="font-size:0.75rem; color:#047857; font-weight:700;">(ST所属 ${linkedStStaffData.staffList.length}名 合算中)</span>`;
         }
         if (workRangeEl) workRangeEl.innerHTML = `実数 ${allMin} 〜 ${allMax} 名 (ブレ幅: 実数 ${Number((allMax - allMin).toFixed(2))} 名)${stNote}`;
@@ -5238,6 +5353,8 @@ document.addEventListener('DOMContentLoaded', () => {
         if (specEl) {
             if (isST) {
                 specEl.textContent = `早: ${totalEarly}回（各人3回割当・遅/E/8時はST対象外）`;
+            } else if (isMaster) {
+                specEl.textContent = `全館合計 早: ${totalEarly}回 / 遅: ${totalLate}回 / E: ${totalEve}回 / 8時: ${totalH8}回`;
             } else {
                 specEl.textContent = `早: ${totalEarly}回 / 遅: ${totalLate}回 / E: ${totalEve}回 / 8時: ${totalH8}回`;
             }
@@ -5247,9 +5364,9 @@ document.addEventListener('DOMContentLoaded', () => {
         const chartEl = document.getElementById('dailyWorkChart');
         if (chartEl) {
             let chartHtml = '';
-            const minScale = isST ? 5 : 25;
-            const maxScale = isST ? 16 : 40;
-            const range = maxScale - minScale;
+            const minScale = isST ? 5 : (isMaster ? Math.max(10, Math.floor(allMin * 0.85)) : 25);
+            const maxScale = isST ? 16 : (isMaster ? Math.max(minScale + 10, Math.ceil(allMax * 1.15)) : 40);
+            const range = Math.max(1, maxScale - minScale);
 
             stats.daily.forEach((d, idx) => {
                 const di = dates[idx];

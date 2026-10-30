@@ -4984,12 +4984,14 @@ class ShiftScheduler {
                 else if (sym === SYMBOLS.PAID) { paid += 1.0; }
                 else if (SYMBOLS.REF_SUMMER.includes(sym) || SYMBOLS.REF_WINTER.includes(sym)) { ref += 1.0; }
                 else if (sym === SYMBOLS.HALF_WORK_OFF || sym === SYMBOLS.HALF_OFF_WORK) {
-                    if (!isExcludedFromWork) totalWork += 0.5;
+                    const headAmt = staff.isHalf ? 0.25 : 0.5;
+                    if (!isExcludedFromWork) totalWork += headAmt;
                     off += 0.5;
                     staffWorkAmt = 0.5;
                 }
                 else if (sym === SYMBOLS.HALF_WORK_PAID || sym === SYMBOLS.HALF_PAID_WORK) {
-                    if (!isExcludedFromWork) totalWork += 0.5;
+                    const headAmt = staff.isHalf ? 0.25 : 0.5;
+                    if (!isExcludedFromWork) totalWork += headAmt;
                     paid += 0.5;
                     staffWorkAmt = 0.5;
                 }
@@ -5016,6 +5018,11 @@ class ShiftScheduler {
             sectionWork['ST'] = stWorkAmt;
             totalWork += stHeadAmt;
 
+            // ★ 南病棟の場合、所属STスタッフの早番を南病棟全体の早番として合算
+            if (this.isSouth && this.stDailyEarly && this.stDailyEarly[d]) {
+                early += this.stDailyEarly[d];
+            }
+
             // 実数合計の計算 (案B: 出勤実働 - 増員分。マイナス/減員時は実数変更なし)
             let realWorkBase = stWorkAmt;
             for (let s = 0; s < this.numStaff; s++) {
@@ -5035,7 +5042,9 @@ class ShiftScheduler {
                 }
             }
             const offset = (this.dayOffsets && this.dayOffsets[d]) ? this.dayOffsets[d] : 0;
-            const realWork = (offset > 0) ? Math.max(0, realWorkBase - offset) : realWorkBase;
+            const realWorkRaw = (offset > 0) ? Math.max(0, realWorkBase - offset) : realWorkBase;
+            const realWork = Number(realWorkRaw.toFixed(2));
+            totalWork = Number(totalWork.toFixed(2));
             daily.push({ day: d + 1, totalWork, realWork, early, late, eve, h8, normal, off, paid, ref, sectionWork, offset });
         }
 
@@ -5576,36 +5585,37 @@ function validateScheduleGrid(grid, staffList, options = {}) {
                         conflictCells.push({ dayIndex: d, footerStat: 'eve', reason: reason });
                     }
                 } else {
-                    // 修正作業エリア: 定員超過（南2, 南3それぞれで各1名を超える場合）のみ指摘
-                    if (s2Early > 1) {
-                        const reason = `${dateLabel}の南2早番が${s2Early}名で定員超過です（要件: 1名以下）`;
-                        errors.push(`【${dateLabel}】${reason}。`);
-                        conflictCells.push({ dayIndex: d, footerStat: 'early', reason: reason });
+                    // 修正作業エリア: 全日0名は許容するが、既に特殊勤務が入っている日での不足または超過は指摘＆網掛け
+                    const totalEarlyToday = s2Early + s3Early + stEarlyCount;
+                    if (totalEarlyToday > 0) {
+                        let earlyValid = false;
+                        if (stEarlyCount === 0) {
+                            earlyValid = (s2Early === 1 && s3Early === 1);
+                        } else {
+                            // ST早番が1名以上の場合: STをどちらかに充当し、もう一方にPOが1名
+                            earlyValid = (s2Early === 1 && s3Early === 0) || (s2Early === 0 && s3Early === 1);
+                        }
+                        if (!earlyValid) {
+                            const reason = `${dateLabel}の南病棟早番要件を満たしていません（南2に1名、南3に1名。ST早番含めて計2名。現況: 南2=${s2Early}名, 南3=${s3Early}名, ST=${stEarlyCount}名）`;
+                            errors.push(`【${dateLabel}】${reason}。`);
+                            conflictCells.push({ dayIndex: d, footerStat: 'early', reason: reason });
+                        }
                     }
-                    if (s3Early > 1) {
-                        const reason = `${dateLabel}の南3早番が${s3Early}名で定員超過です（要件: 1名以下）`;
-                        errors.push(`【${dateLabel}】${reason}。`);
-                        conflictCells.push({ dayIndex: d, footerStat: 'early', reason: reason });
+                    const totalLateToday = s2Late + s3Late;
+                    if (totalLateToday > 0) {
+                        if (s2Late !== 1 || s3Late !== 1) {
+                            const reason = `${dateLabel}の南病棟遅番要件を満たしていません（南2に1名、南3に1名。現況: 南2=${s2Late}名, 南3=${s3Late}名）`;
+                            errors.push(`【${dateLabel}】${reason}。`);
+                            conflictCells.push({ dayIndex: d, footerStat: 'late', reason: reason });
+                        }
                     }
-                    if (s2Late > 1) {
-                        const reason = `${dateLabel}の南2遅番が${s2Late}名で定員超過です（要件: 1名以下）`;
-                        errors.push(`【${dateLabel}】${reason}。`);
-                        conflictCells.push({ dayIndex: d, footerStat: 'late', reason: reason });
-                    }
-                    if (s3Late > 1) {
-                        const reason = `${dateLabel}の南3遅番が${s3Late}名で定員超過です（要件: 1名以下）`;
-                        errors.push(`【${dateLabel}】${reason}。`);
-                        conflictCells.push({ dayIndex: d, footerStat: 'late', reason: reason });
-                    }
-                    if (s2Eve > 1) {
-                        const reason = `${dateLabel}の南2 E番が${s2Eve}名で定員超過です（要件: 1名以下）`;
-                        errors.push(`【${dateLabel}】${reason}。`);
-                        conflictCells.push({ dayIndex: d, footerStat: 'eve', reason: reason });
-                    }
-                    if (s3Eve > 1) {
-                        const reason = `${dateLabel}の南3 E番が${s3Eve}名で定員超過です（要件: 1名以下）`;
-                        errors.push(`【${dateLabel}】${reason}。`);
-                        conflictCells.push({ dayIndex: d, footerStat: 'eve', reason: reason });
+                    const totalEveToday = s2Eve + s3Eve;
+                    if (totalEveToday > 0) {
+                        if (s2Eve !== 1 || s3Eve !== 1) {
+                            const reason = `${dateLabel}の南病棟E番要件を満たしていません（南2に1名、南3に1名。現況: 南2=${s2Eve}名, 南3=${s3Eve}名）`;
+                            errors.push(`【${dateLabel}】${reason}。`);
+                            conflictCells.push({ dayIndex: d, footerStat: 'eve', reason: reason });
+                        }
                     }
                 }
             } else if (isFinal) {

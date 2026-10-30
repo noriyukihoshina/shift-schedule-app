@@ -9,4 +9,7 @@ gen_pages.ps1
 
 _test_*
 comprehensive_test*
-
+*.log
+verify_out_*
+test_*
+run_*

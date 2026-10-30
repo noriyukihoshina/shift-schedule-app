@@ -1,13 +1,7 @@
-$edge = "C:\Program Files (x86)\Microsoft\Edge\Application\msedge.exe"
-$url = "file:///" + ($PSScriptRoot.Replace('\', '/') + "/test_master_detail.html")
-$guid = [System.Guid]::NewGuid().ToString("N")
-$outFile = Join-Path $PSScriptRoot "res_test_master_$guid.html"
+$chromePath = "C:\Program Files (x86)\Google\Chrome\Application\chrome.exe"
+$tempHtml = Join-Path $PSScriptRoot "test_master_stats.html"
+$logFile = Join-Path $PSScriptRoot "test_master_stats.log"
 
-Start-Process -FilePath $edge -ArgumentList "--headless=new", "--virtual-time-budget=5000", "--dump-dom", $url -RedirectStandardOutput $outFile -NoNewWindow -Wait
+& $chromePath --headless --disable-gpu --enable-logging=stderr --v=1 --virtual-time-budget=6000 "file:///$($tempHtml.Replace('\', '/'))" 2>&1 | Out-File $logFile -Encoding UTF8
 
-$dom = [System.IO.File]::ReadAllText($outFile, [System.Text.Encoding]::UTF8)
-if ($dom -match '(?s)<div id="testRes"><pre>(.*?)</pre></div>') {
-    Write-Host $matches[1]
-} else {
-    Write-Host "DOM length: " $dom.Length
-}
+Get-Content $logFile | Select-String -Pattern "MASTER_"
