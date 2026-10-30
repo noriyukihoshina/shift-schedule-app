@@ -1,6 +1,6 @@
 $files = Get-ChildItem -Path $PSScriptRoot -Filter "*.html"
-$currentRev = "rev81"
-$nextRev = "rev82"
+$currentRev = "rev82"
+$nextRev = "rev83"
 
 foreach ($f in $files) {
     $c = [System.IO.File]::ReadAllText($f.FullName, [System.Text.Encoding]::UTF8)

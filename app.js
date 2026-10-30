@@ -1050,6 +1050,8 @@ document.addEventListener('DOMContentLoaded', () => {
                     stDailyHeadCount: getLinkedSTDailyHeadCount(),
                     stDailyFtWork: getLinkedSTDailyFtWork(),
                     stDailyEarly: getLinkedSTDailyEarly(),
+                    stDailyLate: getLinkedSTDailyLate(),
+                    stDailyEve: getLinkedSTDailyEve(),
                     stFloorFtCount: getLinkedSTFloorFtCount()
                 });
                 scheduler.grid = data.outputGrid.map(row => {
@@ -3620,6 +3622,8 @@ document.addEventListener('DOMContentLoaded', () => {
                         stDailyHeadCount: getLinkedSTDailyHeadCount(),
                         stDailyFtWork: getLinkedSTDailyFtWork(),
                         stDailyEarly: getLinkedSTDailyEarly(),
+                    stDailyLate: getLinkedSTDailyLate(),
+                    stDailyEve: getLinkedSTDailyEve(),
                         stFloorFtCount: getLinkedSTFloorFtCount()
                     });
                     const result = scheduler.solveBaseSchedule();
@@ -3726,6 +3730,8 @@ document.addEventListener('DOMContentLoaded', () => {
                         stDailyHeadCount: getLinkedSTDailyHeadCount(),
                         stDailyFtWork: getLinkedSTDailyFtWork(),
                         stDailyEarly: getLinkedSTDailyEarly(),
+                    stDailyLate: getLinkedSTDailyLate(),
+                    stDailyEve: getLinkedSTDailyEve(),
                         stFloorFtCount: getLinkedSTFloorFtCount()
                     });
                     const baseResult = lastScheduler.solveBaseSchedule();
@@ -3767,6 +3773,8 @@ document.addEventListener('DOMContentLoaded', () => {
                         stDailyHeadCount: getLinkedSTDailyHeadCount(),
                         stDailyFtWork: getLinkedSTDailyFtWork(),
                         stDailyEarly: getLinkedSTDailyEarly(),
+                    stDailyLate: getLinkedSTDailyLate(),
+                    stDailyEve: getLinkedSTDailyEve(),
                         stFloorFtCount: getLinkedSTFloorFtCount()
                     });
                     const reBase = freshScheduler.solveBaseSchedule({ force: true });
@@ -3968,7 +3976,7 @@ document.addEventListener('DOMContentLoaded', () => {
         return stFtWork;
     }
 
-    // ★ ST早番スタッフの日別出勤数を取得（南病棟等の早番連携用）
+    // ★ ST早番スタッフの日別出勤数を取得（各病棟テーブルの早番連携用）
     function getLinkedSTDailyEarly() {
         if (!linkedStStaffData || !linkedStStaffData.staffList || !linkedStStaffData.grid) return null;
         const stEarly = new Array(NUM_DAYS).fill(0);
@@ -3985,6 +3993,44 @@ document.addEventListener('DOMContentLoaded', () => {
             }
         });
         return stEarly;
+    }
+
+    // ★ ST遅番スタッフの日別出勤数を取得（各病棟テーブルの遅番連携用）
+    function getLinkedSTDailyLate() {
+        if (!linkedStStaffData || !linkedStStaffData.staffList || !linkedStStaffData.grid) return null;
+        const stLate = new Array(NUM_DAYS).fill(0);
+        linkedStStaffData.staffList.forEach((st, idx) => {
+            if (st.isUnused) return;
+            const row = linkedStStaffData.grid[idx] || [];
+            for (let d = 0; d < NUM_DAYS; d++) {
+                const c = row[d] || { symbol: '' };
+                const sym = (c && typeof c === 'object') ? (c.symbol || '') : (c || '');
+                const wish = (st.days && st.days[d]) ? st.days[d] : '';
+                if (sym === '遅' || wish === '遅') {
+                    stLate[d]++;
+                }
+            }
+        });
+        return stLate;
+    }
+
+    // ★ ST E番スタッフの日別出勤数を取得（各病棟テーブルのE連携用）
+    function getLinkedSTDailyEve() {
+        if (!linkedStStaffData || !linkedStStaffData.staffList || !linkedStStaffData.grid) return null;
+        const stEve = new Array(NUM_DAYS).fill(0);
+        linkedStStaffData.staffList.forEach((st, idx) => {
+            if (st.isUnused) return;
+            const row = linkedStStaffData.grid[idx] || [];
+            for (let d = 0; d < NUM_DAYS; d++) {
+                const c = row[d] || { symbol: '' };
+                const sym = (c && typeof c === 'object') ? (c.symbol || '') : (c || '');
+                const wish = (st.days && st.days[d]) ? st.days[d] : '';
+                if (sym === 'E' || sym === 'イ' || sym === 'イブ' || wish === 'E' || wish === 'イ' || wish === 'イブ') {
+                    stEve[d]++;
+                }
+            }
+        });
+        return stEve;
     }
 
     // ★ ST所属スタッフのうち専従スタッフの総数
@@ -4574,13 +4620,16 @@ document.addEventListener('DOMContentLoaded', () => {
             <tr style="background:transparent; font-weight:600; font-size:0.85rem;">
                 <th class="sticky-col-1" colspan="2" style="color:#334155;">早番</th>
         `;
-        const linkedStEarlyArr = (isSouth || appConfig.deptId === 'south') ? getLinkedSTDailyEarly() : null;
+        const linkedStEarlyArr = (!isST && !isLife) ? getLinkedSTDailyEarly() : null;
+        const linkedStLateArr = (!isST && !isLife) ? getLinkedSTDailyLate() : null;
+        const linkedStEveArr = (!isST && !isLife) ? getLinkedSTDailyEve() : null;
+        const currentGrid = grid || (lastSolveResult && lastSolveResult.grid);
+
         for (let d = 0; d < NUM_DAYS; d++) {
             const dStat = stats.daily[d];
             const thickCls = ((d + 1) % 7 === 0) ? 'border-thick-right' : '';
             let earlyVal = dStat.early;
-            const currentGrid = grid || (lastSolveResult && lastSolveResult.grid);
-            if (isSouth || appConfig.deptId === 'south') {
+            if (!isST && !isLife) {
                 let poEarly = 0;
                 if (currentGrid && Array.isArray(currentGrid)) {
                     currentGrid.forEach((row, sIdx) => {
@@ -4592,7 +4641,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 } else {
                     poEarly = dStat.early;
                 }
-                // ST早番人数を linkedStEarlyArr および linkedStStaffData から確実に合算！
+                // ST早番人数を linkedStEarlyArr および linkedStStaffData から合算！
                 let stEarlyCount = 0;
                 if (linkedStEarlyArr && linkedStEarlyArr[d] !== undefined) {
                     stEarlyCount = linkedStEarlyArr[d];
@@ -4620,7 +4669,36 @@ document.addEventListener('DOMContentLoaded', () => {
         for (let d = 0; d < NUM_DAYS; d++) {
             const dStat = stats.daily[d];
             const thickCls = ((d + 1) % 7 === 0) ? 'border-thick-right' : '';
-            footHtml += `<td class="${thickCls}" data-d="${d}" data-footer-stat="late" style="color:#334155; font-weight:700;">${dStat.late}</td>`;
+            let lateVal = dStat.late;
+            if (!isST && !isLife) {
+                let poLate = 0;
+                if (currentGrid && Array.isArray(currentGrid)) {
+                    currentGrid.forEach((row, sIdx) => {
+                        if (staffList[sIdx] && staffList[sIdx].isUnused) return;
+                        const c = row[d];
+                        const sym = (c && typeof c === 'object') ? (c.symbol || c) : c;
+                        if (sym === '遅') poLate++;
+                    });
+                } else {
+                    poLate = dStat.late;
+                }
+                // ST遅番人数を合算
+                let stLateCount = 0;
+                if (linkedStLateArr && linkedStLateArr[d] !== undefined) {
+                    stLateCount = linkedStLateArr[d];
+                } else if (linkedStStaffData && linkedStStaffData.staffList && linkedStStaffData.grid) {
+                    linkedStStaffData.staffList.forEach((st, sIdx) => {
+                        if (st.isUnused) return;
+                        const row = linkedStStaffData.grid[sIdx] || [];
+                        const c = row[d] || { symbol: '' };
+                        const sym = (c && typeof c === 'object') ? (c.symbol || '') : (c || '');
+                        const wish = (st.days && st.days[d]) ? st.days[d] : '';
+                        if (sym === '遅' || wish === '遅') stLateCount++;
+                    });
+                }
+                lateVal = poLate + stLateCount;
+            }
+            footHtml += `<td class="${thickCls}" data-d="${d}" data-footer-stat="late" style="color:#334155; font-weight:700;">${lateVal}</td>`;
         }
         footHtml += `<td colspan="8" style="color:#94a3b8;">-</td></tr>`;
 
@@ -4632,7 +4710,36 @@ document.addEventListener('DOMContentLoaded', () => {
         for (let d = 0; d < NUM_DAYS; d++) {
             const dStat = stats.daily[d];
             const thickCls = ((d + 1) % 7 === 0) ? 'border-thick-right' : '';
-            footHtml += `<td class="${thickCls}" data-d="${d}" data-footer-stat="eve" style="color:#334155; font-weight:700;">${dStat.eve}</td>`;
+            let eveVal = dStat.eve;
+            if (!isST && !isLife) {
+                let poEve = 0;
+                if (currentGrid && Array.isArray(currentGrid)) {
+                    currentGrid.forEach((row, sIdx) => {
+                        if (staffList[sIdx] && staffList[sIdx].isUnused) return;
+                        const c = row[d];
+                        const sym = (c && typeof c === 'object') ? (c.symbol || c) : c;
+                        if (sym === 'E') poEve++;
+                    });
+                } else {
+                    poEve = dStat.eve;
+                }
+                // ST E番人数を合算
+                let stEveCount = 0;
+                if (linkedStEveArr && linkedStEveArr[d] !== undefined) {
+                    stEveCount = linkedStEveArr[d];
+                } else if (linkedStStaffData && linkedStStaffData.staffList && linkedStStaffData.grid) {
+                    linkedStStaffData.staffList.forEach((st, sIdx) => {
+                        if (st.isUnused) return;
+                        const row = linkedStStaffData.grid[sIdx] || [];
+                        const c = row[d] || { symbol: '' };
+                        const sym = (c && typeof c === 'object') ? (c.symbol || '') : (c || '');
+                        const wish = (st.days && st.days[d]) ? st.days[d] : '';
+                        if (sym === 'E' || sym === 'イ' || sym === 'イブ' || wish === 'E' || wish === 'イ' || wish === 'イブ') stEveCount++;
+                    });
+                }
+                eveVal = poEve + stEveCount;
+            }
+            footHtml += `<td class="${thickCls}" data-d="${d}" data-footer-stat="eve" style="color:#334155; font-weight:700;">${eveVal}</td>`;
         }
         footHtml += `<td colspan="8" style="color:#94a3b8;">-</td></tr>`;
 
@@ -4842,16 +4949,25 @@ document.addEventListener('DOMContentLoaded', () => {
                     }
                 }
 
-                // 所属STスタッフ集計の合算
+                // 所属STスタッフ集計の合算（1〜3階・南病棟ともにPT+OT+ST合算で早・遅・E・8時を集計）
                 for (let si = 0; si < floorStStaff.length; si++) {
                     const st = floorStStaff[si];
                     const cell = floorStGrid[si] ? floorStGrid[si][d] : null;
                     const sym = (cell && typeof cell === 'object') ? cell.symbol : (cell || '');
                     if (sym === '早') {
-                        // ★ 南病棟のみPO＋ST合算で早番2名！1階〜3階は病棟PO早3名＋ST早1名（別枠）のため病棟早番行には合算しない
-                        if (fc.id === 'south') {
-                            earlyCount++;
-                        }
+                        earlyCount++;
+                        headCount += 1.0;
+                        realCount += (st.isHalf ? 0.5 : 1.0);
+                    } else if (sym === '遅') {
+                        lateCount++;
+                        headCount += 1.0;
+                        realCount += (st.isHalf ? 0.5 : 1.0);
+                    } else if (sym === 'E') {
+                        eveCount++;
+                        headCount += 1.0;
+                        realCount += (st.isHalf ? 0.5 : 1.0);
+                    } else if (sym === '8時') {
+                        h8Count++;
                         headCount += 1.0;
                         realCount += (st.isHalf ? 0.5 : 1.0);
                     } else if (sym === '○' || sym === '出' || sym === '研' || sym === '張' || sym === 'ハヤ' || sym === 'オソ' || sym === 'イブ') {
@@ -6246,6 +6362,8 @@ document.addEventListener('DOMContentLoaded', () => {
                     stDailyHeadCount: getLinkedSTDailyHeadCount(),
                     stDailyFtWork: getLinkedSTDailyFtWork(),
                     stDailyEarly: getLinkedSTDailyEarly(),
+                    stDailyLate: getLinkedSTDailyLate(),
+                    stDailyEve: getLinkedSTDailyEve(),
                     stFloorFtCount: getLinkedSTFloorFtCount()
                 });
                 gridToCopy = scheduler.grid;
@@ -7498,6 +7616,8 @@ document.addEventListener('DOMContentLoaded', () => {
                     stDailyHeadCount: getLinkedSTDailyHeadCount(),
                     stDailyFtWork: getLinkedSTDailyFtWork(),
                     stDailyEarly: getLinkedSTDailyEarly(),
+                    stDailyLate: getLinkedSTDailyLate(),
+                    stDailyEve: getLinkedSTDailyEve(),
                     stFloorFtCount: getLinkedSTFloorFtCount()
                 });
             }
@@ -7651,6 +7771,8 @@ document.addEventListener('DOMContentLoaded', () => {
                     stDailyHeadCount: getLinkedSTDailyHeadCount(),
                     stDailyFtWork: getLinkedSTDailyFtWork(),
                     stDailyEarly: getLinkedSTDailyEarly(),
+                    stDailyLate: getLinkedSTDailyLate(),
+                    stDailyEve: getLinkedSTDailyEve(),
                     stFloorFtCount: getLinkedSTFloorFtCount()
                 });
                 gridToExport = scheduler.grid;

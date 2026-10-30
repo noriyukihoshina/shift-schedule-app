@@ -17,7 +17,18 @@ foreach ($s in $screens) {
 
     $content = ""
     if (Test-Path $logFile) {
-        $content = [System.IO.File]::ReadAllText($logFile, [System.Text.Encoding]::UTF8)
+        try {
+            $stream = [System.IO.File]::Open($logFile, [System.IO.FileMode]::Open, [System.IO.FileAccess]::Read, [System.IO.FileShare]::ReadWrite)
+            $reader = New-Object System.IO.StreamReader($stream, [System.Text.Encoding]::UTF8)
+            $content = $reader.ReadToEnd()
+            $reader.Close()
+            $stream.Close()
+        } catch {
+            Start-Sleep -Milliseconds 500
+            if (Test-Path $logFile) {
+                $content = [System.IO.File]::ReadAllText($logFile, [System.Text.Encoding]::UTF8)
+            }
+        }
         # Note: Do not remove file to respect RULE[user_global]
     }
     $errors = ($content -split "`r?`n") | Where-Object { $_ -match "CONSOLE.*Error|SyntaxError|ReferenceError|TypeError" -and $_ -notmatch "chrome-extension" }
