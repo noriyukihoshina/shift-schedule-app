@@ -5538,8 +5538,6 @@ function validateScheduleGrid(grid, staffList, options = {}) {
         }
 
         // 専従: PT・OT・STの専従はその階で3人以上出勤する制約
-        const isLife = !!options.isLife;
-        const isSouth = !!options.isSouth;
         if (!isST && !isLife) {
             let stFtWork = 0;
             if (options.stStaffData && options.stStaffData.staffList) {
