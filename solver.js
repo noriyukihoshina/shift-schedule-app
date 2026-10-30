@@ -2332,6 +2332,10 @@ class ShiftScheduler {
 
                     // スコア計算:
                     let score = totalCountPenalty + dutyTypePenalty;
+                    if (d + 1 < this.numDays && isHolidaySymbol(this.grid[s][d + 1].symbol)) {
+                        // ★ 既に翌日が休日のスタッフを超大幅優遇（スワップ不要で翌日休が100%保証される）
+                        score -= 50000;
+                    }
                     if (swapDay >= 0) {
                         // スワップが必要な場合は優先度を下げ、さらにスワップによる実数合計の偏り影響を加味
                         const d1Load = this.getDailyEffectiveRealLoad(d + 1);
@@ -2505,10 +2509,62 @@ class ShiftScheduler {
                 }
 
                 candidates.sort((a, b) => a.score - b.score);
-                const toAssign = Math.min(needed, candidates.length);
-                for (let i = 0; i < toAssign; i++) {
+                let assignedCount = 0;
+                for (let i = 0; i < candidates.length && assignedCount < needed; i++) {
                     const cand = candidates[i];
                     const chosen = cand.staffIndex;
+
+                    // ★ リアルタイム1年目制約チェック（既に当日任命されたスタッフを反映した最新状態で厳格検査）
+                    if (this.staffList[chosen].isFirstYear) {
+                        if (this.isSouth) {
+                            if (req.key === 'early') {
+                                let curEarlyFY = 0;
+                                for (let otherS = 0; otherS < this.numStaff; otherS++) {
+                                    if (this.staffList[otherS].isFirstYear && this.grid[otherS][d].symbol === SYMBOLS.EARLY) curEarlyFY++;
+                                }
+                                if (curEarlyFY >= 1) continue; // 既に当日早番に1年目がいる場合は絶対にスキップ！
+                            }
+                            if (req.key === 'eve') {
+                                let curEveFY = 0;
+                                for (let otherS = 0; otherS < this.numStaff; otherS++) {
+                                    if (this.staffList[otherS].isFirstYear && this.grid[otherS][d].symbol === SYMBOLS.EVE) curEveFY++;
+                                }
+                                if (curEveFY >= 1) continue; // 既に当日Eに1年目がいる場合は絶対にスキップ！
+                            }
+                            const subFl = getSubFloor(chosen);
+                            if (req.key === 'late') {
+                                let floorEveFY = 0;
+                                for (let otherS = 0; otherS < this.numStaff; otherS++) {
+                                    if (getSubFloor(otherS) === subFl && this.staffList[otherS].isFirstYear && this.grid[otherS][d].symbol === SYMBOLS.EVE) floorEveFY++;
+                                }
+                                if (floorEveFY >= 1) continue;
+                            }
+                            if (req.key === 'eve') {
+                                let floorLateFY = 0;
+                                for (let otherS = 0; otherS < this.numStaff; otherS++) {
+                                    if (getSubFloor(otherS) === subFl && this.staffList[otherS].isFirstYear && this.grid[otherS][d].symbol === SYMBOLS.LATE) floorLateFY++;
+                                }
+                                if (floorLateFY >= 1) continue;
+                            }
+                        } else {
+                            // 1階・2階・3階（通常病棟）
+                            if (req.key === 'early') {
+                                let curEarlyFY = 0;
+                                for (let otherS = 0; otherS < this.numStaff; otherS++) {
+                                    if (this.staffList[otherS].isFirstYear && this.grid[otherS][d].symbol === SYMBOLS.EARLY) curEarlyFY++;
+                                }
+                                if (curEarlyFY >= 1) continue; // 当日早番に1年目は最大1名！2人目はスキップ！
+                            }
+                            if (req.key === 'late' || req.key === 'eve') {
+                                let curLateEveFY = 0;
+                                for (let otherS = 0; otherS < this.numStaff; otherS++) {
+                                    if (this.staffList[otherS].isFirstYear && (this.grid[otherS][d].symbol === SYMBOLS.LATE || this.grid[otherS][d].symbol === SYMBOLS.EVE)) curLateEveFY++;
+                                }
+                                if (curLateEveFY >= 1) continue; // 当日遅・Eに1年目は合計最大1名！2人目はスキップ！
+                            }
+                        }
+                    }
+
                     this.setSymbol(chosen, d, req.type, false);
 
                     if (cand.isNextWorkFallback) {
@@ -2527,6 +2583,7 @@ class ShiftScheduler {
                     counts[req.key][chosen]++;
                     counts.total[chosen]++;
                     lastDay[chosen] = d;
+                    assignedCount++;
                 }
             }
         }
