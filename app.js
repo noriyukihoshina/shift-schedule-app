@@ -1714,7 +1714,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 <th class="remarks-col" rowspan="2" title="委員会等のメモ（ExcelのAG列と自動連携）" style="background:#f8fafc; color:#1e293b; min-width:220px; max-width:320px;">備考（メモ）</th>
             `;
         } else if (isLife) {
-            // ★ 生活期テーブル専用ヘッダー（PT/OT/ST, 係長/主任/副主任, 訪問/通所/Cl1/Cl2/管理, ハ1〜ハ南, 0, 0.5）
+            // ★ 生活期テーブル専用ヘッダー（PT/OT/ST, 係長/主任/副主任, 8時可, 訪問/通所/Cl1/Cl2/管理, ハ1〜ハ4, 0, 0.5）
             headHtml += `
                 <th class="flag-col" rowspan="2" title="PT（択一）" style="background:#e0e7ff; color:#3730a3; font-weight:800;">PT</th>
                 <th class="flag-col" rowspan="2" title="OT（択一）" style="background:#fae8ff; color:#86198f; font-weight:800;">OT</th>
@@ -1722,15 +1722,16 @@ document.addEventListener('DOMContentLoaded', () => {
                 <th class="flag-col" rowspan="2" title="係長（択一）" style="background:#fef3c7; color:#92400e; font-weight:800;">係長</th>
                 <th class="flag-col" rowspan="2" title="主任（択一）" style="background:#fef9c3; color:#854d0e; font-weight:800;">主任</th>
                 <th class="flag-col" rowspan="2" title="副主任（択一）" style="background:#e0f2fe; color:#0369a1; font-weight:800;">副主任</th>
-                <th class="flag-col" rowspan="2" title="訪問（土日休み固定、PO人数除外）" style="background:#e0f2fe; color:#0369a1; font-weight:800;">訪問</th>
-                <th class="flag-col" rowspan="2" title="通所（日曜日全員休み、平日は分散、PO人数除外）" style="background:#fef3c7; color:#92400e; font-weight:800;">通所</th>
-                <th class="flag-col" rowspan="2" title="Cl1（集計に一切含めない）" style="background:#f1f5f9; color:#475569; font-weight:800;">Cl1</th>
-                <th class="flag-col" rowspan="2" title="Cl2（通所の集計に含める）" style="background:#ffedd5; color:#c2410c; font-weight:800;">Cl2</th>
-                <th class="flag-col" rowspan="2" title="管理（記載するが集計に一切含めない）" style="background:#f3e8ff; color:#6b21a8; font-weight:800;">管理</th>
-                <th class="flag-col" rowspan="2" title="ハ1（択一）" style="background:#dcfce7; color:#15803d; font-weight:800;">ハ1</th>
-                <th class="flag-col" rowspan="2" title="ハ2（択一）" style="background:#dcfce7; color:#15803d; font-weight:800;">ハ2</th>
-                <th class="flag-col" rowspan="2" title="ハ3（択一）" style="background:#dcfce7; color:#15803d; font-weight:800;">ハ3</th>
-                <th class="flag-col" rowspan="2" title="ハ南（択一）" style="background:#fae8ff; color:#86198f; font-weight:800;">ハ南</th>
+                <th class="flag-col" rowspan="2" title="8時開始可能か（訪問のみ使用）" style="background:#e0f2fe; color:#0369a1; font-weight:800;">8時<br>可</th>
+                <th class="flag-col" rowspan="2" title="訪問（土日休み固定、8時勤務あり）" style="background:#e0f2fe; color:#0369a1; font-weight:800;">訪問</th>
+                <th class="flag-col" rowspan="2" title="通所（日曜日全員休み、平日は分散）" style="background:#fef3c7; color:#92400e; font-weight:800;">通所</th>
+                <th class="flag-col" rowspan="2" title="Cl1（土日休み固定、集計除外）" style="background:#f1f5f9; color:#475569; font-weight:800;">Cl1</th>
+                <th class="flag-col" rowspan="2" title="Cl2（日曜日全員休み、平日は分散）" style="background:#ffedd5; color:#c2410c; font-weight:800;">Cl2</th>
+                <th class="flag-col" rowspan="2" title="管理（土日休み固定、集計除外）" style="background:#f3e8ff; color:#6b21a8; font-weight:800;">管理</th>
+                <th class="flag-col" rowspan="2" title="ハ1（土日休み固定、1階へ実数0.5加算）" style="background:#dcfce7; color:#15803d; font-weight:800;">ハ1</th>
+                <th class="flag-col" rowspan="2" title="ハ2（土日休み固定、2階へ実数0.5加算）" style="background:#dcfce7; color:#15803d; font-weight:800;">ハ2</th>
+                <th class="flag-col" rowspan="2" title="ハ3（通所と同じ組み方、3階へ実数0.5加算）" style="background:#dcfce7; color:#15803d; font-weight:800;">ハ3</th>
+                <th class="flag-col" rowspan="2" title="ハ4（通所と同じ組み方、南病棟へ実数0.5加算）" style="background:#fae8ff; color:#86198f; font-weight:800;">ハ4</th>
                 <th class="flag-col" rowspan="2" title="0（実数計算で0人換算）" style="background:#f5d0fe; color:#701a75; font-weight:800;">0</th>
                 <th class="flag-col" rowspan="2" title="0.5（実数計算で0.5人換算）" style="background:#e9d5ff; color:#581c87; font-weight:800;">0.5</th>
                 <th class="flag-col" rowspan="2" title="6連勤例外許可" style="background:#fee2e2; color:#991b1b;">6連勤<br>可</th>
@@ -1948,6 +1949,12 @@ document.addEventListener('DOMContentLoaded', () => {
                             <span class="toggle-slider"></span>
                         </label>
                     </td>
+                    <td class="flag-col" style="background:#e0f2fe;">
+                        <label class="toggle-switch" title="8時開始可能か（訪問のみ使用）">
+                            <input type="checkbox" ${staff.can8 ? 'checked' : ''} data-flag="can8" data-s="${sIdx}">
+                            <span class="toggle-slider"></span>
+                        </label>
+                    </td>
                 `;
 
                 // 2. 生活期業務（訪問・通所・Cl1・Cl2・管理: 択一）
@@ -1963,8 +1970,8 @@ document.addEventListener('DOMContentLoaded', () => {
                     `;
                 });
 
-                // 3. ハセクション（ハ1・ハ2・ハ3・ハ南: 択一）
-                const haSecs = ['ハ1', 'ハ2', 'ハ3', 'ハ南'];
+                // 3. ハセクション（ハ1・ハ2・ハ3・ハ4: 択一）
+                const haSecs = ['ハ1', 'ハ2', 'ハ3', 'ハ4'];
                 haSecs.forEach(haName => {
                     bodyHtml += `
                         <td class="flag-col" style="background:#f0fdf4;">
@@ -2375,7 +2382,7 @@ document.addEventListener('DOMContentLoaded', () => {
             });
         });
 
-        // ★ 生活期 ハセクション択一排他制御（ハ1・ハ2・ハ3・ハ南）
+        // ★ 生活期 ハセクション択一排他制御（ハ1・ハ2・ハ3・ハ4）
         document.querySelectorAll('input[type="checkbox"][data-ha-section]').forEach(chk => {
             chk.addEventListener('change', (e) => {
                 const s = parseInt(e.target.dataset.s, 10);
@@ -4036,15 +4043,15 @@ document.addEventListener('DOMContentLoaded', () => {
                 linkedLifeStaffData = null;
                 return;
             }
-            const targetHa = (currentFloor === '1F' ? 'ハ1' : (currentFloor === '2F' ? 'ハ2' : (currentFloor === '3F' ? 'ハ3' : (currentFloor === '南' ? 'ハ南' : ''))));
-            if (!targetHa) {
+            const targetHas = (currentFloor === '1F' ? ['ハ1'] : (currentFloor === '2F' ? ['ハ2'] : (currentFloor === '3F' ? ['ハ3'] : (currentFloor === '南' ? ['ハ4', 'ハ南'] : []))));
+            if (targetHas.length === 0) {
                 linkedLifeStaffData = null;
                 return;
             }
             const matchingStaff = [];
             const matchingGrid = [];
             data.staffList.forEach((st, idx) => {
-                if (!st.isUnused && st.haSection === targetHa) {
+                if (!st.isUnused && targetHas.includes(st.haSection)) {
                     matchingStaff.push(st);
                     if (data.outputGrid && data.outputGrid[idx]) {
                         matchingGrid.push(data.outputGrid[idx]);
@@ -4731,7 +4738,7 @@ document.addEventListener('DOMContentLoaded', () => {
         if (lifeData && Array.isArray(lifeData.staffList)) {
             lifeData.staffList.forEach((st, idx) => {
                 if (st.isUnused || st.isZeroCount) return;
-                const flId = st.haSection === 'ハ1' ? '1f' : (st.haSection === 'ハ2' ? '2f' : (st.haSection === 'ハ3' ? '3f' : (st.haSection === 'ハ南' ? 'south' : '')));
+                const flId = st.haSection === 'ハ1' ? '1f' : (st.haSection === 'ハ2' ? '2f' : (st.haSection === 'ハ3' ? '3f' : ((st.haSection === 'ハ4' || st.haSection === 'ハ南') ? 'south' : '')));
                 if (!flId) return;
                 const gridRow = (lifeData.outputGrid && lifeData.outputGrid[idx]) ? lifeData.outputGrid[idx] : null;
                 for (let d = 0; d < numDays; d++) {
