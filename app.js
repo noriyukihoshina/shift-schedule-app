@@ -461,10 +461,17 @@ document.addEventListener('DOMContentLoaded', () => {
                     days: new Array(NUM_DAYS).fill('')
                 });
             } else {
-                // 通常のPT/OTスタッフ初期化
+                // 通常のPT/OTスタッフ初期化（生活期初期値：41〜44番は各病棟応援ハ1〜ハ4）
+                const isDefaultHa1 = isLife && (i === 41);
+                const isDefaultHa2 = isLife && (i === 42);
+                const isDefaultHa3 = isLife && (i === 43);
+                const isDefaultHa4 = isLife && (i === 44);
+                const defaultHaSec = isDefaultHa1 ? 'ハ1' : (isDefaultHa2 ? 'ハ2' : (isDefaultHa3 ? 'ハ3' : (isDefaultHa4 ? 'ハ4' : '')));
+                const defaultStaffName = defaultHaSec ? `${defaultHaSec} スタッフ` : `スタッフ ${String(i).padStart(2, '0')}`;
+
                 staffList.push({
                     id: i,
-                    name: `スタッフ ${String(i).padStart(2, '0')}`,
+                    name: defaultStaffName,
                     isUnused: (isLife ? false : (i > 48)),  // 生活期は45名全員使用、POは49〜60番目不使用
                     floor: currentFloor || '',
                     section: '',         // 'PT A', 'PT B', 'OT A', 'OT B', または ''
@@ -480,7 +487,7 @@ document.addEventListener('DOMContentLoaded', () => {
                     isZeroCount: false,                  // ★ 0（出勤実数を0人換算）
                     isFirstYear: false,                  // ★ 1年目
                     lifeSection: '',                     // ★ 生活期セクション
-                    haSection: '',                       // ★ ハセクション
+                    haSection: defaultHaSec,             // ★ ハセクション（ハ1〜ハ4）
                     jobTitle: '',                        // ★ 職種（PT/OT/ST）
                     isFullTime: (i <= 10),               // ★ 専従
                     allow6Consec: false,                 // ★ 6連勤可
@@ -935,6 +942,7 @@ document.addEventListener('DOMContentLoaded', () => {
             currentWorkingStartDate = targetStart;
             const term = getTermInfo();
 
+
             // ★ ST所属スタッフ連携データの読み込み（病棟テーブル時）
             loadLinkedSTData(targetStart);
             loadLinkedLifeData(targetStart);
@@ -1306,6 +1314,7 @@ document.addEventListener('DOMContentLoaded', () => {
         // 先に getTermInfo() を呼んで NUM_DAYS (28 or 29) を確定させる
         const term = getTermInfo();
 
+
         // ★ ST所属スタッフ連携データの読み込み（病棟テーブル時）
         loadLinkedSTData(newStartDate);
         loadLinkedLifeData(newStartDate);
@@ -1368,6 +1377,19 @@ document.addEventListener('DOMContentLoaded', () => {
     const undoStack = [];
     const redoStack = [];
 
+    // ★ マスターテーブル専用 Undo/Redo 履歴スタック
+    const masterUndoStack = [];
+    const masterRedoStack = [];
+
+    function pushMasterHistory(action) {
+        masterUndoStack.push(action);
+        if (masterUndoStack.length > MAX_HISTORY) {
+            masterUndoStack.shift();
+        }
+        masterRedoStack.length = 0;
+        updateUndoRedoUI();
+    }
+
     function getHistorySnapshot() {
         return {
             staffList: staffList.map(s => ({
@@ -1407,6 +1429,32 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     function undo() {
+        if (isMaster) {
+            if (masterUndoStack.length === 0) return;
+            const action = masterUndoStack.pop();
+            masterRedoStack.push(action);
+            try {
+                localStorage.setItem(action.targetKey, action.prevJson);
+                renderMasterIntegrationView();
+                if (action.openFloors && Array.isArray(action.openFloors)) {
+                    action.openFloors.forEach(flId => {
+                        const rows = document.querySelectorAll(`.master-detail-${flId}`);
+                        rows.forEach(r => { r.style.display = 'table-row'; });
+                        const btn = document.querySelector(`.toggle-master-floor-btn[data-floor="${flId}"]`);
+                        if (btn) {
+                            btn.innerHTML = '▲折りたたむ';
+                            btn.style.background = '#f1f5f9';
+                        }
+                    });
+                }
+                updateUndoRedoUI();
+                showToast('↩ 直前の状態に戻しました');
+            } catch (err) {
+                console.error('マスターUndoエラー:', err);
+            }
+            return;
+        }
+
         if (undoStack.length === 0) return;
         redoStack.push(getHistorySnapshot());
         const prevState = undoStack.pop();
@@ -1418,6 +1466,32 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     function redo() {
+        if (isMaster) {
+            if (masterRedoStack.length === 0) return;
+            const action = masterRedoStack.pop();
+            masterUndoStack.push(action);
+            try {
+                localStorage.setItem(action.targetKey, action.nextJson);
+                renderMasterIntegrationView();
+                if (action.openFloors && Array.isArray(action.openFloors)) {
+                    action.openFloors.forEach(flId => {
+                        const rows = document.querySelectorAll(`.master-detail-${flId}`);
+                        rows.forEach(r => { r.style.display = 'table-row'; });
+                        const btn = document.querySelector(`.toggle-master-floor-btn[data-floor="${flId}"]`);
+                        if (btn) {
+                            btn.innerHTML = '▲折りたたむ';
+                            btn.style.background = '#f1f5f9';
+                        }
+                    });
+                }
+                updateUndoRedoUI();
+                showToast('↪ やり直しました');
+            } catch (err) {
+                console.error('マスターRedoエラー:', err);
+            }
+            return;
+        }
+
         if (redoStack.length === 0) return;
         undoStack.push(getHistorySnapshot());
         const nextState = redoStack.pop();
@@ -1490,8 +1564,8 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     function updateUndoRedoUI() {
-        const undoDisabled = (undoStack.length === 0);
-        const redoDisabled = (redoStack.length === 0);
+        const undoDisabled = isMaster ? (masterUndoStack.length === 0) : (undoStack.length === 0);
+        const redoDisabled = isMaster ? (masterRedoStack.length === 0) : (redoStack.length === 0);
         const undoBtns = [
             document.getElementById('undoBtn'),
             document.getElementById('headerUndoBtn'),
@@ -1685,6 +1759,7 @@ document.addEventListener('DOMContentLoaded', () => {
         if (!thead || !tbody) return;
 
         const term = getTermInfo();
+
         const isSouth = (currentFloor === '南' || appConfig.deptId === 'south');
 
         let headHtml = `
@@ -2472,6 +2547,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
                         if (oldSym && oldSym !== '') {
                             const term = getTermInfo();
+
                             const dateInfo = term.dates[d];
                             const staff = staffList[s];
                             showConfirmEditFixedModal({
@@ -2587,6 +2663,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
     function checkInputConstraints(showToastOnSuccess = false) {
         const term = getTermInfo();
+
         const curStartDate = document.getElementById('termStartDate')?.value || currentWorkingStartDate;
         const stCoverage = getSTChiefCoverageDays(currentFloor, curStartDate);
         const res = validateInitialState(staffList, {
@@ -2766,6 +2843,7 @@ document.addEventListener('DOMContentLoaded', () => {
         }
 
         const term = getTermInfo();
+
         const stdHolidayVal = parseFloat(document.getElementById('standardHolidaySelect')?.value || '8.0');
         const res = validateScheduleGrid(lastSolveResult.grid, staffList, {
             dates: term.dates,
@@ -2827,6 +2905,7 @@ document.addEventListener('DOMContentLoaded', () => {
         }
 
         const term = getTermInfo();
+
         const stdHolidayVal = parseFloat(document.getElementById('standardHolidaySelect')?.value || '8.0');
         const res = validateScheduleGrid(lastSolveResult.grid, staffList, {
             dates: term.dates,
@@ -3175,6 +3254,7 @@ document.addEventListener('DOMContentLoaded', () => {
     if (resetCurrentTermBtn) {
         resetCurrentTermBtn.addEventListener('click', () => {
             const term = getTermInfo();
+
             if (confirm(`【${term.title}】の作業内容（希望入力・作成済み勤務表）を初期状態（白紙）に戻しますか？`)) {
                 initNewTerm(currentWorkingStartDate);
                 pushStateToCloud(false);
@@ -3365,6 +3445,7 @@ document.addEventListener('DOMContentLoaded', () => {
     function handleAutoAssignRefreshHolidays(options = {}) {
         const silent = !!options.silent;
         const term = getTermInfo();
+
         const groups = (typeof getTermRefreshGroups === 'function') ? getTermRefreshGroups(term.dates) : [];
 
         if (!groups || groups.length === 0) {
@@ -3595,6 +3676,7 @@ document.addEventListener('DOMContentLoaded', () => {
             // ★ リフレッシュ休暇自動配分連携:
             // ターム内にリフ対象月が含まれており、まだ必要人数分に達していないグループ（月末最終タームの未消化分含む）があれば自動配分を補完適用！
             const term = getTermInfo();
+
             const refGroups = (typeof getTermRefreshGroups === 'function') ? getTermRefreshGroups(term.dates) : [];
             if (refGroups && refGroups.length > 0) {
                 handleAutoAssignRefreshHolidays({ silent: true });
@@ -3606,7 +3688,12 @@ document.addEventListener('DOMContentLoaded', () => {
                 try {
                     const stdHolidayVal = parseFloat(document.getElementById('standardHolidaySelect')?.value || '8.0');
                     const term = getTermInfo();
+
                     const curStartDate = document.getElementById('termStartDate')?.value || currentWorkingStartDate;
+                    if (!isST && !isLife && currentFloor) {
+                        loadLinkedSTData(curStartDate);
+                        loadLinkedLifeData(curStartDate);
+                    }
                     const stCoverage = getSTChiefCoverageDays(currentFloor, curStartDate);
                     const scheduler = new ShiftScheduler(staffList, {
                         standardHolidays: stdHolidayVal,
@@ -4051,69 +4138,154 @@ document.addEventListener('DOMContentLoaded', () => {
         }
         const targetDate = startDate || currentWorkingStartDate || '2026-04-01';
         const lifeKey = `shift_schedule_life_term_${targetDate}`;
-        let raw = localStorage.getItem(lifeKey);
-        if (!window._cloudMem) window._cloudMem = new Map();
-        if (!raw && window._cloudMem.has(lifeKey)) {
-            raw = window._cloudMem.get(lifeKey);
-        }
-        if (!raw) {
-            if (!window._lifeFetchInFlight) {
-                window._lifeFetchInFlight = true;
-                fetch(`/api/cloud_sync?deptId=life&t=${Date.now()}`, { cache: 'no-store' })
-                    .then(r => r.ok ? r.json() : null)
-                    .then(res => {
-                        window._lifeFetchInFlight = false;
-                        const cloudState = res && (res.cloudState || res.data);
-                        if (cloudState && cloudState.terms && cloudState.terms[targetDate]) {
-                            const termObj = cloudState.terms[targetDate];
-                            window._cloudMem.set(lifeKey, JSON.stringify(termObj));
-                            loadLinkedLifeData(targetDate);
-                            if (lastSolveResult && lastSolveResult.grid) {
-                                const currentStats = lastScheduler ? lastScheduler.calculateStats(lastSolveResult.grid) : null;
-                                if (currentStats) {
-                                    renderOutputTable(lastSolveResult.grid, currentStats);
-                                    renderStatsDashboard(currentStats);
-                                }
-                            }
-                        }
-                    })
-                    .catch(() => { window._lifeFetchInFlight = false; });
-            }
+        const targetHas = (currentFloor === '1F' ? ['ハ1'] : (currentFloor === '2F' ? ['ハ2'] : (currentFloor === '3F' ? ['ハ3'] : (currentFloor === '南' ? ['ハ4', 'ハ南'] : []))));
+        if (targetHas.length === 0) {
             linkedLifeStaffData = null;
             return;
         }
 
-        try {
-            const data = JSON.parse(raw);
-            if (!data || !Array.isArray(data.staffList)) {
-                linkedLifeStaffData = null;
-                return;
-            }
-            const targetHas = (currentFloor === '1F' ? ['ハ1'] : (currentFloor === '2F' ? ['ハ2'] : (currentFloor === '3F' ? ['ハ3'] : (currentFloor === '南' ? ['ハ4', 'ハ南'] : []))));
-            if (targetHas.length === 0) {
-                linkedLifeStaffData = null;
-                return;
-            }
-            const matchingStaff = [];
-            const matchingGrid = [];
-            data.staffList.forEach((st, idx) => {
-                if (!st.isUnused && targetHas.includes(st.haSection)) {
-                    matchingStaff.push(st);
-                    if (data.outputGrid && data.outputGrid[idx]) {
-                        matchingGrid.push(data.outputGrid[idx]);
-                    } else {
-                        matchingGrid.push(st.days || new Array(NUM_DAYS).fill(''));
+        // 1. 各種ソースから生活期データ・スタッフマスターを取得
+        let rawTerm = localStorage.getItem(lifeKey);
+        if (!window._cloudMem) window._cloudMem = new Map();
+        if (!rawTerm && window._cloudMem.has(lifeKey)) {
+            rawTerm = window._cloudMem.get(lifeKey);
+        }
+        // 他の生活期タームキーも検索フォールバック
+        if (!rawTerm) {
+            for (let i = 0; i < localStorage.length; i++) {
+                const k = localStorage.key(i);
+                if (k && k.startsWith('shift_schedule_life_term_')) {
+                    const candidate = localStorage.getItem(k);
+                    if (candidate) {
+                        try {
+                            const parsed = JSON.parse(candidate);
+                            if (parsed && Array.isArray(parsed.staffList) && parsed.staffList.some(s => targetHas.includes(s.haSection))) {
+                                rawTerm = candidate;
+                                break;
+                            }
+                        } catch (e) {}
                     }
                 }
-            });
-            linkedLifeStaffData = {
-                staffList: matchingStaff,
-                grid: matchingGrid
-            };
-        } catch (e) {
-            console.warn('生活期ハ応援データ読み込み警告:', e);
-            linkedLifeStaffData = null;
+            }
         }
+
+        let rawMaster = localStorage.getItem('shift_schedule_life_staff_master');
+        let masterStaffList = null;
+        if (rawMaster) {
+            try { masterStaffList = JSON.parse(rawMaster); } catch (e) {}
+        }
+
+        let termData = null;
+        if (rawTerm) {
+            try { termData = JSON.parse(rawTerm); } catch (e) {}
+        }
+
+        // 2. クラウド同期バックグラウンド取得（存在しない場合）
+        if (!rawTerm && !window._lifeFetchInFlight) {
+            window._lifeFetchInFlight = true;
+            fetch(`/api/cloud_sync?deptId=life&t=${Date.now()}`, { cache: 'no-store' })
+                .then(r => r.ok ? r.json() : null)
+                .then(res => {
+                    window._lifeFetchInFlight = false;
+                    const cloudState = res && (res.cloudState || res.data);
+                    if (cloudState) {
+                        if (cloudState.terms && cloudState.terms[targetDate]) {
+                            window._cloudMem.set(lifeKey, JSON.stringify(cloudState.terms[targetDate]));
+                        }
+                        if (cloudState.staffMaster) {
+                            try { localStorage.setItem('shift_schedule_life_staff_master', JSON.stringify(cloudState.staffMaster)); } catch (e) {}
+                        }
+                        loadLinkedLifeData(targetDate);
+                        if (lastSolveResult && lastSolveResult.grid) {
+                            const currentStats = lastScheduler ? lastScheduler.calculateStats(lastSolveResult.grid) : null;
+                            if (currentStats) {
+                                renderOutputTable(lastSolveResult.grid, currentStats);
+                                renderStatsDashboard(currentStats);
+                            }
+                        }
+                    }
+                })
+                .catch(() => { window._lifeFetchInFlight = false; });
+        }
+
+        // 3. 生活期スタッフ一覧の構築（termData, masterStaffList, またはデフォルト標準定義から）
+        let baseStaffList = (termData && Array.isArray(termData.staffList)) ? termData.staffList : (Array.isArray(masterStaffList) ? masterStaffList : []);
+
+        // マスターの設定（haSection）をマージ
+        if (Array.isArray(masterStaffList)) {
+            masterStaffList.forEach((ms, idx) => {
+                if (baseStaffList[idx]) {
+                    if (ms.haSection !== undefined) baseStaffList[idx].haSection = ms.haSection;
+                    if (ms.name) baseStaffList[idx].name = ms.name;
+                    if (ms.isUnused !== undefined) baseStaffList[idx].isUnused = ms.isUnused;
+                }
+            });
+        }
+
+        // 該当フロアのハ応援スタッフを抽出
+        let matchingStaff = [];
+        let matchingGrid = [];
+
+        baseStaffList.forEach((st, idx) => {
+            if (!st.isUnused && targetHas.includes(st.haSection)) {
+                matchingStaff.push(st);
+                if (termData && termData.outputGrid && termData.outputGrid[idx]) {
+                    matchingGrid.push(termData.outputGrid[idx]);
+                } else if (st.days && Array.isArray(st.days)) {
+                    matchingGrid.push(st.days.map(dSym => ({ symbol: dSym, isFixed: false })));
+                } else {
+                    matchingGrid.push(null);
+                }
+            }
+        });
+
+        // ★ もし生活期でまだハトグル設定されていない場合の公認デフォルトフォールバック
+        // （1F: ハ1, 2F: ハ2, 3F: ハ3, 南: ハ4/ハ南）
+        if (matchingStaff.length === 0) {
+            const defaultHaName = targetHas[0];
+            const defaultHaStaff = {
+                id: (defaultHaName === 'ハ1' ? 41 : (defaultHaName === 'ハ2' ? 42 : (defaultHaName === 'ハ3' ? 43 : 44))),
+                name: `生活期 ${defaultHaName}`,
+                haSection: defaultHaName,
+                isUnused: false,
+                days: new Array(NUM_DAYS).fill('')
+            };
+            matchingStaff.push(defaultHaStaff);
+            matchingGrid.push(null);
+        }
+
+        // 各日の勤務記号が空の場合の基本勤務記号解決
+        // ハ1・ハ2: 土日休みの固定、平日○
+        // ハ3・ハ4: 通所（日曜日休の固定、月〜土○）
+        const term = getTermInfo(targetDate);
+        const resolvedGrid = matchingStaff.map((st, mIdx) => {
+            const rawRow = matchingGrid[mIdx];
+            const row = [];
+            const isWeekendOff = (st.haSection === 'ハ1' || st.haSection === 'ハ2');
+            for (let d = 0; d < NUM_DAYS; d++) {
+                let cellVal = rawRow ? rawRow[d] : null;
+                let sym = (cellVal && typeof cellVal === 'object') ? (cellVal.symbol || '') : (cellVal || '');
+                if (!sym && st.days && st.days[d]) sym = st.days[d];
+                if (!sym) {
+                    const dInfo = (term && term.dates && term.dates[d]) ? term.dates[d] : null;
+                    const wDay = dInfo ? dInfo.weekday : (d % 7 === 5 ? '土' : (d % 7 === 6 ? '日' : '月'));
+                    if (isWeekendOff) {
+                        sym = (wDay === '土' || wDay === '日') ? '休' : '○';
+                    } else {
+                        // ハ3, ハ4（通所組み）: 日曜日休固定、月〜土は出勤○
+                        sym = (wDay === '日') ? '休' : '○';
+                    }
+                }
+                const isFixed = (cellVal && typeof cellVal === 'object') ? !!cellVal.isFixed : false;
+                row.push({ symbol: sym, isFixed: isFixed });
+            }
+            return row;
+        });
+
+        linkedLifeStaffData = {
+            staffList: matchingStaff,
+            grid: resolvedGrid
+        };
     }
 
     function getLinkedLifeDailyWork() {
@@ -4144,7 +4316,14 @@ document.addEventListener('DOMContentLoaded', () => {
         const tfoot = document.getElementById('outputTableFoot');
         if (!thead || !tbody || !tfoot) return;
 
+        // ★ 病棟テーブル描画時、ST所属スタッフ及び生活期ハ応援データを確実に最新化
+        if (!isST && !isLife && currentFloor) {
+            loadLinkedSTData();
+            loadLinkedLifeData();
+        }
+
         const term = getTermInfo();
+
 
         let headHtml = `
             <tr>
@@ -4873,6 +5052,7 @@ document.addEventListener('DOMContentLoaded', () => {
         if (!checkTbody) return;
 
         const term = getTermInfo();
+
         const numDays = term.dates.length;
         const curStartDate = document.getElementById('termStartDate')?.value || currentWorkingStartDate || '2026-04-01';
 
@@ -4927,25 +5107,72 @@ document.addEventListener('DOMContentLoaded', () => {
             if (rawLife) lifeData = JSON.parse(rawLife);
         } catch (e) {}
 
+        let lifeMaster = null;
+        try {
+            const rawLifeMaster = localStorage.getItem('shift_schedule_life_staff_master');
+            if (rawLifeMaster) lifeMaster = JSON.parse(rawLifeMaster);
+        } catch (e) {}
+
         // ★ 生活期のハ応援データ（フロア別: 1f→ハ1, 2f→ハ2, 3f→ハ3, south→ハ南）
         const lifeHaDataMap = { '1f': new Array(numDays).fill(0), '2f': new Array(numDays).fill(0), '3f': new Array(numDays).fill(0), 'south': new Array(numDays).fill(0) };
-        if (lifeData && Array.isArray(lifeData.staffList)) {
-            lifeData.staffList.forEach((st, idx) => {
-                if (st.isUnused || st.isZeroCount) return;
-                const flId = st.haSection === 'ハ1' ? '1f' : (st.haSection === 'ハ2' ? '2f' : (st.haSection === 'ハ3' ? '3f' : ((st.haSection === 'ハ4' || st.haSection === 'ハ南') ? 'south' : '')));
-                if (!flId) return;
-                const gridRow = (lifeData.outputGrid && lifeData.outputGrid[idx]) ? lifeData.outputGrid[idx] : null;
-                for (let d = 0; d < numDays; d++) {
-                    const c = gridRow ? gridRow[d] : null;
-                    const sym = (c && typeof c === 'object') ? (c.symbol || '') : (c || (st.days ? st.days[d] : ''));
-                    if (isWorkSymbol(sym) && sym !== '研' && sym !== '張') {
-                        lifeHaDataMap[flId][d] += 0.5; // ★ 生活期ハ応援スタッフが出勤している日は病棟実数に0.5加算！
-                    } else if (sym === '○/休' || sym === '休/○' || sym === '○/有' || sym === '有/○' || sym === '〇/休' || sym === '休/〇' || sym === '〇/有' || sym === '有/〇') {
-                        lifeHaDataMap[flId][d] += 0.25;
-                    }
+        const baseLifeStaff = (lifeData && Array.isArray(lifeData.staffList)) ? lifeData.staffList : (Array.isArray(lifeMaster) ? lifeMaster : []);
+
+        if (Array.isArray(lifeMaster)) {
+            lifeMaster.forEach((ms, idx) => {
+                if (baseLifeStaff[idx]) {
+                    if (ms.haSection !== undefined) baseLifeStaff[idx].haSection = ms.haSection;
+                    if (ms.isUnused !== undefined) baseLifeStaff[idx].isUnused = ms.isUnused;
                 }
             });
         }
+
+        const haFloorDefs = [
+            { flId: '1f', target: 'ハ1', isWeekendOff: true },
+            { flId: '2f', target: 'ハ2', isWeekendOff: true },
+            { flId: '3f', target: 'ハ3', isWeekendOff: false },
+            { flId: 'south', target: 'ハ4', isWeekendOff: false }
+        ];
+
+        haFloorDefs.forEach(def => {
+            let staffFound = false;
+            baseLifeStaff.forEach((st, idx) => {
+                if (st.isUnused || st.isZeroCount) return;
+                const matches = (st.haSection === def.target || (def.target === 'ハ4' && st.haSection === 'ハ南'));
+                if (!matches) return;
+                staffFound = true;
+                const gridRow = (lifeData && lifeData.outputGrid && lifeData.outputGrid[idx]) ? lifeData.outputGrid[idx] : null;
+                for (let d = 0; d < numDays; d++) {
+                    const c = gridRow ? gridRow[d] : null;
+                    let sym = (c && typeof c === 'object') ? (c.symbol || '') : (c || (st.days ? st.days[d] : ''));
+                    if (!sym) {
+                        const dInfo = (term && term.dates && term.dates[d]) ? term.dates[d] : null;
+                        const wDay = dInfo ? dInfo.weekday : (d % 7 === 5 ? '土' : (d % 7 === 6 ? '日' : '月'));
+                        if (def.isWeekendOff) {
+                            sym = (wDay === '土' || wDay === '日') ? '休' : '○';
+                        } else {
+                            sym = (wDay === '日') ? '休' : '○';
+                        }
+                    }
+                    if (isWorkSymbol(sym) && sym !== '研' && sym !== '張') {
+                        lifeHaDataMap[def.flId][d] += 0.5; // ★ 生活期ハ応援スタッフが出勤している日は病棟実数に0.5加算！
+                    } else if (sym === '○/休' || sym === '休/○' || sym === '○/有' || sym === '有/○' || sym === '〇/休' || sym === '休/〇' || sym === '〇/有' || sym === '有/〇') {
+                        lifeHaDataMap[def.flId][d] += 0.25;
+                    }
+                }
+            });
+
+            // 未設定時のフォールバック
+            if (!staffFound) {
+                for (let d = 0; d < numDays; d++) {
+                    const dInfo = (term && term.dates && term.dates[d]) ? term.dates[d] : null;
+                    const wDay = dInfo ? dInfo.weekday : (d % 7 === 5 ? '土' : (d % 7 === 6 ? '日' : '月'));
+                    const isWork = def.isWeekendOff ? (wDay !== '土' && wDay !== '日') : (wDay !== '日');
+                    if (isWork) {
+                        lifeHaDataMap[def.flId][d] += 0.5;
+                    }
+                }
+            }
+        });
 
         // checkThead / checkTfoot のクリア（全フロア統合テーブルはtbody内で自律完結）
         if (checkThead) checkThead.innerHTML = '';
@@ -5561,10 +5788,7 @@ document.addEventListener('DOMContentLoaded', () => {
                         fData.outputGrid[stIdx][dayIdx] = { symbol: selectedSym, isFixed: curFixed };
                     }
 
-                    fData.updatedAt = new Date().toISOString();
-                    localStorage.setItem(targetKey, JSON.stringify(fData));
-
-                    // 展開状態（どの階が展開されていたか）を記憶して再描画！
+                    // 展開状態（どの階が展開されていたか）を記憶
                     const openFloors = [];
                     floorConfigs.forEach(fc => {
                         const rows = document.querySelectorAll(`.master-detail-${fc.id}`);
@@ -5572,6 +5796,19 @@ document.addEventListener('DOMContentLoaded', () => {
                             openFloors.push(fc.id);
                         }
                     });
+
+                    // ★ マスターUndo履歴を保存（「↩ 戻る」「↪ やり直し」で即座に戻せる！）
+                    const prevJson = raw;
+                    fData.updatedAt = new Date().toISOString();
+                    const nextJson = JSON.stringify(fData);
+                    pushMasterHistory({
+                        targetKey: targetKey,
+                        prevJson: prevJson,
+                        nextJson: nextJson,
+                        openFloors: openFloors
+                    });
+
+                    localStorage.setItem(targetKey, nextJson);
 
                     renderMasterIntegrationView();
 
@@ -5627,6 +5864,7 @@ document.addEventListener('DOMContentLoaded', () => {
         };
 
         renderStatsDashboard(masterStats);
+        updateUndoRedoUI();
     }
 
     // 出力シートおよびチェックシートでのセルクリックによる手動調整イベント
@@ -5657,6 +5895,7 @@ document.addEventListener('DOMContentLoaded', () => {
                     renderOutputTable(lastSolveResult.grid, lastSolveResult.stats);
                     const staff = staffList[s];
                     const term = getTermInfo();
+
                     const dateInfo = term.dates[d];
                     showToast(cellData.isFixed
                         ? `🛡️ 【No.${staff.id} ${staff.name}】${dateInfo.label} をプロテクト（固定希望・赤字）に設定しました`
@@ -5703,6 +5942,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 // ★ 事前固定希望枠（赤字）を修正する場合はポップアップで確認
                 if (cellData.isFixed) {
                     const term = getTermInfo();
+
                     const dateInfo = term.dates[d];
                     const staff = staffList[s];
                     showConfirmEditFixedModal({
@@ -5755,6 +5995,7 @@ document.addEventListener('DOMContentLoaded', () => {
         }
 
         const term = getTermInfo();
+
         const dates = term.dates;
 
         // 1. 「平日」と「土日祝（その他）」に完全に2区分（★実数合計 realWork を基準に表示）
@@ -6245,6 +6486,7 @@ document.addEventListener('DOMContentLoaded', () => {
     // ★ Excel出力用HTMLテーブル生成（エクスポート・コピペ共通：A列Noなし、列幅・行高・全集計行・ST挿入自動追従数式）
     function generateExcelTableHtml(grid, stats) {
         const term = getTermInfo();
+
         const borderThin = 'border:0.5pt solid #cbd5e1;';
         const borderThickR = 'border-right:2pt solid #475569;';
         const borderMediumR = 'border-right:1.5pt solid #64748b;';
@@ -6594,6 +6836,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 statsToCopy = lastScheduler.calculateStats();
             } else {
                 const term = getTermInfo();
+
                 const stdVal = parseFloat(document.getElementById('standardHolidaySelect')?.value || '8.0');
                 const scheduler = new ShiftScheduler(staffList, {
                     standardHolidays: stdVal,
@@ -6774,6 +7017,7 @@ document.addEventListener('DOMContentLoaded', () => {
             return;
         }
         const term = getTermInfo();
+
         const numDays = term.dates.length;
         const floorPrefix = (function() {
             if (window.APP_CONFIG) {
@@ -6981,6 +7225,7 @@ document.addEventListener('DOMContentLoaded', () => {
     // ★ ST専用スタッフ希望勤務入力シート (.xlsx) のダウンロード実行
     function downloadBlankXlsxForST() {
         const term = getTermInfo();
+
         const numDays = term.dates.length;
         const title = `${term.first.m}月${term.first.day}日～${term.last.m}月${term.last.day}日 スタッフ希望勤務入力シート（希望勤務はプルダウンから選択してください）`;
 
@@ -7238,6 +7483,7 @@ document.addEventListener('DOMContentLoaded', () => {
     // ==========================================
     function applyScheduleImport(extractedItems, mode = 'merge', remarksMap = null) {
         const term = getTermInfo();
+
         // mode: 'replace' の場合は既存の入力希望および当タームの備考を一度クリア
         if (mode === 'replace') {
             for (let s = 0; s < NUM_STAFF; s++) {
@@ -7846,6 +8092,7 @@ document.addEventListener('DOMContentLoaded', () => {
             }
 
             const term = getTermInfo();
+
             const stdHolidayVal = parseFloat(document.getElementById('standardHolidaySelect')?.value || '8.0');
 
             if (!lastScheduler) {
@@ -8003,6 +8250,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 statsToExport = lastScheduler.calculateStats();
             } else {
                 const term = getTermInfo();
+
                 const stdVal = parseFloat(document.getElementById('standardHolidaySelect')?.value || '8.0');
                 const scheduler = new ShiftScheduler(staffList, {
                     standardHolidays: stdVal,
@@ -8033,6 +8281,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
     function exportExcelSpreadsheet(grid, stats) {
         const term = getTermInfo();
+
         const numDays = term.dates.length;
         const safeTitle = `${term.first.m}月${term.first.day}日～${term.last.m}月${term.last.day}日 勤務表`;
         // シート名禁則文字 (: \ / ? * [ ]) を全角またはハイフンにサニタイズ
@@ -8386,10 +8635,17 @@ document.addEventListener('DOMContentLoaded', () => {
     // ★ 13ターム選択プルダウンの初期化とイベント登録
     initTermSelector();
 
+    // ★ 病棟テーブル起動時、STおよび生活期ハ応援連携データを確実に初期ロード
+    if (!isST && !isLife && currentFloor) {
+        loadLinkedSTData(targetDate);
+        loadLinkedLifeData(targetDate);
+    }
+
     if (localStorage.getItem(`${STORAGE_KEY_PREFIX}${targetDate}`) || localStorage.getItem(`shift_schedule_term_${targetDate}`)) {
         loadTermFromStorage(targetDate);
     } else {
         const term = getTermInfo();
+
         const stdHolidaySelect = document.getElementById('standardHolidaySelect');
         if (stdHolidaySelect) stdHolidaySelect.value = term.isTerm13 ? '8.5' : '8.0';
         dayOffsets = createDefaultDayOffsets(term.dates);
