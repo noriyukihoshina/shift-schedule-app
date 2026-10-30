@@ -635,6 +635,23 @@ document.addEventListener('DOMContentLoaded', () => {
                         // オフラインまたは通信失敗時はローカルキャッシュをそのまま維持
                     }
                 }));
+            } else if (!isST && currentFloor) {
+                // ★ 各病棟テーブル（1F, 2F, 3F, 南）の場合: ST専用テーブルの最新クラウドデータを自動取得してLocalStorageを同期！
+                try {
+                    const r = await fetch(`/api/cloud_sync?deptId=st&t=${Date.now()}`, { cache: 'no-store' });
+                    if (r.ok) {
+                        const j = await r.json();
+                        const stCloud = j && (j.cloudState || j.data);
+                        if (stCloud && stCloud.terms && typeof stCloud.terms === 'object') {
+                            Object.keys(stCloud.terms).forEach(tDate => {
+                                if (stCloud.terms[tDate]) {
+                                    window.localStorage.setItem(`shift_schedule_st_term_${tDate}`, JSON.stringify(stCloud.terms[tDate]));
+                                }
+                            });
+                            loadLinkedSTData(currentWorkingStartDate);
+                        }
+                    }
+                } catch (e) {}
             }
 
             const resp = await fetch(`/api/cloud_sync?deptId=${encodeURIComponent(deptId)}&t=${Date.now()}`, {
@@ -3858,7 +3875,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
             data.staffList.forEach((st, idx) => {
                 // 不使用でなく、かつ当病棟フロア（1F, 2F, 3F, 南）に所属するST
-                if (!st.isUnused && st.floor === currentFloor) {
+                if (!st.isUnused && (st.floor === currentFloor || (st.floor && st.floor.includes(currentFloor)))) {
                     matchingStaff.push(st);
                     if (data.outputGrid && Array.isArray(data.outputGrid[idx])) {
                         matchingGrid.push(data.outputGrid[idx]);
@@ -3947,8 +3964,9 @@ document.addEventListener('DOMContentLoaded', () => {
             const row = linkedStStaffData.grid[idx] || [];
             for (let d = 0; d < NUM_DAYS; d++) {
                 const c = row[d] || { symbol: '' };
-                const sym = (c && typeof c === 'object') ? c.symbol : (c || '');
-                if (sym === '早') {
+                const sym = (c && typeof c === 'object') ? (c.symbol || '') : (c || '');
+                const wish = (st.days && st.days[d]) ? st.days[d] : '';
+                if (sym === '早' || wish === '早') {
                     stEarly[d]++;
                 }
             }
@@ -4457,13 +4475,26 @@ document.addEventListener('DOMContentLoaded', () => {
                     currentGrid.forEach((row, sIdx) => {
                         if (staffList[sIdx] && staffList[sIdx].isUnused) return;
                         const c = row[d];
-                        const sym = (c && typeof c === 'object') ? c.symbol : c;
+                        const sym = (c && typeof c === 'object') ? (c.symbol || c) : c;
                         if (sym === '早') poEarly++;
                     });
                 } else {
                     poEarly = dStat.early;
                 }
-                const stEarlyCount = (linkedStEarlyArr && linkedStEarlyArr[d]) ? linkedStEarlyArr[d] : 0;
+                // ST早番人数を linkedStEarlyArr および linkedStStaffData から確実に合算！
+                let stEarlyCount = 0;
+                if (linkedStEarlyArr && linkedStEarlyArr[d] !== undefined) {
+                    stEarlyCount = linkedStEarlyArr[d];
+                } else if (linkedStStaffData && linkedStStaffData.staffList && linkedStStaffData.grid) {
+                    linkedStStaffData.staffList.forEach((st, sIdx) => {
+                        if (st.isUnused) return;
+                        const row = linkedStStaffData.grid[sIdx] || [];
+                        const c = row[d] || { symbol: '' };
+                        const sym = (c && typeof c === 'object') ? (c.symbol || '') : (c || '');
+                        const wish = (st.days && st.days[d]) ? st.days[d] : '';
+                        if (sym === '早' || wish === '早') stEarlyCount++;
+                    });
+                }
                 earlyVal = poEarly + stEarlyCount;
             }
             footHtml += `<td class="${thickCls}" data-d="${d}" data-footer-stat="early" style="color:#334155; font-weight:700;">${earlyVal}</td>`;
