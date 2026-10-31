@@ -380,7 +380,7 @@ thead th.sticky-col-2 {
     text-align: center;
 }
 
-/* セルスタイル（全テーブル共通：日付列は72px完全均一固定） */
+/* セルスタイル（全テーブル共通：日付列は52px完全均一固定・12/31も1行で綺麗に収まり不要な左右スクロールを排除） */
 .col-day-fixed,
 .header-day-col,
 .day-cell,
@@ -388,9 +388,9 @@ th.header-day-col,
 th.col-day-fixed,
 td.day-cell,
 td.col-day-fixed {
-    width: 72px !important;
-    min-width: 72px !important;
-    max-width: 72px !important;
+    width: 52px !important;
+    min-width: 52px !important;
+    max-width: 52px !important;
     box-sizing: border-box !important;
     text-align: center !important;
     white-space: nowrap !important;
@@ -811,14 +811,36 @@ input:checked + .toggle-slider:before {
     color: #94a3b8 !important;
 }
 
-/* 日付ヘッダーセルの完全均一固定幅（12月31日等の二桁月日も確実に1行で収まる72px） */
+/* 日付ヘッダーセルの完全均一固定幅（12/31等の二桁月日も確実に1行で収まる52px） */
 .header-day-col {
-    min-width: 72px !important;
-    width: 72px !important;
-    max-width: 72px !important;
+    min-width: 52px !important;
+    width: 52px !important;
+    max-width: 52px !important;
     padding: 3px 1px !important;
     text-align: center !important;
     box-sizing: border-box !important;
+}
+
+/* 加減枠（52px固定幅にすっきりと美しく収まるコンパクト設計） */
+.day-offset-ctrl {
+    display: inline-flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+    gap: 1px !important;
+    width: 100% !important;
+}
+.day-offset-btn {
+    width: 13px !important;
+    height: 16px !important;
+    font-size: 10px !important;
+    line-height: 1 !important;
+    padding: 0 !important;
+}
+.day-offset-val {
+    min-width: 20px !important;
+    font-size: 0.72rem !important;
+    font-weight: 700 !important;
+    text-align: center !important;
 }
 
 .day-label {
