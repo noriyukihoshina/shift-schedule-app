@@ -1879,7 +1879,7 @@ document.addEventListener('DOMContentLoaded', () => {
             const di = term.dates[d];
             const cls = di.wIdx === 5 ? 'header-sat' : ((di.wIdx === 6 || di.isHoliday) ? 'header-sun' : '');
             const thickCls = ((d + 1) % 7 === 0) ? 'border-thick-right' : '';
-            headHtml += `<th class="${cls} ${thickCls} header-day-col" title="${di.label} (${di.weekday})${di.isHoliday ? ' 祝日' : ''}">
+            headHtml += `<th class="${cls} ${thickCls} header-day-col col-day-fixed" style="width:72px; min-width:72px; max-width:72px;" title="${di.label} (${di.weekday})${di.isHoliday ? ' 祝日' : ''}">
                 <div class="day-label">${di.label}</div>
                 <div class="day-weekday"><small>${di.weekday}</small></div>
                 ${renderDayOffsetCtrl(d)}
@@ -4365,7 +4365,7 @@ document.addEventListener('DOMContentLoaded', () => {
             const cls = dateInfo.wIdx === 5 ? 'header-sat' : ((dateInfo.wIdx === 6 || dateInfo.isHoliday) ? 'header-sun' : '');
             // 7日ごと（週区切り）および28日目に太線
             const thickCls = ((d + 1) % 7 === 0) ? 'border-thick-right' : '';
-            headHtml += `<th class="${cls} ${thickCls} border-thick-bottom header-day-col" title="${dateInfo.label} (${dateInfo.weekday})${dateInfo.isHoliday ? ' 祝日' : ''}">
+            headHtml += `<th class="${cls} ${thickCls} border-thick-bottom header-day-col col-day-fixed" style="width:72px; min-width:72px; max-width:72px;" title="${dateInfo.label} (${dateInfo.weekday})${dateInfo.isHoliday ? ' 祝日' : ''}">
                 <div class="day-label">${dateInfo.label}</div>
                 <div class="day-weekday"><small>${dateInfo.weekday}</small></div>
                 ${renderDayOffsetCtrl(d)}
@@ -4736,7 +4736,7 @@ document.addEventListener('DOMContentLoaded', () => {
                     <th class="sticky-col-2" style="background:${fl.bg}; border-right:2px solid #475569; text-align:center; color:#1e293b; padding:4px 8px;">出勤人数</th>`;
                 for (let d = 0; d < NUM_DAYS; d++) {
                     const thickCls = ((d + 1) % 7 === 0) ? 'border-thick-right' : '';
-                    footHtml += `<td class="${thickCls}" style="font-weight:800; color:#1e293b; text-align:center;">${dWork[d]}</td>`;
+                    footHtml += `<td class="${thickCls} col-day-fixed" style="width:72px; min-width:72px; max-width:72px; font-weight:800; color:#1e293b; text-align:center;">${dWork[d]}</td>`;
                 }
                 footHtml += `<td style="font-weight:700; color:#1e293b; text-align:center;">${sumWork}</td><td colspan="8"></td></tr>`;
 
@@ -4745,7 +4745,7 @@ document.addEventListener('DOMContentLoaded', () => {
                     <th class="sticky-col-2" style="background:${fl.bg}; border-right:2px solid #475569; text-align:center; color:#0369a1; padding:4px 8px;">実数</th>`;
                 for (let d = 0; d < NUM_DAYS; d++) {
                     const thickCls = ((d + 1) % 7 === 0) ? 'border-thick-right' : '';
-                    footHtml += `<td class="${thickCls}" style="font-weight:800; color:#0369a1; text-align:center;">${dReal[d]}</td>`;
+                    footHtml += `<td class="${thickCls} col-day-fixed" style="width:72px; min-width:72px; max-width:72px; font-weight:800; color:#0369a1; text-align:center;">${dReal[d]}</td>`;
                 }
                 footHtml += `<td style="font-weight:700; color:#0369a1; text-align:center;">${sumReal}</td><td colspan="8"></td></tr>`;
 
@@ -4754,7 +4754,7 @@ document.addEventListener('DOMContentLoaded', () => {
                     <th class="sticky-col-2" style="background:${fl.bg}; border-right:2px solid #475569; text-align:center; color:#c2410c; padding:4px 8px;">早</th>`;
                 for (let d = 0; d < NUM_DAYS; d++) {
                     const thickCls = ((d + 1) % 7 === 0) ? 'border-thick-right' : '';
-                    footHtml += `<td class="${thickCls}" style="font-weight:800; color:#c2410c; text-align:center;">${dEarly[d]}</td>`;
+                    footHtml += `<td class="${thickCls} col-day-fixed" style="width:72px; min-width:72px; max-width:72px; font-weight:800; color:#c2410c; text-align:center;">${dEarly[d]}</td>`;
                 }
                 footHtml += `<td style="font-weight:700; color:#c2410c; text-align:center;">${sumEarly}</td><td colspan="8"></td></tr>`;
             });
@@ -4769,7 +4769,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 <th class="sticky-col-2" style="background:#f1f5f9; border-right:2px solid #475569; text-align:center; color:#0f172a; padding:4px 8px;">出勤合計</th>`;
             for (let d = 0; d < NUM_DAYS; d++) {
                 const thickCls = ((d + 1) % 7 === 0) ? 'border-thick-right' : '';
-                footHtml += `<td class="${thickCls}" style="font-weight:900; color:#0f172a; text-align:center; font-size:0.95rem;">${allFloorsWork[d]}</td>`;
+                footHtml += `<td class="${thickCls} col-day-fixed" style="width:72px; min-width:72px; max-width:72px; font-weight:900; color:#0f172a; text-align:center; font-size:0.95rem;">${allFloorsWork[d]}</td>`;
             }
             footHtml += `<td style="font-weight:900; color:#0f172a; text-align:center;">${totalWorkAll}</td><td colspan="8"></td></tr>`;
 
@@ -4777,7 +4777,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 <th class="sticky-col-2" style="background:#f1f5f9; border-right:2px solid #475569; text-align:center; color:#0369a1; padding:4px 8px;">実数合計</th>`;
             for (let d = 0; d < NUM_DAYS; d++) {
                 const thickCls = ((d + 1) % 7 === 0) ? 'border-thick-right' : '';
-                footHtml += `<td class="${thickCls}" style="font-weight:900; color:#0369a1; text-align:center; font-size:0.95rem;">${allFloorsReal[d]}</td>`;
+                footHtml += `<td class="${thickCls} col-day-fixed" style="width:72px; min-width:72px; max-width:72px; font-weight:900; color:#0369a1; text-align:center; font-size:0.95rem;">${allFloorsReal[d]}</td>`;
             }
             footHtml += `<td style="font-weight:900; color:#0369a1; text-align:center;">${totalRealAll}</td><td colspan="8"></td></tr>`;
 
@@ -4785,7 +4785,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 <th class="sticky-col-2" style="background:#f1f5f9; border-right:2px solid #475569; text-align:center; color:#c2410c; padding:4px 8px;">早合計</th>`;
             for (let d = 0; d < NUM_DAYS; d++) {
                 const thickCls = ((d + 1) % 7 === 0) ? 'border-thick-right' : '';
-                footHtml += `<td class="${thickCls}" style="font-weight:900; color:#c2410c; text-align:center; font-size:0.95rem;">${allFloorsEarly[d]}</td>`;
+                footHtml += `<td class="${thickCls} col-day-fixed" style="width:72px; min-width:72px; max-width:72px; font-weight:900; color:#c2410c; text-align:center; font-size:0.95rem;">${allFloorsEarly[d]}</td>`;
             }
             footHtml += `<td style="font-weight:900; color:#c2410c; text-align:center;">${totalEarlyAll}</td><td colspan="8"></td></tr>`;
 
@@ -4812,7 +4812,7 @@ document.addEventListener('DOMContentLoaded', () => {
         for (let d = 0; d < NUM_DAYS; d++) {
             const dStat = stats.daily[d];
             const thickCls = ((d + 1) % 7 === 0) ? 'border-thick-right' : '';
-            footHtml += `<td class="${thickCls}" style="font-weight:800; color:#1e293b; font-size:0.95rem;">${dStat.totalWork}</td>`;
+            footHtml += `<td class="${thickCls} col-day-fixed" style="width:72px; min-width:72px; max-width:72px; font-weight:800; color:#1e293b; font-size:0.95rem;">${dStat.totalWork}</td>`;
         }
         footHtml += `
             <td style="font-weight:700; color:#1e293b; background:transparent;">${totalWorkSum}</td>
@@ -4896,7 +4896,7 @@ document.addEventListener('DOMContentLoaded', () => {
         for (let d = 0; d < NUM_DAYS; d++) {
             const thickCls = ((d + 1) % 7 === 0) ? 'border-thick-right' : '';
             const real = calculatedDailyReal[d];
-            footHtml += `<td class="${thickCls}" style="vertical-align:middle; font-weight:800; color:#1e293b; font-size:0.95rem;">${real}</td>`;
+            footHtml += `<td class="${thickCls} col-day-fixed" style="width:72px; min-width:72px; max-width:72px; vertical-align:middle; font-weight:800; color:#1e293b; font-size:0.95rem;">${real}</td>`;
         }
         footHtml += `<td style="font-weight:700; color:#1e293b;">${Number(totalRealSum.toFixed(1))}</td><td colspan="8" style="color:#94a3b8;">-</td></tr>`;
 
@@ -4912,7 +4912,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 secTotalSum += secVal;
                 const thickCls = ((d + 1) % 7 === 0) ? 'border-thick-right' : '';
                 const displayVal = secVal > 0 ? (secVal % 1 === 0 ? secVal : secVal.toFixed(1)) : (sec.name === 'ST' || sec.name === 'HA' ? '0' : '-');
-                footHtml += `<td class="${thickCls}" style="color:${sec.color}; font-weight:800;">${displayVal}</td>`;
+                footHtml += `<td class="${thickCls} col-day-fixed" style="width:72px; min-width:72px; max-width:72px; color:${sec.color}; font-weight:800;">${displayVal}</td>`;
             }
             const displayTotal = secTotalSum % 1 === 0 ? secTotalSum : secTotalSum.toFixed(1);
             footHtml += `<td style="font-weight:800; color:${sec.color};">${displayTotal}</td><td colspan="8" style="color:#94a3b8;">-</td></tr>`;
@@ -4960,7 +4960,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 }
                 earlyVal = poEarly + stEarlyCount;
             }
-            footHtml += `<td class="${thickCls}" data-d="${d}" data-footer-stat="early" style="color:#334155; font-weight:700;">${earlyVal}</td>`;
+            footHtml += `<td class="${thickCls} col-day-fixed" data-d="${d}" data-footer-stat="early" style="width:72px; min-width:72px; max-width:72px; color:#334155; font-weight:700;">${earlyVal}</td>`;
         }
         footHtml += `<td colspan="8" style="color:#94a3b8;">-</td></tr>`;
 
@@ -5001,7 +5001,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 }
                 lateVal = poLate + stLateCount;
             }
-            footHtml += `<td class="${thickCls}" data-d="${d}" data-footer-stat="late" style="color:#334155; font-weight:700;">${lateVal}</td>`;
+            footHtml += `<td class="${thickCls} col-day-fixed" data-d="${d}" data-footer-stat="late" style="width:72px; min-width:72px; max-width:72px; color:#334155; font-weight:700;">${lateVal}</td>`;
         }
         footHtml += `<td colspan="8" style="color:#94a3b8;">-</td></tr>`;
 
@@ -5042,7 +5042,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 }
                 eveVal = poEve + stEveCount;
             }
-            footHtml += `<td class="${thickCls}" data-d="${d}" data-footer-stat="eve" style="color:#334155; font-weight:700;">${eveVal}</td>`;
+            footHtml += `<td class="${thickCls} col-day-fixed" data-d="${d}" data-footer-stat="eve" style="width:72px; min-width:72px; max-width:72px; color:#334155; font-weight:700;">${eveVal}</td>`;
         }
         footHtml += `<td colspan="8" style="color:#94a3b8;">-</td></tr>`;
 
@@ -5054,7 +5054,7 @@ document.addEventListener('DOMContentLoaded', () => {
         for (let d = 0; d < NUM_DAYS; d++) {
             const dStat = stats.daily[d];
             const thickCls = ((d + 1) % 7 === 0) ? 'border-thick-right' : '';
-            footHtml += `<td class="${thickCls} border-thick-bottom" data-d="${d}" data-footer-stat="h8" style="color:#334155; font-weight:700;">${dStat.h8}</td>`;
+            footHtml += `<td class="${thickCls} border-thick-bottom col-day-fixed" data-d="${d}" data-footer-stat="h8" style="width:72px; min-width:72px; max-width:72px; color:#334155; font-weight:700;">${dStat.h8}</td>`;
         }
         footHtml += `<td class="border-thick-bottom" colspan="8" style="color:#94a3b8;">-</td></tr>`;
 
@@ -5351,14 +5351,14 @@ document.addEventListener('DOMContentLoaded', () => {
                 grandH8[d] += h8Count;
             }
 
-            // テーブルヘッダー1: 日付ヘッダー（階列44px, 項目列95pxに引き締め）
+            // テーブルヘッダー1: 日付ヘッダー（全テーブル共通: 日付列幅72px完全均一固定・12月31日等も余裕で1行表示）
             html += `<tr style="background:${fc.headerBg}; font-weight:700; border-top: 3px solid ${fc.border};">
                 <th class="sticky-col-1" style="background:${fc.headerBg}; color:${fc.badgeColor}; width:44px; min-width:44px; max-width:44px; text-align:center; padding:2px; border-right:1px solid ${fc.border};">階</th>
                 <th class="sticky-col-2" style="background:${fc.headerBg}; color:#1e293b; width:95px; min-width:95px; max-width:105px; text-align:left; padding:2px 4px; border-right:2px solid #475569;">項目</th>`;
             for (let d = 0; d < numDays; d++) {
                 const di = term.dates[d];
                 const thickCls = ((d + 1) % 7 === 0) ? 'border-thick-right' : '';
-                html += `<th class="${thickCls}" style="background:${fc.headerBg}; font-size:0.78rem; padding:4px 2px; color:#1e293b; border-bottom:1px solid ${fc.border};">${di.m}月${di.day}日</th>`;
+                html += `<th class="${thickCls} col-day-fixed" style="width:72px; min-width:72px; max-width:72px; background:${fc.headerBg}; font-size:0.78rem; padding:4px 2px; color:#1e293b; border-bottom:1px solid ${fc.border}; text-align:center; white-space:nowrap;">${di.m}月${di.day}日</th>`;
             }
             html += `
                 <th title="出勤日数" style="background:${fc.headerBg}; color:#1e293b; border-bottom:1px solid ${fc.border}; width:38px; min-width:38px; text-align:center; font-size:0.75rem;">出勤</th>
@@ -5381,7 +5381,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 const thickCls = ((d + 1) % 7 === 0) ? 'border-thick-right' : '';
                 const wColor = di.wIdx === 5 ? '#2563eb' : ((di.wIdx === 6 || di.isHoliday) ? '#dc2626' : '#334155');
                 const wBg = di.wIdx === 5 ? '#eff6ff' : ((di.wIdx === 6 || di.isHoliday) ? '#fef2f2' : fc.headerBg);
-                html += `<th class="${thickCls}" style="background:${wBg}; color:${wColor}; font-size:0.8rem; padding:2px; border-bottom:1px solid ${fc.border};">${di.weekday}</th>`;
+                html += `<th class="${thickCls} col-day-fixed" style="width:72px; min-width:72px; max-width:72px; background:${wBg}; color:${wColor}; font-size:0.8rem; padding:2px; border-bottom:1px solid ${fc.border}; text-align:center;">${di.weekday}</th>`;
             }
             html += `<th colspan="9" style="background:${fc.headerBg}; border-bottom:1px solid ${fc.border};"></th></tr>`;
 
@@ -5394,7 +5394,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 const off = dailyOffsets[d];
                 const offText = off > 0 ? `+${off}` : `${off}`;
                 const offColor = off > 0 ? '#15803d' : (off < 0 ? '#dc2626' : '#64748b');
-                html += `<td class="${thickCls}" style="background:${fc.bg}; color:${offColor}; font-weight:700; border-bottom:1px solid ${fc.border};">${offText}</td>`;
+                html += `<td class="${thickCls} col-day-fixed" style="width:72px; min-width:72px; max-width:72px; background:${fc.bg}; color:${offColor}; font-weight:700; border-bottom:1px solid ${fc.border}; text-align:center;">${offText}</td>`;
             }
             html += `<td colspan="9" style="background:${fc.bg};"></td></tr>`;
 
@@ -5403,7 +5403,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 <td class="sticky-col-2" style="background:#f1f5f9; color:#0f172a; border-right:2px solid #475569; font-weight:800; width:95px; min-width:95px; max-width:105px;">出勤人数合計</td>`;
             for (let d = 0; d < numDays; d++) {
                 const thickCls = ((d + 1) % 7 === 0) ? 'border-thick-right' : '';
-                html += `<td class="${thickCls}" style="background:#f1f5f9; color:#0f172a; font-weight:800; border-bottom:1px solid #cbd5e1; text-align:center;">${dailyTotal[d]}</td>`;
+                html += `<td class="${thickCls} col-day-fixed" style="width:72px; min-width:72px; max-width:72px; background:#f1f5f9; color:#0f172a; font-weight:800; border-bottom:1px solid #cbd5e1; text-align:center;">${dailyTotal[d]}</td>`;
             }
             html += `<td colspan="9" style="background:#f1f5f9;"></td></tr>`;
 
@@ -5412,7 +5412,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 <td class="sticky-col-2" style="background:#e2e8f0; color:#0369a1; border-right:2px solid #475569; font-weight:800; width:95px; min-width:95px; max-width:105px;">実数合計</td>`;
             for (let d = 0; d < numDays; d++) {
                 const thickCls = ((d + 1) % 7 === 0) ? 'border-thick-right' : '';
-                html += `<td class="${thickCls}" style="background:#e2e8f0; color:#0369a1; font-weight:800; border-bottom:1px solid #cbd5e1; text-align:center;">${dailyReal[d]}</td>`;
+                html += `<td class="${thickCls} col-day-fixed" style="width:72px; min-width:72px; max-width:72px; background:#e2e8f0; color:#0369a1; font-weight:800; border-bottom:1px solid #cbd5e1; text-align:center;">${dailyReal[d]}</td>`;
             }
             html += `<td colspan="9" style="background:#e2e8f0;"></td></tr>`;
 
@@ -5425,66 +5425,66 @@ document.addEventListener('DOMContentLoaded', () => {
 
             // サマリー行4: 早 (8行目相当)
             html += `<tr style="background:${fc.bg}; font-weight:600;">
-                <td class="sticky-col-2" style="background:${fc.bg}; color:#1e293b; border-right:2px solid #475569;">早</td>`;
+                <td class="sticky-col-2" style="background:${fc.bg}; color:#1e293b; border-right:2px solid #475569; width:95px; min-width:95px; max-width:105px;">早</td>`;
             for (let d = 0; d < numDays; d++) {
                 const thickCls = ((d + 1) % 7 === 0) ? 'border-thick-right' : '';
                 const cnt = dailyEarly[d];
                 const isConflict = (cnt !== targetEarly);
                 const bgStyle = isConflict ? 'background:#dbeafe !important; color:#1d4ed8 !important;' : `background:${fc.bg}; color:#ea580c;`;
                 const titleStr = isConflict ? `title="⚠️ 定数エラー: ${cnt}名（定数: ${targetEarly}名）"` : '';
-                html += `<td class="${thickCls} ${isConflict ? 'conflict-highlight' : ''}" ${titleStr} style="${bgStyle} font-weight:700; border-bottom:1px solid ${fc.border}; text-align:center;">${cnt}</td>`;
+                html += `<td class="${thickCls} col-day-fixed ${isConflict ? 'conflict-highlight' : ''}" ${titleStr} style="width:72px; min-width:72px; max-width:72px; ${bgStyle} font-weight:700; border-bottom:1px solid ${fc.border}; text-align:center;">${cnt}</td>`;
             }
             html += `<td colspan="9" style="background:${fc.bg};"></td></tr>`;
 
             // サマリー行5: 遅 (9行目相当)
             html += `<tr style="background:${fc.bg}; font-weight:600;">
-                <td class="sticky-col-2" style="background:${fc.bg}; color:#1e293b; border-right:2px solid #475569;">遅</td>`;
+                <td class="sticky-col-2" style="background:${fc.bg}; color:#1e293b; border-right:2px solid #475569; width:95px; min-width:95px; max-width:105px;">遅</td>`;
             for (let d = 0; d < numDays; d++) {
                 const thickCls = ((d + 1) % 7 === 0) ? 'border-thick-right' : '';
                 const cnt = dailyLate[d];
                 const isConflict = (cnt !== targetLate);
                 const bgStyle = isConflict ? 'background:#dbeafe !important; color:#1d4ed8 !important;' : `background:${fc.bg}; color:#0284c7;`;
                 const titleStr = isConflict ? `title="⚠️ 定数エラー: ${cnt}名（定数: ${targetLate}名）"` : '';
-                html += `<td class="${thickCls} ${isConflict ? 'conflict-highlight' : ''}" ${titleStr} style="${bgStyle} font-weight:700; border-bottom:1px solid ${fc.border}; text-align:center;">${cnt}</td>`;
+                html += `<td class="${thickCls} col-day-fixed ${isConflict ? 'conflict-highlight' : ''}" ${titleStr} style="width:72px; min-width:72px; max-width:72px; ${bgStyle} font-weight:700; border-bottom:1px solid ${fc.border}; text-align:center;">${cnt}</td>`;
             }
             html += `<td colspan="9" style="background:${fc.bg};"></td></tr>`;
 
             // サマリー行6: E (10行目相当)
             html += `<tr style="background:${fc.bg}; font-weight:600;">
-                <td class="sticky-col-2" style="background:${fc.bg}; color:#1e293b; border-right:2px solid #475569;">E</td>`;
+                <td class="sticky-col-2" style="background:${fc.bg}; color:#1e293b; border-right:2px solid #475569; width:95px; min-width:95px; max-width:105px;">E</td>`;
             for (let d = 0; d < numDays; d++) {
                 const thickCls = ((d + 1) % 7 === 0) ? 'border-thick-right' : '';
                 const cnt = dailyEve[d];
                 const isConflict = (cnt !== targetEve);
                 const bgStyle = isConflict ? 'background:#dbeafe !important; color:#1d4ed8 !important;' : `background:${fc.bg}; color:#7c3aed;`;
                 const titleStr = isConflict ? `title="⚠️ 定数エラー: ${cnt}名（定数: ${targetEve}名）"` : '';
-                html += `<td class="${thickCls} ${isConflict ? 'conflict-highlight' : ''}" ${titleStr} style="${bgStyle} font-weight:700; border-bottom:1px solid ${fc.border}; text-align:center;">${cnt}</td>`;
+                html += `<td class="${thickCls} col-day-fixed ${isConflict ? 'conflict-highlight' : ''}" ${titleStr} style="width:72px; min-width:72px; max-width:72px; ${bgStyle} font-weight:700; border-bottom:1px solid ${fc.border}; text-align:center;">${cnt}</td>`;
             }
             html += `<td colspan="9" style="background:${fc.bg};"></td></tr>`;
 
             // サマリー行7: 8時 (11行目相当)
             html += `<tr style="background:${fc.bg}; font-weight:600;">
-                <td class="sticky-col-2" style="background:${fc.bg}; color:#1e293b; border-right:2px solid #475569;">8時</td>`;
+                <td class="sticky-col-2" style="background:${fc.bg}; color:#1e293b; border-right:2px solid #475569; width:95px; min-width:95px; max-width:105px;">8時</td>`;
             for (let d = 0; d < numDays; d++) {
                 const thickCls = ((d + 1) % 7 === 0) ? 'border-thick-right' : '';
                 const cnt = dailyH8[d];
                 const isConflict = (cnt !== targetH8);
                 const bgStyle = isConflict ? 'background:#dbeafe !important; color:#1d4ed8 !important;' : `background:${fc.bg}; color:#059669;`;
                 const titleStr = isConflict ? `title="⚠️ 定数エラー: ${cnt}名（定数: ${targetH8}名）"` : '';
-                html += `<td class="${thickCls} ${isConflict ? 'conflict-highlight' : ''}" ${titleStr} style="${bgStyle} font-weight:700; border-bottom:1px solid ${fc.border}; text-align:center;">${cnt}</td>`;
+                html += `<td class="${thickCls} col-day-fixed ${isConflict ? 'conflict-highlight' : ''}" ${titleStr} style="width:72px; min-width:72px; max-width:72px; ${bgStyle} font-weight:700; border-bottom:1px solid ${fc.border}; text-align:center;">${cnt}</td>`;
             }
             html += `<td colspan="9" style="background:${fc.bg};"></td></tr>`;
 
             // サマリー行8: 「！表示する」トグルボタン行 (12行目相当)
             html += `<tr style="background:${fc.bg}; border-bottom: 2px solid ${fc.border};">
-                <td class="sticky-col-2" style="background:${fc.bg}; border-right:2px solid #475569; padding:4px 6px;">
+                <td class="sticky-col-2" style="background:${fc.bg}; border-right:2px solid #475569; padding:4px 6px; width:95px; min-width:95px; max-width:105px;">
                     <button type="button" class="btn btn-outline toggle-master-floor-btn" data-floor="${fc.id}" style="width:100%; font-size:0.75rem; padding:2px 6px; font-weight:700; background:#ffffff; color:${fc.badgeColor}; border-color:${fc.border}; box-shadow: 0 1px 2px rgba(0,0,0,0.05); cursor:pointer;">
                         ⚡表示する
                     </button>
                 </td>`;
             for (let d = 0; d < numDays; d++) {
                 const thickCls = ((d + 1) % 7 === 0) ? 'border-thick-right' : '';
-                html += `<td class="${thickCls}" style="background:${fc.bg}; border-bottom:2px solid ${fc.border};"></td>`;
+                html += `<td class="${thickCls} col-day-fixed" style="width:72px; min-width:72px; max-width:72px; background:${fc.bg}; border-bottom:2px solid ${fc.border};"></td>`;
             }
             html += `<td colspan="9" style="background:${fc.bg};"></td></tr>`;
 
@@ -5643,7 +5643,7 @@ document.addEventListener('DOMContentLoaded', () => {
                     const fixedCls = isCellFixed ? 'fixed-cell' : 'auto-cell';
                     const titleText = isCellFixed ? '🔒 事前固定希望枠（赤字・クリックで修正可能）' : 'システム自動配置（クリックで修正可能）';
 
-                    html += `<td class="${thickCls} ${fixedCls} master-editable-cell" data-floor="${fc.id}" data-is-st="${item.isST ? '1' : '0'}" data-is-ha="${item.isHa ? '1' : '0'}" data-ha-idx="${item.lifeStaffIdx !== undefined ? item.lifeStaffIdx : -1}" data-staff-id="${s.id || ''}" data-staff-name="${escapeHtmlText(s.name)}" data-day="${d}" title="${titleText}" style="background:${bg}; color:${color}; font-weight:700; border-bottom:1px solid #e2e8f0; text-align:center; cursor:pointer;">${sym}</td>`;
+                    html += `<td class="${thickCls} ${fixedCls} master-editable-cell col-day-fixed" data-floor="${fc.id}" data-is-st="${item.isST ? '1' : '0'}" data-is-ha="${item.isHa ? '1' : '0'}" data-ha-idx="${item.lifeStaffIdx !== undefined ? item.lifeStaffIdx : -1}" data-staff-id="${s.id || ''}" data-staff-name="${escapeHtmlText(s.name)}" data-day="${d}" title="${titleText}" style="width:72px; min-width:72px; max-width:72px; background:${bg}; color:${color}; font-weight:700; border-bottom:1px solid #e2e8f0; text-align:center; cursor:pointer;">${sym}</td>`;
                 }
 
                 // 勤務の右端に出勤・公休などのスタッフ毎の集計を記載
@@ -5747,7 +5747,7 @@ document.addEventListener('DOMContentLoaded', () => {
                     const thickCls = ((d + 1) % 7 === 0) ? 'border-thick-right' : '';
                     const v = fr.vals[d];
                     const dispV = (v > 0) ? (v % 1 === 0 ? v : v.toFixed(1)) : (['早番', '遅番', 'E', '8時', '出勤人数合計', '実数合計'].includes(fr.label) ? v : '-');
-                    html += `<td class="${thickCls}" style="background:${fr.bg}; color:${fr.color}; text-align:center; border-bottom:1px solid #cbd5e1; font-weight:${fr.bold ? '800' : '700'};">${dispV}</td>`;
+                    html += `<td class="${thickCls} col-day-fixed" style="width:72px; min-width:72px; max-width:72px; background:${fr.bg}; color:${fr.color}; text-align:center; border-bottom:1px solid #cbd5e1; font-weight:${fr.bold ? '800' : '700'};">${dispV}</td>`;
                 }
                 html += `<td style="background:${fr.bg}; color:${fr.color}; font-weight:800; text-align:center; font-size:0.82rem;">${displayTotal}</td><td colspan="8" style="background:${fr.bg};"></td></tr>`;
             });
@@ -5758,72 +5758,72 @@ document.addEventListener('DOMContentLoaded', () => {
 
         // ★ ユーザー指示 (添付5): 南の下に全フロア合算「集計」を記載（出勤人数合計・実数合計・早・遅・E・8時）
         html += `<tr style="background:#f1f5f9; font-weight:700; border-top: 3px solid #334155;">
-            <th class="sticky-col-1" rowspan="6" style="background:#e2e8f0; color:#1e293b; font-size:1.1rem; font-weight:900; vertical-align:middle; text-align:center; border-right:1px solid #cbd5e1;">集計</th>
-            <td class="sticky-col-2" style="background:#f8fafc; color:#0f172a; border-right:2px solid #475569; font-weight:800; font-size:0.9rem;">出勤人数合計</td>`;
+            <th class="sticky-col-1" rowspan="6" style="background:#e2e8f0; color:#1e293b; font-size:1.1rem; font-weight:900; vertical-align:middle; text-align:center; border-right:1px solid #cbd5e1; width:44px; min-width:44px; max-width:44px;">集計</th>
+            <td class="sticky-col-2" style="background:#f8fafc; color:#0f172a; border-right:2px solid #475569; font-weight:800; font-size:0.9rem; width:95px; min-width:95px; max-width:105px;">出勤人数合計</td>`;
         for (let d = 0; d < numDays; d++) {
             const thickCls = ((d + 1) % 7 === 0) ? 'border-thick-right' : '';
-            html += `<td class="${thickCls}" style="background:#f8fafc; color:#0f172a; font-weight:800; font-size:0.95rem; border-bottom:1px solid #cbd5e1; text-align:center;">${grandTotal[d]}</td>`;
+            html += `<td class="${thickCls} col-day-fixed" style="width:72px; min-width:72px; max-width:72px; background:#f8fafc; color:#0f172a; font-weight:800; font-size:0.95rem; border-bottom:1px solid #cbd5e1; text-align:center;">${grandTotal[d]}</td>`;
         }
         html += `<td colspan="9" style="background:#f8fafc;"></td></tr>`;
 
         // 実数合計
         html += `<tr style="background:#f8fafc; font-weight:700;">
-            <td class="sticky-col-2" style="background:#f8fafc; color:#0369a1; border-right:2px solid #475569; font-weight:800; font-size:0.9rem;">実数合計</td>`;
+            <td class="sticky-col-2" style="background:#f8fafc; color:#0369a1; border-right:2px solid #475569; font-weight:800; font-size:0.9rem; width:95px; min-width:95px; max-width:105px;">実数合計</td>`;
         for (let d = 0; d < numDays; d++) {
             const thickCls = ((d + 1) % 7 === 0) ? 'border-thick-right' : '';
-            html += `<td class="${thickCls}" style="background:#f8fafc; color:#0369a1; font-weight:800; font-size:0.95rem; border-bottom:1px solid #cbd5e1; text-align:center;">${Number(grandReal[d].toFixed(1))}</td>`;
+            html += `<td class="${thickCls} col-day-fixed" style="width:72px; min-width:72px; max-width:72px; background:#f8fafc; color:#0369a1; font-weight:800; font-size:0.95rem; border-bottom:1px solid #cbd5e1; text-align:center;">${Number(grandReal[d].toFixed(1))}</td>`;
         }
         html += `<td colspan="9" style="background:#f8fafc;"></td></tr>`;
 
         // 早（全館定数: 1〜3階各3 + 南2 = 計11名）
         html += `<tr style="background:#f8fafc; font-weight:700;">
-            <td class="sticky-col-2" style="background:#f8fafc; color:#ea580c; border-right:2px solid #475569; font-weight:700;">早</td>`;
+            <td class="sticky-col-2" style="background:#f8fafc; color:#ea580c; border-right:2px solid #475569; font-weight:700; width:95px; min-width:95px; max-width:105px;">早</td>`;
         for (let d = 0; d < numDays; d++) {
             const thickCls = ((d + 1) % 7 === 0) ? 'border-thick-right' : '';
             const cnt = grandEarly[d];
             const isConflict = (cnt !== 11);
             const bgStyle = isConflict ? 'background:#dbeafe !important; color:#1d4ed8 !important;' : 'background:#f8fafc; color:#ea580c;';
             const titleStr = isConflict ? `title="⚠️ 全館早番定数エラー: ${cnt}名（定数: 11名）"` : '';
-            html += `<td class="${thickCls} ${isConflict ? 'conflict-highlight' : ''}" ${titleStr} style="${bgStyle} font-weight:700; border-bottom:1px solid #cbd5e1; text-align:center;">${cnt}</td>`;
+            html += `<td class="${thickCls} col-day-fixed ${isConflict ? 'conflict-highlight' : ''}" ${titleStr} style="width:72px; min-width:72px; max-width:72px; ${bgStyle} font-weight:700; border-bottom:1px solid #cbd5e1; text-align:center;">${cnt}</td>`;
         }
         html += `<td colspan="9" style="background:#f8fafc;"></td></tr>`;
 
         // 遅（全館定数: 1〜3階各1 + 南2 = 計5名）
         html += `<tr style="background:#f8fafc; font-weight:700;">
-            <td class="sticky-col-2" style="background:#f8fafc; color:#0284c7; border-right:2px solid #475569; font-weight:700;">遅</td>`;
+            <td class="sticky-col-2" style="background:#f8fafc; color:#0284c7; border-right:2px solid #475569; font-weight:700; width:95px; min-width:95px; max-width:105px;">遅</td>`;
         for (let d = 0; d < numDays; d++) {
             const thickCls = ((d + 1) % 7 === 0) ? 'border-thick-right' : '';
             const cnt = grandLate[d];
             const isConflict = (cnt !== 5);
             const bgStyle = isConflict ? 'background:#dbeafe !important; color:#1d4ed8 !important;' : 'background:#f8fafc; color:#0284c7;';
             const titleStr = isConflict ? `title="⚠️ 全館遅番定数エラー: ${cnt}名（定数: 5名）"` : '';
-            html += `<td class="${thickCls} ${isConflict ? 'conflict-highlight' : ''}" ${titleStr} style="${bgStyle} font-weight:700; border-bottom:1px solid #cbd5e1; text-align:center;">${cnt}</td>`;
+            html += `<td class="${thickCls} col-day-fixed ${isConflict ? 'conflict-highlight' : ''}" ${titleStr} style="width:72px; min-width:72px; max-width:72px; ${bgStyle} font-weight:700; border-bottom:1px solid #cbd5e1; text-align:center;">${cnt}</td>`;
         }
         html += `<td colspan="9" style="background:#f8fafc;"></td></tr>`;
 
         // E（全館定数: 1〜3階各2 + 南2 = 計8名）
         html += `<tr style="background:#f8fafc; font-weight:700;">
-            <td class="sticky-col-2" style="background:#f8fafc; color:#7c3aed; border-right:2px solid #475569; font-weight:700;">E</td>`;
+            <td class="sticky-col-2" style="background:#f8fafc; color:#7c3aed; border-right:2px solid #475569; font-weight:700; width:95px; min-width:95px; max-width:105px;">E</td>`;
         for (let d = 0; d < numDays; d++) {
             const thickCls = ((d + 1) % 7 === 0) ? 'border-thick-right' : '';
             const cnt = grandEve[d];
             const isConflict = (cnt !== 8);
             const bgStyle = isConflict ? 'background:#dbeafe !important; color:#1d4ed8 !important;' : 'background:#f8fafc; color:#7c3aed;';
             const titleStr = isConflict ? `title="⚠️ 全館E定数エラー: ${cnt}名（定数: 8名）"` : '';
-            html += `<td class="${thickCls} ${isConflict ? 'conflict-highlight' : ''}" ${titleStr} style="${bgStyle} font-weight:700; border-bottom:1px solid #cbd5e1; text-align:center;">${cnt}</td>`;
+            html += `<td class="${thickCls} col-day-fixed ${isConflict ? 'conflict-highlight' : ''}" ${titleStr} style="width:72px; min-width:72px; max-width:72px; ${bgStyle} font-weight:700; border-bottom:1px solid #cbd5e1; text-align:center;">${cnt}</td>`;
         }
         html += `<td colspan="9" style="background:#f8fafc;"></td></tr>`;
 
         // 8時（全館定数: 1〜3階各1 + 南0 = 計3名）
         html += `<tr style="background:#f8fafc; font-weight:700; border-bottom:3px solid #334155;">
-            <td class="sticky-col-2" style="background:#f8fafc; color:#059669; border-right:2px solid #475569; font-weight:700;">8時</td>`;
+            <td class="sticky-col-2" style="background:#f8fafc; color:#059669; border-right:2px solid #475569; font-weight:700; width:95px; min-width:95px; max-width:105px;">8時</td>`;
         for (let d = 0; d < numDays; d++) {
             const thickCls = ((d + 1) % 7 === 0) ? 'border-thick-right' : '';
             const cnt = grandH8[d];
             const isConflict = (cnt !== 3);
             const bgStyle = isConflict ? 'background:#dbeafe !important; color:#1d4ed8 !important;' : 'background:#f8fafc; color:#059669;';
             const titleStr = isConflict ? `title="⚠️ 全館8時定数エラー: ${cnt}名（定数: 3名）"` : '';
-            html += `<td class="${thickCls} ${isConflict ? 'conflict-highlight' : ''}" ${titleStr} style="${bgStyle} font-weight:700; border-bottom:1px solid #cbd5e1; text-align:center;">${cnt}</td>`;
+            html += `<td class="${thickCls} col-day-fixed ${isConflict ? 'conflict-highlight' : ''}" ${titleStr} style="width:72px; min-width:72px; max-width:72px; ${bgStyle} font-weight:700; border-bottom:1px solid #cbd5e1; text-align:center;">${cnt}</td>`;
         }
         html += `<td colspan="9" style="background:#f8fafc;"></td></tr>`;
 
