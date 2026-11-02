@@ -1,4 +1,4 @@
-﻿/**
+/**
  * 勤務表作成システム - アプリケーションロジック (app.js)
  * 最新版:
  * - 8時可フラグ: 1〜9番目のスタッフのみON（現場の実態に完全一致）
@@ -566,6 +566,16 @@ document.addEventListener('DOMContentLoaded', () => {
             const curTermData = curTermRaw ? JSON.parse(curTermRaw) : null;
             const savedTerms = getSavedTerms();
 
+            // ★ 安全ガード: ローカルのデータが完全な初期デフォルト（全員スタッフ01、トグル空、勤務表も空）の場合、クラウドへ空プッシュして既存データを破壊することを防止！
+            if (Array.isArray(staffMaster)) {
+                const isAllDefault = staffMaster.every((s, i) => (!s.name || s.name === `スタッフ ${String(i+1).padStart(2,'0')}`) && !s.can8 && !s.isChief && !s.isHalf);
+                const hasAnyShift = curTermData && ((curTermData.outputGrid && curTermData.outputGrid.length > 0) || (curTermData.staffList && curTermData.staffList.some(s => s.days && s.days.some(d => d))));
+                if (isAllDefault && !hasAnyShift && !includeAllLocalTerms) {
+                    console.warn('クラウド保存スキップ: 有意なデータが未入力（初期デフォルト値）のためクラウド上書きを防止しました');
+                    return;
+                }
+            }
+
             let fullTermsMap = null;
             if (includeAllLocalTerms) {
                 fullTermsMap = {};
@@ -643,7 +653,8 @@ document.addEventListener('DOMContentLoaded', () => {
                     }
                 }));
             } else if (!isST && currentFloor) {
-                // ★ 各病棟テーブル（1F, 2F, 3F, 南）の場合: ST専用テーブルの最新クラウドデータを自動取得してLocalStorageを同期！
+                // ★ 各病棟テーブル（1F, 2F, 3F, 南）の場合:
+                // 1) ST専用テーブルの最新クラウドデータを自動取得してLocalStorageを同期！
                 try {
                     const r = await fetch(`/api/cloud_sync?deptId=st&t=${Date.now()}`, { cache: 'no-store' });
                     if (r.ok) {
@@ -657,6 +668,29 @@ document.addEventListener('DOMContentLoaded', () => {
                             });
                             loadLinkedSTData(currentWorkingStartDate);
                             loadLinkedLifeData(currentWorkingStartDate);
+                        }
+                    }
+                } catch (e) {}
+
+                // 2) 全体マスター(master)の最新クラウドデータも取得し、共通スタッフマスタ(トグル・役職・セクション)を同期！
+                try {
+                    const rMaster = await fetch(`/api/cloud_sync?deptId=master&t=${Date.now()}`, { cache: 'no-store' });
+                    if (rMaster.ok) {
+                        const jMaster = await rMaster.json();
+                        const mCloud = jMaster && (jMaster.cloudState || jMaster.data);
+                        if (mCloud && Array.isArray(mCloud.staffMaster) && mCloud.staffMaster.length > 0) {
+                            const curLocalMaster = window.localStorage.getItem(STORAGE_KEY_STAFF_MASTER);
+                            let needMasterSync = !curLocalMaster;
+                            if (curLocalMaster) {
+                                try {
+                                    const lList = JSON.parse(curLocalMaster);
+                                    needMasterSync = lList.every((s, i) => (!s.name || s.name === `スタッフ ${String(i+1).padStart(2,'0')}`) && !s.can8 && !s.isChief && !s.isHalf);
+                                } catch(e) { needMasterSync = true; }
+                            }
+                            if (needMasterSync) {
+                                window.localStorage.setItem(STORAGE_KEY_STAFF_MASTER, JSON.stringify(mCloud.staffMaster));
+                                applyMasterArrayToStaffList(mCloud.staffMaster);
+                            }
                         }
                     }
                 } catch (e) {}
@@ -682,11 +716,21 @@ document.addEventListener('DOMContentLoaded', () => {
                 return false;
             }
 
-            // クラウド上にまだファイル自体が存在しない場合のみ：現在のメモリデータをクラウドへ初期アップロード！
-            // （※ exists === true で cloudState が null の場合は一時的な通信・デコードエラーのためクラウドを上書きしない）
+            // クラウド上にまだファイル自体が存在しない場合:
+            // 空の初期値であればクラウドへ送信せず、有意なデータが存在する場合のみ初期保存
             if (!resJson.exists) {
                 isCloudInitialSyncDone = true;
-                await pushStateToCloud(true);
+                const localMasterRaw = window.localStorage.getItem(STORAGE_KEY_STAFF_MASTER);
+                let hasMeaningfulData = false;
+                if (localMasterRaw) {
+                    try {
+                        const lList = JSON.parse(localMasterRaw);
+                        hasMeaningfulData = lList.some(s => s.name && !s.name.startsWith('スタッフ ') || s.can8 || s.isChief || s.isHalf || s.section);
+                    } catch (e) {}
+                }
+                if (hasMeaningfulData) {
+                    await pushStateToCloud(true);
+                }
                 if (isMaster) renderMasterIntegrationView();
                 return true;
             }
@@ -703,13 +747,25 @@ document.addEventListener('DOMContentLoaded', () => {
             isRestoringFromCloud = true;
             try {
                 // 1. スタッフマスター（全トグル・役職・所属・氏名・備考）のクラウド復元
-                // ※ ローカルにすでにマスターが存在する場合、勝手にクラウドのデータで上書きせずローカルを優先
+                // 判定ロジック:
+                // - showToastMsg（手動更新）または isInitialBoot（起動時）
+                // - またはローカルが未編集の初期デフォルト（名前がスタッフ01かつトグルが空）の場合
+                // ➔ クラウドのトグル設定・マスタを確実に復元・画面へ即座に反映！
                 const localMasterRaw = window.localStorage.getItem(STORAGE_KEY_STAFF_MASTER);
-                if (!localMasterRaw || showToastMsg) {
-                    if (Array.isArray(cloud.staffMaster) && cloud.staffMaster.length > 0) {
-                        window.localStorage.setItem(STORAGE_KEY_STAFF_MASTER, JSON.stringify(cloud.staffMaster));
-                        applyMasterArrayToStaffList(cloud.staffMaster);
+                let shouldApplyMaster = (!localMasterRaw || showToastMsg || isInitialBoot);
+                if (localMasterRaw && !showToastMsg && !isInitialBoot) {
+                    try {
+                        const localList = JSON.parse(localMasterRaw);
+                        const isLocalDefault = Array.isArray(localList) && localList.every((s, i) => (!s.name || s.name === `スタッフ ${String(i+1).padStart(2,'0')}`) && !s.can8 && !s.isChief && !s.isHalf);
+                        if (isLocalDefault) shouldApplyMaster = true;
+                    } catch (e) {
+                        shouldApplyMaster = true;
                     }
+                }
+
+                if (shouldApplyMaster && Array.isArray(cloud.staffMaster) && cloud.staffMaster.length > 0) {
+                    window.localStorage.setItem(STORAGE_KEY_STAFF_MASTER, JSON.stringify(cloud.staffMaster));
+                    applyMasterArrayToStaffList(cloud.staffMaster);
                 }
 
                 // 2. 全保存タームデータのクラウド復元
@@ -717,7 +773,18 @@ document.addEventListener('DOMContentLoaded', () => {
                     Object.keys(cloud.terms).forEach(tDate => {
                         if (cloud.terms[tDate]) {
                             const curLocal = window.localStorage.getItem(`${STORAGE_KEY_PREFIX}${tDate}`);
-                            if (!curLocal || showToastMsg) {
+                            let shouldApplyTerm = (!curLocal || showToastMsg || isInitialBoot);
+                            if (curLocal && !showToastMsg && !isInitialBoot) {
+                                try {
+                                    const localT = JSON.parse(curLocal);
+                                    const isLocalEmpty = !localT.outputGrid || localT.outputGrid.length === 0;
+                                    const hasCloudData = (cloud.terms[tDate].outputGrid && cloud.terms[tDate].outputGrid.length > 0) || (cloud.terms[tDate].staffList && cloud.terms[tDate].staffList.some(s => s.days && s.days.some(d => d)));
+                                    if (isLocalEmpty && hasCloudData) shouldApplyTerm = true;
+                                } catch (e) {
+                                    shouldApplyTerm = true;
+                                }
+                            }
+                            if (shouldApplyTerm) {
                                 window.localStorage.setItem(`${STORAGE_KEY_PREFIX}${tDate}`, JSON.stringify(cloud.terms[tDate]));
                             }
                         }
@@ -753,6 +820,8 @@ document.addEventListener('DOMContentLoaded', () => {
                     renderInputTable();
                 }
                 renderSavedTermsSelect();
+                // トグル状態および入力テーブルを画面へ確実に反映
+                renderInputTable();
             } finally {
                 isRestoringFromCloud = false;
                 isCloudInitialSyncDone = true;
