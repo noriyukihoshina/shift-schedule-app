@@ -1,0 +1,19 @@
+# 勤務表作成システム 開発・運用絶対遵守ルール
+
+## 1. 最優先遵守事項: 包括マスター仕様書の事前確認
+- システムのコード（`solver.js`, `app.js`, `style.css`, 各HTML, `api/cloud_sync.js` 等）を編集・修正・操作する際は、**必ず事前に `SYSTEM_CONSTRAINTS_AND_REQUIREMENTS_MASTER.md` を確認し、すべてのハード制約・ソフト制約・UI寸法・帳票仕様が網羅されているかを厳格に検証した上で実行すること**。
+- ユーザーからの要望や修正があった場合、コードの修正と同時に必ず `SYSTEM_CONSTRAINTS_AND_REQUIREMENTS_MASTER.md` も更新し、ドキュメントとコードの完全一致（100%整合性）を永久に維持すること。
+
+## 2. 通知音の確実な鳴動運用
+- 作業・タスク完了時、およびユーザーへの確認・操作要求時には、必ず以下のコマンドを実行して確実に通知音（Windows Ding）を鳴動させること：
+  ```powershell
+  powershell -ExecutionPolicy Bypass -File "C:\Users\coffe\Music\Antigravity\勤務表作成\play_sound.ps1"
+  ```
+
+## 3. ファイル安全保護・命名規則
+- ファイル・ディレクトリの削除コマンド（`Remove-Item`, `del`, `rmdir`, `git reset --hard` 等）の実行は絶対禁止。
+- ファイルを新規作成・更新する際は、上書き破棄を避けるため `ver.1`, `ver.2` などの連番命名規則を遵守すること。
+
+## 4. デプロイ運用（三重検証ゲート: Tri-Lock Verification）
+- ユーザーからの明示的な指示がない限り、勝手なデプロイ・プッシュは絶対に実行しないこと。
+- デプロイ時は必ず `-AppDir [対象フォルダ]` と `-AppName [公認プロジェクト名]` を明示指定し、三重検証ゲートを通過させること。
