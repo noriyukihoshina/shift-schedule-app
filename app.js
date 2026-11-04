@@ -881,50 +881,31 @@ document.addEventListener('DOMContentLoaded', () => {
     function getSavedTerms() {
         try {
             const termSet = new Set();
-            // 1. 記録された一覧
+            // 1. 記録された一覧（2025年度は完全除外）
             const raw = localStorage.getItem(STORAGE_KEY_SAVED_TERMS);
             if (raw) {
                 const arr = JSON.parse(raw);
-                if (Array.isArray(arr)) arr.forEach(t => termSet.add(t));
+                if (Array.isArray(arr)) {
+                    arr.forEach(t => {
+                        if (t && !t.startsWith('2025-')) termSet.add(t);
+                    });
+                }
             }
-            // 2. localStorage全体の shift_schedule_term_ キーを自動スキャンして取りこぼしを完全防止
-            for (let i = 0; i < localStorage.length; i++) {
-                const k = localStorage.key(i);
-                if (k && k.startsWith(STORAGE_KEY_PREFIX)) {
-                    const datePart = k.replace(STORAGE_KEY_PREFIX, '');
-                    if (datePart && /^\d{4}-\d{2}-\d{2}$/.test(datePart)) {
+            // 2. localStorage全体から shift_schedule_term_ キーをスキャン（2025年度は完全除外）
+            for (let k = 0; k < localStorage.length; k++) {
+                const key = localStorage.key(k);
+                if (key && key.startsWith(STORAGE_KEY_PREFIX)) {
+                    const datePart = key.replace(STORAGE_KEY_PREFIX, "");
+                    if (datePart && /^\d{4}-\d{2}-\d{2}$/.test(datePart) && !datePart.startsWith("2025-")) {
                         termSet.add(datePart);
                     }
                 }
             }
-            // 3. 現在日付（未保存でもスロットとして追加）
-            const curDate = document.getElementById('termStartDate')?.value || currentWorkingStartDate;
-            if (curDate && /^\d{4}-\d{2}-\d{2}$/.test(curDate)) {
-                termSet.add(curDate);
-            }
-
-            const sorted = Array.from(termSet).sort();
-            localStorage.setItem(STORAGE_KEY_SAVED_TERMS, JSON.stringify(sorted));
-            return sorted;
+            return Array.from(termSet).filter(t => !t.startsWith('2025-')).sort((a, b) => a.localeCompare(b));
         } catch (e) {
             return [];
         }
     }
-
-    function updateSavedTermsList(startDate) {
-        try {
-            let terms = getSavedTerms();
-            if (!terms.includes(startDate)) {
-                terms.push(startDate);
-                terms.sort();
-                localStorage.setItem(STORAGE_KEY_SAVED_TERMS, JSON.stringify(terms));
-            }
-            renderSavedTermsSelect();
-        } catch (e) {
-            console.error(e);
-        }
-    }
-
     function renderSavedTermsSelect() {
         const select = document.getElementById('savedTermsSelect');
         if (!select) return;
@@ -4319,8 +4300,23 @@ document.addEventListener('DOMContentLoaded', () => {
                         if (cloudState.terms && cloudState.terms[targetDate]) {
                             window._cloudMem.set(lifeKey, JSON.stringify(cloudState.terms[targetDate]));
                         }
-                        if (cloudState.staffMaster) {
-                            try { localStorage.setItem('shift_schedule_life_staff_master', JSON.stringify(cloudState.staffMaster)); } catch (e) {}
+                        if (cloudState.staffMaster && Array.isArray(cloudState.staffMaster) && cloudState.staffMaster.length > 0) {
+                            // ★ 空データ上書き防止二重保護（既存のローカル設定を破壊させない）
+                            const localLifeRaw = localStorage.getItem('shift_schedule_life_staff_master');
+                            let shouldUpdate = true;
+                            if (localLifeRaw) {
+                                try {
+                                    const localM = JSON.parse(localLifeRaw);
+                                    const hasLocalConfig = Array.isArray(localM) && localM.some(s => s.lifeSection || s.haSection);
+                                    const cloudHasConfig = cloudState.staffMaster.some(s => s.lifeSection || s.haSection);
+                                    if (hasLocalConfig && !cloudHasConfig) {
+                                        shouldUpdate = false; // 空データによる設定破壊を物理遮断
+                                    }
+                                } catch (e) {}
+                            }
+                            if (shouldUpdate) {
+                                try { localStorage.setItem('shift_schedule_life_staff_master', JSON.stringify(cloudState.staffMaster)); } catch (e) {}
+                            }
                         }
                         loadLinkedLifeData(targetDate);
                         if (lastSolveResult && lastSolveResult.grid) {
