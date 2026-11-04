@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>勤務予定表 自動作成システム - 生活期</title>
-    <link rel="stylesheet" href="style.css?v=20261105_fix_v8">
+    <link rel="stylesheet" href="style.css?v=20261105_fix_v10">
 </head>
 <body class="theme-life">
 
@@ -38,17 +38,12 @@
         <a href="ST.html" class="dept-nav-btn dept-nav-btn-st">ST</a>
         <a href="life.html" class="dept-nav-btn dept-nav-btn-life active">生活期</a>
     </nav>
-    <!-- ナビゲーションタブ -->
-        <!-- Navigation Tabs -->
-        <nav class="dept-nav-container">
-        <span style="font-size:0.8rem; font-weight:700; color:#475569;">テーブル切替:</span>
-        <a href="index.html" class="dept-nav-btn dept-nav-btn-master">👑 マスターテーブル</a>
-        <a href="1f.html" class="dept-nav-btn dept-nav-btn-1f">1階病棟</a>
-        <a href="2f.html" class="dept-nav-btn dept-nav-btn-2f">2階病棟</a>
-        <a href="3f.html" class="dept-nav-btn dept-nav-btn-3f">3階病棟</a>
-        <a href="south.html" class="dept-nav-btn dept-nav-btn-south">南病棟</a>
-        <a href="ST.html" class="dept-nav-btn dept-nav-btn-st">ST</a>
-        <a href="life.html" class="dept-nav-btn dept-nav-btn-life active">生活期</a>
+        <!-- ナビゲーションタブ -->
+    <nav class="tab-container">
+        <button class="tab-btn active" data-tab="inputTab">&#x1F4CB; 希望入力</button>
+        <button class="tab-btn" data-tab="outputTab">&#x270F;&#xFE0F; 修正作業エリア</button>
+        <button class="tab-btn" data-tab="checkTab">&#x1F50D; 最終チェック&完成</button>
+        <button class="tab-btn" data-tab="statsTab">&#x1F4C8; 勤務分析・平準化ダッシュボード</button>
     </nav>
 
     <!-- メインコンテンツ -->
@@ -647,8 +642,8 @@
             theme: 'theme-life'
         };
     </script>
-    <script src="solver.js?v=20261105_fix_v8"></script>
-    <script src="app.js?v=20261105_fix_v8"></script>
+    <script src="solver.js?v=20261105_fix_v10"></script>
+    <script src="app.js?v=20261105_fix_v10"></script>
 </body>
 </html>
 

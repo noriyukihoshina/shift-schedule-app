@@ -677,7 +677,7 @@ document.addEventListener('DOMContentLoaded', () => {
                         const subCloud = j && (j.cloudState || j.data);
                         if (subCloud && subCloud.terms && typeof subCloud.terms === 'object') {
                             Object.keys(subCloud.terms).forEach(tDate => {
-                                if (!subCloud.terms[tDate]) return;
+                                if (!subCloud.terms[tDate] || tDate.startsWith('2025-')) return;
                                 const localKey = `shift_schedule_${subId}_term_${tDate}`;
                                 const localRaw = window.localStorage.getItem(localKey);
                                 if (localRaw) {
@@ -716,7 +716,7 @@ document.addEventListener('DOMContentLoaded', () => {
                         if (stCloud && stCloud.terms && typeof stCloud.terms === 'object') {
                             Object.keys(stCloud.terms).forEach(tDate => {
                                 const cloudTerm = stCloud.terms[tDate];
-                                if (!cloudTerm) return;
+                                if (!cloudTerm || tDate.startsWith('2025-')) return;
                                 const localStKey = `shift_schedule_st_term_${tDate}`;
                                 const localRaw = window.localStorage.getItem(localStKey);
                                 if (localRaw) {
@@ -891,6 +891,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 // 2. 全保存タームデータのクラウド復元（ローカル編集データの絶対保護）
                 if (cloud.terms && typeof cloud.terms === 'object') {
                     Object.keys(cloud.terms).forEach(tDate => {
+                        if (tDate.startsWith('2025-')) return;
                         if (cloud.terms[tDate]) {
                             const curLocal = window.localStorage.getItem(`${STORAGE_KEY_PREFIX}${tDate}`);
                             let localTermHasData = false;
@@ -988,16 +989,20 @@ document.addEventListener('DOMContentLoaded', () => {
                     });
                 }
             }
-            // 2. localStorage全体から shift_schedule_term_ キーをスキャン（2025年度は完全除外）
+            // 2. localStorage全体から shift_schedule_term_ キーをスキャン（2025年度は完全除外＆自動抹消）
+            const keysToRemove = [];
             for (let k = 0; k < localStorage.length; k++) {
                 const key = localStorage.key(k);
                 if (key && key.startsWith(STORAGE_KEY_PREFIX)) {
                     const datePart = key.replace(STORAGE_KEY_PREFIX, "");
-                    if (datePart && /^\d{4}-\d{2}-\d{2}$/.test(datePart) && !datePart.startsWith("2025-")) {
+                    if (datePart && datePart.startsWith("2025-")) {
+                        keysToRemove.push(key);
+                    } else if (datePart && /^\d{4}-\d{2}-\d{2}$/.test(datePart)) {
                         termSet.add(datePart);
                     }
                 }
             }
+            keysToRemove.forEach(k => { try { localStorage.removeItem(k); } catch(e){} });
             return Array.from(termSet).filter(t => !t.startsWith('2025-')).sort((a, b) => a.localeCompare(b));
         } catch (e) {
             return [];
