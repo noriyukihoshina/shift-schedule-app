@@ -3345,6 +3345,12 @@ document.addEventListener('DOMContentLoaded', () => {
             }
 
             currentWorkingStartDate = selectedDate;
+            const startDateInput = document.getElementById('termStartDate');
+            if (startDateInput) startDateInput.value = selectedDate;
+            const termSelect = document.getElementById('termSelect');
+            if (termSelect) termSelect.value = selectedDate;
+            localStorage.setItem(STORAGE_KEY_LAST_ACTIVE, selectedDate);
+
             const loaded = loadTermFromStorage(selectedDate);
             if (loaded) {
                 showToast(`💾 保存済み期間（${selectedDate}～）を呼び出しました`);
@@ -3355,6 +3361,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
             // 呼出後は選択肢を「(保存済み期間の呼出)」にリセット（次回も同じ期間を選択可能にする）
             renderSavedTermsSelect();
+            if (isMaster) renderMasterIntegrationView();
         });
     }
 
@@ -4090,16 +4097,30 @@ document.addEventListener('DOMContentLoaded', () => {
             const matchingGrid = [];
 
             data.staffList.forEach((st, idx) => {
-                // 不使用でなく、かつ当病棟フロア（1F, 2F, 3F, 南）に所属するST
+                // 不使用（isUnused / 不要）でなく、かつ当病棟フロア（1F, 2F, 3F, 南）に所属するSTのみ抽出
                 if (!st.isUnused && (st.floor === currentFloor || (st.floor && st.floor.includes(currentFloor)))) {
                     matchingStaff.push(st);
+                    let row = [];
                     if (data.outputGrid && Array.isArray(data.outputGrid[idx])) {
-                        matchingGrid.push(data.outputGrid[idx]);
+                        row = data.outputGrid[idx].map(c => {
+                            const sym = (c && typeof c === 'object') ? (c.symbol || '') : (c || '');
+                            // STはPOと異なり8時・遅・Eは不要！早番「早」のみ許可し、他は通常勤務「○」にサニタイズ
+                            if (sym === '8時' || sym === '遅' || sym === 'E' || sym === 'ハヤ' || sym === 'オソ' || sym === 'イブ') {
+                                return { symbol: '○', isFixed: false };
+                            }
+                            return (typeof c === 'object') ? { ...c } : { symbol: sym, isFixed: false };
+                        });
                     } else if (Array.isArray(st.days)) {
-                        matchingGrid.push(st.days.map(sym => ({ symbol: sym, isFixed: false })));
+                        row = st.days.map(sym => {
+                            if (sym === '8時' || sym === '遅' || sym === 'E' || sym === 'ハヤ' || sym === 'オソ' || sym === 'イブ') {
+                                return { symbol: '○', isFixed: false };
+                            }
+                            return { symbol: sym, isFixed: false };
+                        });
                     } else {
-                        matchingGrid.push(new Array(NUM_DAYS).fill({ symbol: '' }));
+                        row = new Array(NUM_DAYS).fill({ symbol: '' });
                     }
+                    matchingGrid.push(row);
                 }
             });
 
@@ -4659,7 +4680,11 @@ document.addEventListener('DOMContentLoaded', () => {
 
                 for (let d = 0; d < NUM_DAYS; d++) {
                     const c = rowData[d] || { symbol: '' };
-                    const sym = c.symbol ? c.symbol.replace(/[◦•･◯〇●]/g, '○') : '';
+                    let sym = c.symbol ? c.symbol.replace(/[◦•･◯〇●]/g, '○') : '';
+                    // STはPOと異なり8時・遅・Eは不要！早番のみ許可、他は通常勤務「○」に完全サニタイズ
+                    if (sym === '8時' || sym === '遅' || sym === 'E' || sym === 'ハヤ' || sym === 'オソ' || sym === 'イブ') {
+                        sym = '○';
+                    }
                     const thickCls = ((d + 1) % 7 === 0) ? 'border-thick-right' : '';
 
                     if (sym === '休') stOffCount++;
@@ -5082,21 +5107,8 @@ document.addEventListener('DOMContentLoaded', () => {
                 } else {
                     poLate = dStat.late;
                 }
-                // ST遅番人数を合算
-                let stLateCount = 0;
-                if (linkedStLateArr && linkedStLateArr[d] !== undefined) {
-                    stLateCount = linkedStLateArr[d];
-                } else if (linkedStStaffData && linkedStStaffData.staffList && linkedStStaffData.grid) {
-                    linkedStStaffData.staffList.forEach((st, sIdx) => {
-                        if (st.isUnused) return;
-                        const row = linkedStStaffData.grid[sIdx] || [];
-                        const c = row[d] || { symbol: '' };
-                        const sym = (c && typeof c === 'object') ? (c.symbol || '') : (c || '');
-                        const wish = (st.days && st.days[d]) ? st.days[d] : '';
-                        if (sym === '遅' || wish === '遅') stLateCount++;
-                    });
-                }
-                lateVal = poLate + stLateCount;
+                // STはPOと異なり遅番不要のため合算なし
+                lateVal = poLate;
             }
             footHtml += `<td class="${thickCls} col-day-fixed" data-d="${d}" data-footer-stat="late" style="width:52px; min-width:52px; max-width:52px; color:#334155; font-weight:700;">${lateVal}</td>`;
         }
@@ -5123,21 +5135,8 @@ document.addEventListener('DOMContentLoaded', () => {
                 } else {
                     poEve = dStat.eve;
                 }
-                // ST E番人数を合算
-                let stEveCount = 0;
-                if (linkedStEveArr && linkedStEveArr[d] !== undefined) {
-                    stEveCount = linkedStEveArr[d];
-                } else if (linkedStStaffData && linkedStStaffData.staffList && linkedStStaffData.grid) {
-                    linkedStStaffData.staffList.forEach((st, sIdx) => {
-                        if (st.isUnused) return;
-                        const row = linkedStStaffData.grid[sIdx] || [];
-                        const c = row[d] || { symbol: '' };
-                        const sym = (c && typeof c === 'object') ? (c.symbol || '') : (c || '');
-                        const wish = (st.days && st.days[d]) ? st.days[d] : '';
-                        if (sym === 'E' || sym === 'イ' || sym === 'イブ' || wish === 'E' || wish === 'イ' || wish === 'イブ') stEveCount++;
-                    });
-                }
-                eveVal = poEve + stEveCount;
+                // STはPOと異なりE不要のため合算なし
+                eveVal = poEve;
             }
             footHtml += `<td class="${thickCls} col-day-fixed" data-d="${d}" data-footer-stat="eve" style="width:52px; min-width:52px; max-width:52px; color:#334155; font-weight:700;">${eveVal}</td>`;
         }
@@ -5424,7 +5423,7 @@ document.addEventListener('DOMContentLoaded', () => {
                     }
                 }
 
-                // 所属STスタッフ集計の合算（1〜3階・南病棟ともにPT+OT+ST合算で早・遅・E・8時を集計）
+                // 所属STスタッフ集計の合算（STはPOと異なり8時・遅・Eは不要！早番のみ合算）
                 for (let si = 0; si < floorStStaff.length; si++) {
                     const st = floorStStaff[si];
                     const cell = floorStGrid[si] ? floorStGrid[si][d] : null;
@@ -5433,19 +5432,8 @@ document.addEventListener('DOMContentLoaded', () => {
                         earlyCount++;
                         headCount += 1.0;
                         realCount += (st.isHalf ? 0.5 : 1.0);
-                    } else if (sym === '遅') {
-                        lateCount++;
-                        headCount += 1.0;
-                        realCount += (st.isHalf ? 0.5 : 1.0);
-                    } else if (sym === 'E') {
-                        eveCount++;
-                        headCount += 1.0;
-                        realCount += (st.isHalf ? 0.5 : 1.0);
-                    } else if (sym === '8時') {
-                        h8Count++;
-                        headCount += 1.0;
-                        realCount += (st.isHalf ? 0.5 : 1.0);
-                    } else if (sym === '○' || sym === '出' || sym === '研' || sym === '張' || sym === 'ハヤ' || sym === 'オソ' || sym === 'イブ') {
+                    } else if (isWorkSymbol(sym)) {
+                        // STの一般勤務（8時・遅・E・ハヤ等は存在しないため通常出勤として実数にのみ加算）
                         headCount += 1.0;
                         realCount += (st.isHalf ? 0.5 : 1.0);
                     } else if (sym === '○/休' || sym === '休/○' || sym === '○/有' || sym === '有/○' || sym === '〇/休' || sym === '休/〇' || sym === '〇/有' || sym === '有/〇') {

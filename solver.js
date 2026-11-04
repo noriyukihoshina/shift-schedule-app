@@ -1182,6 +1182,38 @@ class ShiftScheduler {
         // ステップ5: 平準化スワップ（希望休や固定枠による歪みがある場合のみ微調整）
         this.balanceWorkforceForST();
 
+        // ステップ6: ST専用厳格検証・サニタイズゲート（不要トグル・早不可・8時完全根絶の100%保証）
+        for (let s = 0; s < this.numStaff; s++) {
+            const st = this.staffList[s];
+            if (!st) continue;
+
+            // ① 不使用（isUnused / 不要）トグルがONのスタッフ: 一切の勤務を組まない（完全空欄維持）
+            if (st.isUnused) {
+                for (let d = 0; d < this.numDays; d++) {
+                    this.grid[s][d] = { symbol: '', isFixed: false, locked: true };
+                }
+                continue;
+            }
+
+            // ② 早番不可（noEarly / 早番不要）トグルがONのスタッフ: 「早」を1回も組まない（0回保証）
+            if (st.noEarly) {
+                for (let d = 0; d < this.numDays; d++) {
+                    if (this.grid[s][d].symbol === SYMBOLS.EARLY || this.grid[s][d].symbol === '早') {
+                        this.setSymbol(s, d, SYMBOLS.WORK, false);
+                    }
+                }
+            }
+
+            // ③ STスタッフ全員: POと異なり「8時」「遅」「E」は不要（絶対に混入させない）
+            for (let d = 0; d < this.numDays; d++) {
+                const sym = this.grid[s][d].symbol;
+                if (sym === SYMBOLS.H8 || sym === '8時' || sym === '遅' || sym === 'E' || sym === 'ハヤ' || sym === 'オソ' || sym === 'イブ') {
+                    // STは早番「早」のみ。それ以外の特殊勤務は通常勤務「○」に正規化
+                    this.setSymbol(s, d, SYMBOLS.WORK, false);
+                }
+            }
+        }
+
         return {
             success: true,
             grid: this.grid,
