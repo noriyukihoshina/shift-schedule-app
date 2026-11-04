@@ -379,13 +379,13 @@
      powershell -Command '& { Add-Type -AssemblyName PresentationCore; $m = New-Object System.Windows.Media.MediaPlayer; $m.Open([Uri]"C:\Windows\Media\Windows Ding.wav"); $m.Volume = 0.25; $m.Play(); Start-Sleep -Milliseconds 2000 }'
      ```
 4. **言語の統一**: 対話、思考プロセス、コード内コメント、ドキュメントはすべて日本語で行う。
-5. **デプロイ運用（三重検証ゲート: Tri-Lock Verification）**:
-   - ユーザーからの明示的な指示時のみデプロイを実行。
-   - ① `.app_meta.json` の `appName` 一致
-   - ② `deploy_registry.json` の公認定義一致
-   - ③ アプリ固有キーワードの合致
-   - 疑義がある場合は即座にABORTする。
-
+5. **デプロイ運用（自律デプロイ原則 ＆ 三重検証ゲート: Tri-Lock Verification）**:
+   - **恒久指示（許可不要）**: ユーザーから一時停止等の特別な指示がない限り、プログラムや仕様の修正作業完了時は**ユーザーへの都度許可を求めず、自律的にデプロイまで完遂すること**（過去5回以上指示された絶対原則）。
+   - **安全デプロイの必須手順**: デプロイ実行時は必ず三重検証ゲートを通過すること:
+     ① .app_meta.json の ppName 一致
+     ② deploy_registry.json の公認定義一致
+     ③ アプリ固有キーワードの合致
+   - 三重検証で不一致・疑義がある場合のみ即時ABORTしてユーザーに報告すること。
 ---
 
 ## 15. 将来の病院共有フォルダ移行計画（最終形）

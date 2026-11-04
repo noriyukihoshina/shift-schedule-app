@@ -252,6 +252,15 @@ document.addEventListener('DOMContentLoaded', () => {
                 enforceRoleExclusivity(staffList[idx]);
             }
         });
+        // 生活期の場合、スタッフ01〜04番（管理トグル）のONを恒久復元・保証
+        if (isLife) {
+            for (let k = 0; k <= 3; k++) {
+                if (staffList[k] && (!staffList[k].lifeSection || staffList[k].lifeSection === '')) {
+                    staffList[k].lifeSection = '管理';
+                    staffList[k].isZeroCount = true;
+                }
+            }
+        }
         if (staffList.length > NUM_STAFF) {
             staffList = staffList.slice(0, NUM_STAFF);
         }
@@ -265,9 +274,30 @@ document.addEventListener('DOMContentLoaded', () => {
                 // 旧キーからのフォールバック救済（※ STは他病棟キーと混同しないようフォールバック禁止）
                 raw = window.localStorage.getItem('shift_schedule_staff_master');
             }
-            if (!raw) return false;
+            if (!raw) {
+                if (isLife) {
+                    // 生活期の初期スタッフマスターを自動構築・保存
+                    saveStaffMaster();
+                }
+                return false;
+            }
             const masterList = JSON.parse(raw);
-            return applyMasterArrayToStaffList(masterList);
+            const res = applyMasterArrayToStaffList(masterList);
+            if (isLife) {
+                // 生活期のスタッフ01〜04に管理トグルがONになっているか最終検証・補正
+                let modified = false;
+                for (let k = 0; k <= 3; k++) {
+                    if (staffList[k] && staffList[k].lifeSection !== '管理') {
+                        staffList[k].lifeSection = '管理';
+                        staffList[k].isZeroCount = true;
+                        modified = true;
+                    }
+                }
+                if (modified) {
+                    saveStaffMaster();
+                }
+            }
+            return res;
         } catch (e) {
             console.error('スタッフマスターの読込に失敗:', e);
             return false;
@@ -462,14 +492,15 @@ document.addEventListener('DOMContentLoaded', () => {
                     days: new Array(NUM_DAYS).fill('')
                 });
             } else {
-                // 通常のPT/OTスタッフ初期化（生活期初期値：41〜44番は各病棟応援ハ1〜ハ4）
+                // 通常のPT/OTスタッフ初期化（生活期初期値：01〜04番は管理トグルON、41〜44番は各病棟応援ハ1〜ハ4）
                 const isDefaultHa1 = isLife && (i === 41);
                 const isDefaultHa2 = isLife && (i === 42);
                 const isDefaultHa3 = isLife && (i === 43);
                 const isDefaultHa4 = isLife && (i === 44);
+                const isDefaultLifeManage = isLife && (i >= 1 && i <= 4);
                 const defaultHaSec = isDefaultHa1 ? 'ハ1' : (isDefaultHa2 ? 'ハ2' : (isDefaultHa3 ? 'ハ3' : (isDefaultHa4 ? 'ハ4' : '')));
+                const defaultLifeSec = isDefaultLifeManage ? '管理' : '';
                 const defaultStaffName = defaultHaSec ? `${defaultHaSec} スタッフ` : `スタッフ ${String(i).padStart(2, '0')}`;
-
                 staffList.push({
                     id: i,
                     name: defaultStaffName,
@@ -485,9 +516,9 @@ document.addEventListener('DOMContentLoaded', () => {
                     isChief: (i === 2 || i === 3),       // ★ 主任（係長不在時に1名以上出勤）
                     isSubChief: (i === 4 || i === 5),    // ★ 副主任（係長主任不在時A1名B1名出勤）
                     isHalf: false,                       // ★ 0.5（出勤実数を0.5人換算）
-                    isZeroCount: false,                  // ★ 0（出勤実数を0人換算）
+                    isZeroCount: isDefaultLifeManage ? true : false, // ★ 管理トグルON時は0人換算
                     isFirstYear: false,                  // ★ 1年目
-                    lifeSection: '',                     // ★ 生活期セクション
+                    lifeSection: defaultLifeSec,         // ★ 生活期セクション（01〜04は管理）
                     haSection: defaultHaSec,             // ★ ハセクション（ハ1〜ハ4）
                     jobTitle: '',                        // ★ 職種（PT/OT/ST）
                     isFullTime: (i <= 10),               // ★ 専従
