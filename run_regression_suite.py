@@ -119,11 +119,11 @@ window.addEventListener('load', () => {
                 const sym = (cell && typeof cell === 'object') ? cell.symbol : cell;
                 if (isUnused && sym !== '') unusedWorkCount++;
                 if (cell && cell.isFixed) fixedCellCount++;
-                if (sym === '早') {
+                if ((sym === '早' || sym === '\u65e9')) {
                     totalEarly++;
                     staffEarly[s]++;
                 }
-                if (fl && (sym === '○' || sym === '早')) {
+                if (fl && ((sym === '○' || sym === '\u25cb' || sym === '〇') || (sym === '早' || sym === '\u65e9'))) {
                     floorWorkDaily[fl][d]++;
                 }
             }
