@@ -1188,7 +1188,8 @@ class ShiftScheduler {
             if (!st) continue;
 
             // ① 不使用（isUnused / 不要）トグルがONのスタッフ: 一切の勤務を組まない（完全空欄維持）
-            if (st.isUnused) {
+            const fl = (st.floor || '').trim();
+            if (st.isUnused || !['1F', '2F', '3F', '南'].includes(fl)) {
                 for (let d = 0; d < this.numDays; d++) {
                     this.grid[s][d] = { symbol: '', isFixed: false, locked: true };
                 }
@@ -1319,9 +1320,19 @@ class ShiftScheduler {
             });
         });
 
-        // 全スタッフの空き枠を「○」で確定
+        // 1F, 2F, 3F, 南に所属する有効スタッフのみ空き枠を「○」で確定！
+        // ※未設定スタッフ（floor空欄）や不要・不使用スタッフ（isUnused）には絶対に勤務を組まない（完全空欄保証）
         for (let s = 0; s < this.numStaff; s++) {
-            if (this.staffList[s].isUnused) continue;
+            const st = this.staffList[s];
+            if (!st || st.isUnused) continue;
+            const fl = (st.floor || '').trim();
+            if (!['1F', '2F', '3F', '南'].includes(fl)) {
+                // フロア未設定スタッフは完全空欄を保証
+                for (let d = 0; d < this.numDays; d++) {
+                    this.grid[s][d] = { symbol: '', isFixed: false, locked: true };
+                }
+                continue;
+            }
             for (let d = 0; d < this.numDays; d++) {
                 if (this.grid[s][d].symbol === '') {
                     this.setSymbol(s, d, SYMBOLS.WORK, false);
@@ -1974,12 +1985,10 @@ class ShiftScheduler {
             }
         }
 
-        // ステップ1: 8時勤務（1名/日）を優先配置！（8時可フラグのある貴重なスタッフから均等に選出。南病棟は8時不要）
-        if (!this.isSouth) {
-            const h8Result = this.assign8ClockDuties(options);
-            if (!h8Result.success && !force) {
-                return h8Result;
-            }
+        // ステップ1: 8時勤務（1名/日）を優先配置！（南病棟含む全通常病棟で毎日1名必須配置）
+        const h8Result = this.assign8ClockDuties(options);
+        if (!h8Result.success && !force) {
+            return h8Result;
         }
 
         // ステップ2: 毎日の特殊勤務（遅1, E2, 早3）を配置し、翌日を自動的に「休」に設定
@@ -3712,7 +3721,7 @@ class ShiftScheduler {
      * ステップ2: 8時勤務（毎日1名）の配置（限定リソースを最優先で割り当て）
      */
     assign8ClockDuties(options = {}) {
-        if (this.isSouth) return { success: true };
+        // 南病棟も1F〜3Fと同様に通常病棟として毎日1名8時勤務を必ず配置！
         const force = options && options.force === true;
         const counts = new Array(this.numStaff).fill(0);
         const lastAssignedDay = new Array(this.numStaff).fill(-10);

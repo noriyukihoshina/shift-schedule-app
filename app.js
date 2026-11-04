@@ -468,7 +468,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 staffList.push({
                     id: i,
                     name: `ST ${String(i).padStart(2, '0')}`,
-                    isUnused: (i > 16),      // 17〜36番目は初期状態で不使用
+                    isUnused: (i > 16 || !floor), // 17〜36番目およびフロア未設定は確実に不使用（不要）
                     floor: floor,           // '1F', '2F', '3F', '南' (択一)
                     section: '',
                     can8: false,
@@ -677,9 +677,26 @@ document.addEventListener('DOMContentLoaded', () => {
                         const subCloud = j && (j.cloudState || j.data);
                         if (subCloud && subCloud.terms && typeof subCloud.terms === 'object') {
                             Object.keys(subCloud.terms).forEach(tDate => {
-                                if (subCloud.terms[tDate]) {
-                                    window.localStorage.setItem(`shift_schedule_${subId}_term_${tDate}`, JSON.stringify(subCloud.terms[tDate]));
+                                if (!subCloud.terms[tDate]) return;
+                                const localKey = `shift_schedule_${subId}_term_${tDate}`;
+                                const localRaw = window.localStorage.getItem(localKey);
+                                if (localRaw) {
+                                    try {
+                                        const localData = JSON.parse(localRaw);
+                                        // ローカルに既に勤務表（outputGrid）があり、クラウド側がnull/空の場合は絶対に上書きしない！
+                                        const localHasOutput = !!(localData && localData.outputGrid && Array.isArray(localData.outputGrid) && localData.outputGrid.length > 0);
+                                        const cloudHasOutput = !!(subCloud.terms[tDate] && subCloud.terms[tDate].outputGrid && Array.isArray(subCloud.terms[tDate].outputGrid) && subCloud.terms[tDate].outputGrid.length > 0);
+                                        if (localHasOutput && !cloudHasOutput) {
+                                            return; // 上書きを物理遮断
+                                        }
+                                        const localTime = new Date(localData.updatedAt || 0).getTime();
+                                        const cloudTime = new Date(subCloud.terms[tDate].updatedAt || 0).getTime();
+                                        if (localTime > cloudTime) {
+                                            return; // ローカルが新しいので上書き遮断
+                                        }
+                                    } catch (e) {}
                                 }
+                                window.localStorage.setItem(localKey, JSON.stringify(subCloud.terms[tDate]));
                             });
                         }
                     } catch (e) {
@@ -1021,9 +1038,22 @@ document.addEventListener('DOMContentLoaded', () => {
                     prevDays: [...s.prevDays],
                     days: [...s.days]
                 })),
-                outputGrid: (lastSolveResult && lastSolveResult.grid) 
-                    ? lastSolveResult.grid.map(row => row.map(c => ({ ...c }))) 
-                    : null,
+                // ★ 既存の勤務表（outputGrid）を絶対に消失させない永続保護ロック！
+                outputGrid: (() => {
+                    if (lastSolveResult && lastSolveResult.grid) {
+                        return lastSolveResult.grid.map(row => row.map(c => ({ ...c })));
+                    }
+                    try {
+                        const existingRaw = localStorage.getItem(`${STORAGE_KEY_PREFIX}${startDate}`);
+                        if (existingRaw) {
+                            const existingData = JSON.parse(existingRaw);
+                            if (existingData && existingData.outputGrid && Array.isArray(existingData.outputGrid)) {
+                                return existingData.outputGrid;
+                            }
+                        }
+                    } catch (e) {}
+                    return null;
+                })(),
                 activeTab: activeTab,
                 dayOffsets: [...dayOffsets],
                 sectionTeamLeveledRev45: true,
