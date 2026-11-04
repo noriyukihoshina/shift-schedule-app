@@ -719,6 +719,23 @@ document.addEventListener('DOMContentLoaded', () => {
                             });
                             loadLinkedSTData(currentWorkingStartDate);
                             loadLinkedLifeData(currentWorkingStartDate);
+                            // ★ STデータ同期完了直後に、病棟テーブルの集計・ST行を即時更新再描画！
+                            if (lastScheduler) {
+                                lastScheduler.stDailyWork = getLinkedSTDailyWork();
+                                lastScheduler.stDailyHeadCount = getLinkedSTDailyHeadCount();
+                                lastScheduler.stDailyFtWork = getLinkedSTDailyFtWork();
+                                lastScheduler.stDailyEarly = getLinkedSTDailyEarly();
+                                lastScheduler.stDailyLate = getLinkedSTDailyLate();
+                                lastScheduler.stDailyEve = getLinkedSTDailyEve();
+                                lastScheduler.stFloorFtCount = getLinkedSTFloorFtCount();
+                            }
+                            const curGrid = (lastSolveResult && lastSolveResult.grid) || (lastScheduler && lastScheduler.grid);
+                            if (curGrid) {
+                                const newStats = lastScheduler ? lastScheduler.calculateStats(curGrid) : null;
+                                renderOutputTable(curGrid, newStats);
+                                if (newStats) renderStatsDashboard(newStats);
+                            }
+                            renderInputTable();
                         }
                     }
                 } catch (e) {}
@@ -4130,7 +4147,15 @@ document.addEventListener('DOMContentLoaded', () => {
                 raw = window._cloudMem.get(stKey);
             }
         }
-        if (!raw) {
+        // ★ ローカルデータが存在しても、outputGridが空またはnullなら不完全データとみなしクラウドから強制再取得！
+        let hasValidOutputGrid = false;
+        if (raw) {
+            try {
+                const parsed = JSON.parse(raw);
+                hasValidOutputGrid = !!(parsed && parsed.outputGrid && Array.isArray(parsed.outputGrid) && parsed.outputGrid.length > 0 && parsed.outputGrid.some(row => row && row.some(cell => (cell.symbol || cell) !== '')));
+            } catch (e) {}
+        }
+        if (!raw || !hasValidOutputGrid) {
             // クラウドからSTの最新データをバックグラウンド取得して再読込（※PO側からSTのローカルストレージは一切汚染せずメモリキャッシュのみに保持）
             if (!window._stFetchInFlight) {
                 window._stFetchInFlight = true;
@@ -5622,12 +5647,12 @@ document.addEventListener('DOMContentLoaded', () => {
             }
             html += `<td colspan="9" style="background:#e2e8f0;"></td></tr>`;
 
-            // 定数定義（1〜3階: 早3/遅1/E2/8時1、南: 早2/遅2/E2/8時0）
+            // 定数定義（1〜3階: 早3/遅1/E2/8時1、南: 早2/遅2/E2/8時1 ★南も8時は毎日ピッタリ1名！）
             const isSouthFloor = (fc.id === 'south');
             const targetEarly = isSouthFloor ? 2 : 3;
             const targetLate = isSouthFloor ? 2 : 1;
             const targetEve = 2;
-            const targetH8 = isSouthFloor ? 0 : 1;
+            const targetH8 = 1; // 1階〜南病棟の全フロア共通で8時は毎日1名！
 
             // サマリー行4: 早 (8行目相当)
             html += `<tr style="background:${fc.bg}; font-weight:600;">
@@ -6020,15 +6045,15 @@ document.addEventListener('DOMContentLoaded', () => {
         }
         html += `<td colspan="9" style="background:#f8fafc;"></td></tr>`;
 
-        // 8時（全館定数: 1〜3階各1 + 南0 = 計3名）
+        // 8時（全館定数: 1〜3階各1 + 南1 = 計4名）
         html += `<tr style="background:#f8fafc; font-weight:700; border-bottom:3px solid #334155;">
             <td class="sticky-col-2" style="background:#f8fafc; color:#059669; border-right:2px solid #475569; font-weight:700; width:95px; min-width:95px; max-width:105px;">8時</td>`;
         for (let d = 0; d < numDays; d++) {
             const thickCls = ((d + 1) % 7 === 0) ? 'border-thick-right' : '';
             const cnt = grandH8[d];
-            const isConflict = (cnt !== 3);
+            const isConflict = (cnt !== 4);
             const bgStyle = isConflict ? 'background:#dbeafe !important; color:#1d4ed8 !important;' : 'background:#f8fafc; color:#059669;';
-            const titleStr = isConflict ? `title="⚠️ 全館8時定数エラー: ${cnt}名（定数: 3名）"` : '';
+            const titleStr = isConflict ? `title="⚠️ 全館8時定数エラー: ${cnt}名（定数: 4名）"` : '';
             html += `<td class="${thickCls} col-day-fixed ${isConflict ? 'conflict-highlight' : ''}" ${titleStr} style="width:52px; min-width:52px; max-width:52px; ${bgStyle} font-weight:700; border-bottom:1px solid #cbd5e1; text-align:center;">${cnt}</td>`;
         }
         html += `<td colspan="9" style="background:#f8fafc;"></td></tr>`;
