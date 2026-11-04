@@ -1222,23 +1222,17 @@ class ShiftScheduler {
     }
 
     /**
-     * ST用公休割当：各フロア（1F, 2F, 3F, 南）内で土日祝関係なく毎日均等に出勤するように公休を配置
-     * - 各階4名に黄金ローテーションパターンを適用（連勤3〜4日、毎日2〜3名出勤、スケ可毎日出勤を完全保証）
-     * - フロアごとに開始日を1日ずつシフトし、全社合計で毎日11〜12名出勤（ブレ幅わずか1名）を達成
+    /**
+     * ST用公休配置: 曜日（平日・土日祝）完全均等・出勤実数完全フラット
+     * - 土日減員は一切行わず、28日間すべてで各フロアおよびST全体の実数を均等にする
+     * - 希望休（有休・リフ・事前希望休など）を優先配置した上で、残りの公休枠を
+     *   「出勤実数が厚い日」かつ「連勤制約を満たす日」に均等に配分
      */
     assignHolidaysForST() {
         const floors = ['1F', '2F', '3F', '南'];
-        const stdHols = this.options.standardHolidays;
+        const stdHols = this.options.standardHolidays || 8.0;
 
-        // 黄金公休パターン（各人8日公休、スケ可0と1は完全直交、フロア出勤は毎日2〜3名）
-        const basePatterns = [
-            [0, 3, 7, 10, 14, 17, 21, 24], // idx 0 (スケ可A)
-            [2, 5, 9, 12, 16, 19, 23, 26], // idx 1 (スケ可B: 0と絶対に被らない)
-            [1, 4, 8, 11, 15, 18, 22, 25], // idx 2
-            [3, 6, 10, 13, 17, 20, 24, 27] // idx 3
-        ];
-
-        floors.forEach((fl, fIdx) => {
+        floors.forEach(fl => {
             const floorStaff = [];
             for (let s = 0; s < this.numStaff; s++) {
                 if (!this.staffList[s].isUnused && this.staffList[s].floor === fl) {
@@ -1247,16 +1241,14 @@ class ShiftScheduler {
             }
             if (floorStaff.length === 0) return;
 
-            // スケ可スタッフを idx 0 と idx 1 に配置
+            // スケジュール担当スタッフ（canSched）を優先配置
             floorStaff.sort((a, b) => {
                 const sA = this.staffList[a].canSched ? 1 : 0;
                 const sB = this.staffList[b].canSched ? 1 : 0;
                 return sB - sA;
             });
 
-            const floorShift = fIdx; // フロアごとに1日ずつシフト
-
-            floorStaff.forEach((s, idxInFloor) => {
+            floorStaff.forEach(s => {
                 let currentOff = 0;
                 for (let d = 0; d < this.numDays; d++) {
                     const sym = this.grid[s][d].symbol;
@@ -1264,42 +1256,61 @@ class ShiftScheduler {
                     else if (isHalfDuty(sym)) currentOff += 0.5;
                 }
 
-                const pattern = basePatterns[idxInFloor % 4];
-                const targetDays = pattern.map(d => (d + floorShift) % this.numDays);
-
-                // パターンの公休日を優先配置
-                targetDays.forEach(d => {
-                    if (currentOff >= stdHols) return;
-                    if (this.grid[s][d].isFixed || this.grid[s][d].symbol !== '') return;
-
-                    this.setSymbol(s, d, SYMBOLS.OFF, false);
-                    currentOff++;
-                });
-
-                // まだ足りない場合の安全配置
+                // 公休が不足している場合、出勤実数が最も多く、かつ連勤制約を満たす日に公休を配置
                 while (currentOff < stdHols) {
                     let bestDay = -1;
-                    let bestFloorLoad = -999;
+                    let bestScore = -999999;
+
                     for (let d = 0; d < this.numDays; d++) {
                         if (this.grid[s][d].isFixed || this.grid[s][d].symbol !== '') continue;
-                        let flLoad = 0;
+
+                        // 3連休以上にならないようにチェック
+                        let consecutiveOff = 0;
+                        for (let checkD = Math.max(0, d - 2); checkD <= Math.min(this.numDays - 1, d + 2); checkD++) {
+                            if (checkD === d || isFullOffSymbol(this.grid[s][checkD].symbol)) consecutiveOff++;
+                        }
+                        if (consecutiveOff >= 3) continue;
+
+                        // その日のフロア出勤実数
+                        let flRealLoad = 0;
                         floorStaff.forEach(oS => {
-                            if (!isHolidaySymbol(this.grid[oS][d].symbol)) flLoad++;
+                            const oSym = (oS === s) ? SYMBOLS.WORK : this.grid[oS][d].symbol;
+                            flRealLoad += this.getStaffRealWorkAmt(oS, oSym);
                         });
-                        if (flLoad > bestFloorLoad) {
-                            bestFloorLoad = flLoad;
+
+                        // その日のST全体出勤実数
+                        let totalRealLoad = 0;
+                        for (let oS = 0; oS < this.numStaff; oS++) {
+                            if (this.staffList[oS].isUnused) continue;
+                            const oSym = (oS === s) ? SYMBOLS.WORK : this.grid[oS][d].symbol;
+                            totalRealLoad += this.getStaffRealWorkAmt(oS, oSym);
+                        }
+
+                        // 出勤実数が厚い日ほど高いスコア（土日・平日の区別なく完全均等化）
+                        const score = flRealLoad * 10 + totalRealLoad;
+                        if (score > bestScore) {
+                            bestScore = score;
                             bestDay = d;
                         }
                     }
+
                     if (bestDay >= 0) {
                         this.setSymbol(s, bestDay, SYMBOLS.OFF, false);
-                        currentOff++;
+                        currentOff += 1.0;
                     } else {
+                        // 空いている日を順次埋める
+                        for (let d = 0; d < this.numDays; d++) {
+                            if (!this.grid[s][d].isFixed && this.grid[s][d].symbol === '') {
+                                this.setSymbol(s, d, SYMBOLS.OFF, false);
+                                currentOff += 1.0;
+                                break;
+                            }
+                        }
                         break;
                     }
                 }
 
-                // 残りの空き枠をすべて「○（日勤）」で確定
+                // 残りの空き枠を通常勤務「○」で埋める
                 for (let d = 0; d < this.numDays; d++) {
                     if (this.grid[s][d].symbol === '') {
                         this.setSymbol(s, d, SYMBOLS.WORK, false);
@@ -1308,7 +1319,7 @@ class ShiftScheduler {
             });
         });
 
-        // フロア未設定のスタッフがいれば同様に確定
+        // 全スタッフの空き枠を「○」で確定
         for (let s = 0; s < this.numStaff; s++) {
             if (this.staffList[s].isUnused) continue;
             for (let d = 0; d < this.numDays; d++) {
@@ -1541,12 +1552,15 @@ class ShiftScheduler {
     }
 
     /**
-     * ST用平準化スワップ：各フロア内の日別出勤人数および全フロア合計出勤人数を土日祝関係なく毎日均等に平準化
+     * ST用出勤実数平坦化（土日平日完全均等・実数ブレ幅0.5以内）
+     * - 人数ではなく「実数（getStaffRealWorkAmt: 0.5人換算や半日出勤を考慮）」で完全平坦化
+     * - 1. フロア内平準化: 各フロア（1F, 2F, 3F, 南）の日別出勤実数差を0.5以内に収束
+     * - 2. ST全社平準化: 4フロア合計の日別出勤実数差を0.5以内の完全フラットに収束
      */
     balanceWorkforceForST() {
         const floors = ['1F', '2F', '3F', '南'];
 
-        // 1. 各フロア内での平準化
+        // 1. 各フロア内での実数平坦化スワップ
         floors.forEach(fl => {
             const floorStaff = [];
             for (let s = 0; s < this.numStaff; s++) {
@@ -1556,29 +1570,27 @@ class ShiftScheduler {
             }
             if (floorStaff.length <= 1) return;
 
-            for (let iter = 0; iter < 100; iter++) {
+            for (let iter = 0; iter < 150; iter++) {
                 let improved = false;
-                // 日別出勤数を計算
                 const dailyLoads = [];
                 for (let d = 0; d < this.numDays; d++) {
-                    let cnt = 0;
+                    let realLoad = 0;
                     floorStaff.forEach(s => {
-                        if (isWorkSymbol(this.grid[s][d].symbol)) cnt++;
+                        realLoad += this.getStaffRealWorkAmt(s, this.grid[s][d].symbol);
                     });
-                    dailyLoads.push({ d, cnt });
+                    dailyLoads.push({ d, realLoad });
                 }
-                dailyLoads.sort((a, b) => b.cnt - a.cnt);
+                dailyLoads.sort((a, b) => b.realLoad - a.realLoad);
 
                 const maxDay = dailyLoads[0];
                 const minDay = dailyLoads[dailyLoads.length - 1];
-                if (maxDay.cnt - minDay.cnt <= 1) break; // ブレ幅が1名以内なら完璧
+                if (maxDay.realLoad - minDay.realLoad <= 0.51) break; // 実数差0.5以下なら完了
 
-                // maxDay に○で、minDay に休のスタッフを探してスワップ
                 for (const s of floorStaff) {
                     if (this.grid[s][maxDay.d].isFixed || this.grid[s][minDay.d].isFixed) continue;
-                    if (this.grid[s][maxDay.d].symbol !== SYMBOLS.WORK || this.grid[s][minDay.d].symbol !== SYMBOLS.OFF) continue;
+                    if (!isWorkSymbol(this.grid[s][maxDay.d].symbol) || !isFullOffSymbol(this.grid[s][minDay.d].symbol)) continue;
 
-                    // スケ可スタッフの場合、maxDay を休にしてもスケ可が残るか
+                    // スケジュール担当スタッフの出勤担保
                     if (this.staffList[s].canSched) {
                         let remSched = 0;
                         floorStaff.forEach(oS => {
@@ -1587,79 +1599,81 @@ class ShiftScheduler {
                         if (remSched < 1) continue;
                     }
 
-                    // スワップ試行
-                    this.setSymbol(s, maxDay.d, SYMBOLS.OFF, false);
-                    this.setSymbol(s, minDay.d, SYMBOLS.WORK, false);
+                    const origMaxSym = this.grid[s][maxDay.d].symbol;
+                    const origMinSym = this.grid[s][minDay.d].symbol;
+
+                    this.setSymbol(s, maxDay.d, origMinSym, false);
+                    this.setSymbol(s, minDay.d, origMaxSym, false);
 
                     if (this.isStaffHardValid(s)) {
                         improved = true;
                         break;
                     } else {
-                        this.setSymbol(s, maxDay.d, SYMBOLS.WORK, false);
-                        this.setSymbol(s, minDay.d, SYMBOLS.OFF, false);
+                        this.setSymbol(s, maxDay.d, origMaxSym, false);
+                        this.setSymbol(s, minDay.d, origMinSym, false);
                     }
                 }
                 if (!improved) break;
             }
         });
 
-        // 2. 4フロア合計出勤人数の平準化（各フロア2〜3名出勤を維持したまま、全体出勤を11〜12名に収束）
-        for (let iter = 0; iter < 120; iter++) {
+        // 2. ST全社（4フロア合計）の日別出勤実数平坦化
+        for (let iter = 0; iter < 200; iter++) {
             let improved = false;
             const dailyTotals = [];
             for (let d = 0; d < this.numDays; d++) {
-                let cnt = 0;
+                let realLoad = 0;
                 for (let s = 0; s < this.numStaff; s++) {
-                    if (!this.staffList[s].isUnused && isWorkSymbol(this.grid[s][d].symbol)) cnt++;
+                    if (!this.staffList[s].isUnused) {
+                        realLoad += this.getStaffRealWorkAmt(s, this.grid[s][d].symbol);
+                    }
                 }
-                dailyTotals.push({ d, cnt });
+                dailyTotals.push({ d, realLoad });
             }
-            dailyTotals.sort((a, b) => b.cnt - a.cnt);
+            dailyTotals.sort((a, b) => b.realLoad - a.realLoad);
 
             const highD = dailyTotals[0];
             const lowD = dailyTotals[dailyTotals.length - 1];
-            if (highD.cnt - lowD.cnt <= 1) break;
+            if (highD.realLoad - lowD.realLoad <= 0.51) break; // 全社実数差0.5以下なら完了
 
             for (let s = 0; s < this.numStaff; s++) {
                 if (this.staffList[s].isUnused) continue;
                 if (this.grid[s][highD.d].isFixed || this.grid[s][lowD.d].isFixed) continue;
-                if (this.grid[s][highD.d].symbol !== SYMBOLS.WORK || this.grid[s][lowD.d].symbol !== SYMBOLS.OFF) continue;
+                if (!isWorkSymbol(this.grid[s][highD.d].symbol) || !isFullOffSymbol(this.grid[s][lowD.d].symbol)) continue;
 
                 const fl = this.staffList[s].floor;
 
-                // フロア出勤人数の範囲チェック（2〜3名を維持）
-                let flWorkHigh = 0;
-                let flWorkLow = 0;
+                // フロア出勤実数の下限担保（極端な減員を防止）
+                let floorLoadHigh = 0;
                 for (let oS = 0; oS < this.numStaff; oS++) {
                     if (oS !== s && !this.staffList[oS].isUnused && this.staffList[oS].floor === fl) {
-                        if (isWorkSymbol(this.grid[oS][highD.d].symbol)) flWorkHigh++;
-                    }
-                    if (!this.staffList[oS].isUnused && this.staffList[oS].floor === fl) {
-                        if (isWorkSymbol(this.grid[oS][lowD.d].symbol)) flWorkLow++;
+                        floorLoadHigh += this.getStaffRealWorkAmt(oS, this.grid[oS][highD.d].symbol);
                     }
                 }
-                if (flWorkHigh < 2 || flWorkLow >= 3) continue;
+                if (floorLoadHigh < 1.5) continue;
 
-                // スケ可保護
                 if (this.staffList[s].canSched) {
                     let remSched = 0;
                     for (let oS = 0; oS < this.numStaff; oS++) {
-                        if (oS !== s && !this.staffList[oS].isUnused && this.staffList[oS].floor === fl && this.staffList[oS].canSched) {
-                            if (isWorkSymbol(this.grid[oS][highD.d].symbol)) remSched++;
+                        if (oS !== s && !this.staffList[oS].isUnused && this.staffList[oS].floor === fl && this.staffList[oS].canSched && isWorkSymbol(this.grid[oS][highD.d].symbol)) {
+                            remSched++;
                         }
                     }
                     if (remSched < 1) continue;
                 }
 
-                this.setSymbol(s, highD.d, SYMBOLS.OFF, false);
-                this.setSymbol(s, lowD.d, SYMBOLS.WORK, false);
+                const origHighSym = this.grid[s][highD.d].symbol;
+                const origLowSym = this.grid[s][lowD.d].symbol;
+
+                this.setSymbol(s, highD.d, origLowSym, false);
+                this.setSymbol(s, lowD.d, origHighSym, false);
 
                 if (this.isStaffHardValid(s)) {
                     improved = true;
                     break;
                 } else {
-                    this.setSymbol(s, highD.d, SYMBOLS.WORK, false);
-                    this.setSymbol(s, lowD.d, SYMBOLS.OFF, false);
+                    this.setSymbol(s, highD.d, origHighSym, false);
+                    this.setSymbol(s, lowD.d, origLowSym, false);
                 }
             }
             if (!improved) break;

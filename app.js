@@ -2375,7 +2375,11 @@ document.addEventListener('DOMContentLoaded', () => {
                 // 当ターム 1日〜28日
                 for (let d = 0; d < NUM_DAYS; d++) {
                     const c = rowData[d] || { symbol: '' };
-                    const sym = c.symbol ? c.symbol.replace(/[◦•･◯〇●]/g, '○') : '';
+                    let sym = c.symbol ? c.symbol.replace(/[\u25e6\u2022\uff65\u25ef\u3007\u25cf]/g, '\u25cb') : '';
+                    // STはPOと異なり8時・遅・Eは不要！早番のみ許可、他は通常勤務「○」に完全サニタイズ
+                    if (sym === '8時' || sym === '遅' || sym === 'E' || sym === 'ハヤ' || sym === 'オソ' || sym === 'イブ') {
+                        sym = '○';
+                    }
                     const thickCls = ((d + 1) % 7 === 0) ? 'border-thick-right' : '';
 
                     // ★ 事前固定希望（本人が希望入力した枠）のみ赤字・太字（fixed-cell）！自動生成された公休等は通常文字

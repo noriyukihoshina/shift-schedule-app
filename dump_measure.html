@@ -1,0 +1,49 @@
+﻿<!DOCTYPE html>
+<html><head>
+<meta charset="utf-8">
+<link rel="stylesheet" href="style.css">
+</head>
+<body style="margin:0; padding:20px; font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;">
+<table style="border-collapse:collapse; table-layout:fixed;">
+    <thead>
+        <tr>
+            <th class="header-day-col col-day-fixed" style="width:52px; min-width:52px; max-width:52px; border:1px solid #cbd5e1;">
+                <div class="day-label">12/31</div>
+                <div class="day-weekday"><small>木</small></div>
+                <div class="day-offset-ctrl" style="display:inline-flex; align-items:center; justify-content:center; gap:1px; width:100%;">
+                    <button type="button" class="day-offset-btn offset-minus" style="width:13px; height:16px; font-size:10px; line-height:1; padding:0;">-</button>
+                    <span class="day-offset-val" style="min-width:20px; font-size:0.72rem; font-weight:700; text-align:center;">±0</span>
+                    <button type="button" class="day-offset-btn offset-plus" style="width:13px; height:16px; font-size:10px; line-height:1; padding:0;">+</button>
+                </div>
+            </th>
+            <th class="col-day-fixed" style="width:52px; min-width:52px; max-width:52px; background:#e0f2fe; font-size:0.78rem; padding:4px 2px; color:#1e293b; border:1px solid #bae6fd; text-align:center; white-space:nowrap;">12/31</th>
+        </tr>
+    </thead>
+    <tbody>
+        <tr>
+            <td class="col-day-fixed day-cell" style="width:52px; min-width:52px; max-width:52px; border:1px solid #e2e8f0; text-align:center;">日</td>
+            <td class="col-day-fixed day-cell" style="width:52px; min-width:52px; max-width:52px; border:1px solid #e2e8f0; text-align:center;">早</td>
+        </tr>
+    </tbody>
+</table>
+<div id="res">{"th1_offsetWidth":52,"th1_scrollWidth":51,"th2_offsetWidth":52,"th2_scrollWidth":51,"label_scrollWidth":49,"label_offsetWidth":49,"ctrl_scrollWidth":44,"ctrl_offsetWidth":46}</div>
+<script>
+window.onload = () => {
+    const ths = document.querySelectorAll('th');
+    const label1231 = document.querySelector('.day-label');
+    const ctrl = document.querySelector('.day-offset-ctrl');
+    const result = {
+        th1_offsetWidth: ths[0].offsetWidth,
+        th1_scrollWidth: ths[0].scrollWidth,
+        th2_offsetWidth: ths[1].offsetWidth,
+        th2_scrollWidth: ths[1].scrollWidth,
+        label_scrollWidth: label1231.scrollWidth,
+        label_offsetWidth: label1231.offsetWidth,
+        ctrl_scrollWidth: ctrl.scrollWidth,
+        ctrl_offsetWidth: ctrl.offsetWidth
+    };
+    document.getElementById('res').innerText = JSON.stringify(result);
+};
+</script>
+
+</body></html>
