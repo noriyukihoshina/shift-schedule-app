@@ -5785,7 +5785,8 @@ function validateScheduleGrid(grid, staffList, options = {}) {
                 }
             } else {
                 // 1階〜3階: PT+OT+ST合算で早3, 遅1, E2, 8時1
-                let stEarlyCount = 0, stLateCount = 0, stEveCount = 0, stH8Count = 0;
+                // ★ STはPOと異なり「8時」「遅」「E」は不要（絶対に合算しない。早番「早」のみ合算）
+                let stEarlyCount = 0;
                 const effectiveStData = options.stStaffData || options.linkedStStaffData;
                 if (effectiveStData && effectiveStData.staffList) {
                     effectiveStData.staffList.forEach((st, stIdx) => {
@@ -5793,17 +5794,14 @@ function validateScheduleGrid(grid, staffList, options = {}) {
                             const stRow = (effectiveStData.grid && effectiveStData.grid[stIdx]) ? effectiveStData.grid[stIdx] : (st.days || []);
                             const c = stRow[d] || { symbol: '' };
                             const sSym = (c && typeof c === 'object') ? c.symbol : (c || '');
-                            if (sSym === SYMBOLS.EARLY) stEarlyCount++;
-                            if (sSym === SYMBOLS.LATE) stLateCount++;
-                            if (sSym === SYMBOLS.EVE) stEveCount++;
-                            if (sSym === SYMBOLS.H8) stH8Count++;
+                            if (sSym === SYMBOLS.EARLY || sSym === '早') stEarlyCount++;
                         }
                     });
                 }
                 const totalEarly = earlyCount + stEarlyCount;
-                const totalLate = lateCount + stLateCount;
-                const totalEve = eveCount + stEveCount;
-                const totalH8 = h8Count + stH8Count;
+                const totalLate = lateCount; // STは遅番なし（POから1名）
+                const totalEve = eveCount;   // STはEなし（POから2名）
+                const totalH8 = h8Count;     // STは8時なし（POから1名）
 
                 if (isFinal) {
                     // 最終チェック＆完成: 完全充足を厳格チェック（ハヤ・オソ・イブはカウントしない）

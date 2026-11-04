@@ -684,15 +684,17 @@ document.addEventListener('DOMContentLoaded', () => {
                                     try {
                                         const localData = JSON.parse(localRaw);
                                         // ローカルに既に勤務表（outputGrid）があり、クラウド側がnull/空の場合は絶対に上書きしない！
-                                        const localHasOutput = !!(localData && localData.outputGrid && Array.isArray(localData.outputGrid) && localData.outputGrid.length > 0);
-                                        const cloudHasOutput = !!(subCloud.terms[tDate] && subCloud.terms[tDate].outputGrid && Array.isArray(subCloud.terms[tDate].outputGrid) && subCloud.terms[tDate].outputGrid.length > 0);
-                                        if (localHasOutput && !cloudHasOutput) {
-                                            return; // 上書きを物理遮断
+                                        // 実勤務記号の有無を厳密判定
+                                        const checkHasRealWork = (g) => Array.isArray(g) && g.some(row => Array.isArray(row) && row.some(cell => { const s = (cell && cell.symbol) ? cell.symbol : (cell || ''); return s && s.trim() !== ''; }));
+                                        const localHasRealWork = checkHasRealWork(localData.outputGrid);
+                                        const cloudHasRealWork = checkHasRealWork(subCloud.terms[tDate].outputGrid);
+                                        if (localHasRealWork && !cloudHasRealWork) {
+                                            return; // クラウド側が空ならローカルの完成勤務表を絶対保護
                                         }
                                         const localTime = new Date(localData.updatedAt || 0).getTime();
                                         const cloudTime = new Date(subCloud.terms[tDate].updatedAt || 0).getTime();
-                                        if (localTime > cloudTime) {
-                                            return; // ローカルが新しいので上書き遮断
+                                        if (localTime > cloudTime && localHasRealWork) {
+                                            return; // ローカルが新しく完成しているため上書き遮断
                                         }
                                     } catch (e) {}
                                 }
@@ -715,7 +717,7 @@ document.addEventListener('DOMContentLoaded', () => {
                             Object.keys(stCloud.terms).forEach(tDate => {
                                 const cloudTerm = stCloud.terms[tDate];
                                 if (!cloudTerm) return;
-                                const localStKey = shift_schedule_st_term_;
+                                const localStKey = `shift_schedule_st_term_${tDate}`;
                                 const localRaw = window.localStorage.getItem(localStKey);
                                 if (localRaw) {
                                     try {
@@ -756,10 +758,11 @@ document.addEventListener('DOMContentLoaded', () => {
                         }
                     }
                 } catch (e) {}
+            }
 
             if (!isMaster && !isST && !isLife) {
                 try {
-                    const rMaster = await fetch(/api/cloud_sync?deptId=master&t=, { cache: 'no-store' });
+                    const rMaster = await fetch(`/api/cloud_sync?deptId=master&t=${Date.now()}`, { cache: 'no-store' });
                     if (rMaster.ok) {
                         const jMaster = await rMaster.json();
                         const mCloud = jMaster && (jMaster.cloudState || jMaster.data);
@@ -1000,6 +1003,22 @@ document.addEventListener('DOMContentLoaded', () => {
             return [];
         }
     }
+    function updateSavedTermsList(startDate) {
+        try {
+            if (startDate && !startDate.startsWith('2025-')) {
+                let terms = getSavedTerms();
+                if (!terms.includes(startDate)) {
+                    terms.push(startDate);
+                    terms.sort();
+                    localStorage.setItem(STORAGE_KEY_SAVED_TERMS, JSON.stringify(terms));
+                }
+            }
+            renderSavedTermsSelect();
+        } catch (e) {
+            console.error(e);
+        }
+    }
+
     function renderSavedTermsSelect() {
         const select = document.getElementById('savedTermsSelect');
         if (!select) return;
@@ -1073,6 +1092,11 @@ document.addEventListener('DOMContentLoaded', () => {
                     isChief: !!(s.chief || s.isChief),
                     isSubChief: !!s.isSubChief,
                     isHalf: !!s.isHalf,
+                    isZeroCount: !!s.isZeroCount,
+                    isFirstYear: !!s.isFirstYear,
+                    lifeSection: s.lifeSection || '',
+                    haSection: s.haSection || '',
+                    jobTitle: s.jobTitle || '',
                     isFullTime: !!s.isFullTime,
                     prevName: s.prevName || '',
                     remarks: s.remarks || '',
@@ -1155,9 +1179,13 @@ document.addEventListener('DOMContentLoaded', () => {
             data.staffList.forEach((s, idx) => {
                 if (staffList[idx]) {
                     staffList[idx].name = cleanTextValue(s.name) || staffList[idx].name;
-                    staffList[idx].isUnused = s.isUnused !== undefined ? !!s.isUnused : (idx >= 48);
-                    staffList[idx].floor = s.floor || staffList[idx].floor || '';
+                    const defaultUnused = isST ? (idx >= 16) : (isLife ? false : (idx >= 48));
+                    staffList[idx].isUnused = s.isUnused !== undefined ? !!s.isUnused : defaultUnused;
+                    staffList[idx].floor = s.floor !== undefined ? s.floor : staffList[idx].floor;
                     staffList[idx].section = s.section || '';
+                    staffList[idx].lifeSection = s.lifeSection || '';
+                    staffList[idx].haSection = s.haSection || '';
+                    staffList[idx].jobTitle = s.jobTitle || '';
                     staffList[idx].can8 = s.can8 !== undefined ? !!s.can8 : staffList[idx].can8;
                     staffList[idx].noEarly = !!s.noEarly;
                     staffList[idx].noLate = !!s.noLate;
@@ -1167,6 +1195,8 @@ document.addEventListener('DOMContentLoaded', () => {
                     staffList[idx].isChief = !!(s.isChief || s.chief);
                     staffList[idx].isSubChief = !!s.isSubChief;
                     staffList[idx].isHalf = !!s.isHalf;
+                    staffList[idx].isZeroCount = !!s.isZeroCount;
+                    staffList[idx].isFirstYear = !!s.isFirstYear;
                     staffList[idx].isFullTime = s.isFullTime !== undefined ? !!s.isFullTime : staffList[idx].isFullTime;
                     staffList[idx].prevName = cleanTextValue(s.prevName || '');
                     staffList[idx].remarks = cleanTextValue(s.remarks || '');
@@ -4720,39 +4750,8 @@ document.addEventListener('DOMContentLoaded', () => {
                 });
             });
 
-            // ★ 万が一どのフロアにも属していないスタッフがいた場合のフォールバック表示（行消滅を物理防止）
-            const unassignedStaffIndices = validStaffIndices.filter(s => !matchedStaffSet.has(s));
-            if (unassignedStaffIndices.length > 0) {
-                unassignedStaffIndices.forEach((s, idxInFl) => {
-                    const staff = staffList[s];
-                    const staffStat = (stats && stats.staffStats && stats.staffStats[s]) || { workDays:0, offDays:0, paidDays:0, refDays:0, early:0, late:0, eve:0, h8:0 };
-                    bodyHtml += `<tr>`;
-                    if (idxInFl === 0) {
-                        bodyHtml += `<td class="sticky-col-1 border-thick-right" rowspan="${unassignedStaffIndices.length}" style="background:#fef2f2; color:#b91c1c; font-weight:800; font-size:0.95rem; text-align:center; vertical-align:middle;">未設定</td>`;
-                    }
-                    bodyHtml += `<td class="sticky-col-2 border-thick-right" style="text-align:left; padding-left:8px; font-weight:700;">${escapeHtmlText(staff.name)}</td>`;
-                    for (let d = 0; d < NUM_DAYS; d++) {
-                        const cell = (grid && grid[s] && grid[s][d]) ? grid[s][d] : { symbol: '' };
-                        const displaySym = cell.symbol ? cell.symbol.replace(/[◦•･◯〇●]/g, '○') : '';
-                        const originalWish = (staffList[s] && staffList[s].days && staffList[s].days[d]) ? staffList[s].days[d] : '';
-                        const isCellFixed = !!((cell.isFixed && originalWish !== '' && !isWorkSymbol(originalWish)) || (originalWish !== '' && !isWorkSymbol(originalWish) && originalWish === displaySym));
-                        const cls = isCellFixed ? 'day-cell fixed-cell' : 'day-cell auto-cell';
-                        const thickCls = ((d + 1) % 7 === 0) ? 'border-thick-right' : '';
-                        bodyHtml += `<td class="${cls} ${thickCls}" data-s="${s}" data-d="${d}">${displaySym}</td>`;
-                    }
-                    bodyHtml += `
-                        <td class="stat-cell" data-s="${s}" data-stat="work">${staffStat.workDays}</td>
-                        <td class="stat-cell" data-s="${s}" data-stat="off">${staffStat.offDays}</td>
-                        <td class="stat-cell" data-s="${s}" data-stat="paid">${staffStat.paidDays}</td>
-                        <td class="stat-cell" data-s="${s}" data-stat="ref">${staffStat.refDays}</td>
-                        <td class="stat-cell" data-s="${s}" data-stat="early">${staffStat.early}</td>
-                        <td class="stat-cell" data-s="${s}" data-stat="late">-</td>
-                        <td class="stat-cell" data-s="${s}" data-stat="eve">-</td>
-                        <td class="stat-cell" data-s="${s}" data-stat="h8">-</td>
-                        <td class="remarks-cell" style="min-width:220px; max-width:320px; text-align:left; font-size:0.8rem; color:#475569; padding:2px 8px;">${escapeHtmlText(staff.remarks || '')}</td>
-                    </tr>`;
-                });
-            }
+            // ★ ST専用テーブルでは未設定予備枠（17〜36番目等）は出力テーブルから完全に除外（表示不要）
+            // （※フロアが1F/2F/3F/南のいずれかに正しく設定されたスタッフのみを各階グループに表示）
         } else {
             validStaffIndices.forEach((s, outIdx) => {
                 const staff = staffList[s];
