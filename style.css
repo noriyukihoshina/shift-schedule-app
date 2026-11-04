@@ -995,62 +995,113 @@ input:checked + .toggle-slider:before {
     align-items: center;
     flex-wrap: wrap;
 }
+
+.dept-nav-container {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex-wrap: wrap;
+    background: #ffffff;
+    padding: 6px 12px;
+    border-radius: 8px;
+    border: 1px solid #e2e8f0;
+    box-shadow: 0 1px 2px rgba(0,0,0,0.05);
+}
 .dept-nav-btn {
     display: inline-flex;
     align-items: center;
     gap: 4px;
-    padding: 4px 12px;
+    padding: 5px 12px;
     border-radius: 6px;
-    font-size: 0.82rem;
+    font-size: 0.84rem;
     font-weight: 700;
     text-decoration: none;
-    color: #475569;
-    background: #ffffff;
-    border: 1px solid #cbd5e1;
-    transition: all 0.2s ease;
+    transition: all 0.15s ease;
 }
-.dept-nav-btn:hover {
-    background: #f1f5f9;
-    border-color: #94a3b8;
-    color: #0f172a;
+.dept-nav-btn-master {
+    background: #fefce8;
+    border: 1px solid #ca8a04;
+    color: #854d0e !important;
 }
-.dept-nav-btn.active {
-    background: #0284c7;
-    border-color: #0284c7;
-    color: #ffffff !important;
-    box-shadow: 0 1px 3px rgba(2, 132, 199, 0.3);
-}
-.dept-nav-btn.dept-nav-st {
-    background: #fdf2f8;
-    border-color: #fbcfe8;
-    color: #be185d;
-}
-.dept-nav-btn.dept-nav-st:hover {
-    background: #fce7f3;
-    border-color: #f472b6;
-    color: #9d174d;
-}
-.dept-nav-btn.dept-nav-st.active {
-    background: #db2777;
-    border-color: #db2777;
+.dept-nav-btn-master:hover { background: #fef08a; }
+.dept-nav-btn-master.active {
+    background: #ca8a04 !important;
+    border-color: #a16207 !important;
     color: #ffffff !important;
 }
 
-.dept-nav-btn.dept-nav-life {
-    background: #f0fdfa;
-    border-color: #99f6e4;
-    color: #0f766e;
+.dept-nav-btn-1f {
+    background: #f0f9ff;
+    border: 1px solid #0284c7;
+    color: #0369a1 !important;
 }
-.dept-nav-btn.dept-nav-life:hover {
-    background: #ccfbf1;
-    border-color: #5eead4;
-    color: #115e59;
-}
-.dept-nav-btn.dept-nav-life.active {
-    background: #0d9488;
-    border-color: #0d9488;
+.dept-nav-btn-1f:hover { background: #e0f2fe; }
+.dept-nav-btn-1f.active {
+    background: #0284c7 !important;
+    border-color: #0369a1 !important;
     color: #ffffff !important;
 }
+
+.dept-nav-btn-2f {
+    background: #fff7ed;
+    border: 1px solid #ea580c;
+    color: #c2410c !important;
+}
+.dept-nav-btn-2f:hover { background: #ffedd5; }
+.dept-nav-btn-2f.active {
+    background: #ea580c !important;
+    border-color: #c2410c !important;
+    color: #ffffff !important;
+}
+
+.dept-nav-btn-3f {
+    background: #f0fdf4;
+    border: 1px solid #16a34a;
+    color: #15803d !important;
+}
+.dept-nav-btn-3f:hover { background: #dcfce7; }
+.dept-nav-btn-3f.active {
+    background: #16a34a !important;
+    border-color: #15803d !important;
+    color: #ffffff !important;
+}
+
+.dept-nav-btn-south {
+    background: #faf5ff;
+    border: 1px solid #9333ea;
+    color: #7e22ce !important;
+}
+.dept-nav-btn-south:hover { background: #f3e8ff; }
+.dept-nav-btn-south.active {
+    background: #9333ea !important;
+    border-color: #7e22ce !important;
+    color: #ffffff !important;
+}
+
+.dept-nav-btn-st {
+    background: #fdf2f8;
+    border: 1px solid #db2777;
+    color: #be185d !important;
+}
+.dept-nav-btn-st:hover { background: #fce7f3; }
+.dept-nav-btn-st.active {
+    background: #db2777 !important;
+    border-color: #be185d !important;
+    color: #ffffff !important;
+}
+
+.dept-nav-btn-life {
+    background: #f0fdfa;
+    border: 1px solid #0d9488;
+    color: #0f766e !important;
+}
+.dept-nav-btn-life:hover { background: #ccfbf1; }
+.dept-nav-btn-life.active {
+    background: #0d9488 !important;
+    border-color: #0f766e !important;
+    color: #ffffff !important;
+}
+
 
 /* ========================================================
    ★ テーブル背景テーマカラー（薄く淡い色指定）

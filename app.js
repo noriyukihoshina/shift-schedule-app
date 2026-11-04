@@ -14,7 +14,7 @@ document.addEventListener('DOMContentLoaded', () => {
     // ★ 正規13ターム定義 ＆ セレクター制御
     // ==========================================
     function generateAllTerms() {
-        const years = [2025, 2026, 2027];
+        const years = [2026, 2027];
         const allTerms = [];
 
         years.forEach(year => {
@@ -261,7 +261,7 @@ document.addEventListener('DOMContentLoaded', () => {
     function loadStaffMaster() {
         try {
             let raw = window.localStorage.getItem(STORAGE_KEY_STAFF_MASTER);
-            if (!raw && !isST) {
+            if (!raw && !isST && !isLife) {
                 // 旧キーからのフォールバック救済（※ STは他病棟キーと混同しないようフォールバック禁止）
                 raw = window.localStorage.getItem('shift_schedule_staff_master');
             }
@@ -351,7 +351,8 @@ document.addEventListener('DOMContentLoaded', () => {
     const isLife = !!appConfig.isLife || (appConfig.deptId === 'life' || appConfig.deptId === 'life_admin');
     const isSouth = (appConfig.floor === '南' || appConfig.deptId === 'south');
     const currentFloor = appConfig.floor || (appConfig.deptId === '1f' ? '1F' : (appConfig.deptId === '2f' ? '2F' : (appConfig.deptId === '3f' ? '3F' : (appConfig.deptId === 'south' ? '南' : (isLife ? '生活期' : '')))));
-    const deptPrefix = appConfig.deptId ? `${appConfig.deptId}_` : '';
+    const effectiveDeptId = (appConfig.deptId === 'life_admin') ? 'life' : (appConfig.deptId || 'master');
+    const deptPrefix = effectiveDeptId ? `${effectiveDeptId}_` : '';
     // ★ スタッフ数上限: STは36名、生活期は45名（46人目以降不要）、通常病棟POは60名
     const NUM_STAFF = isST ? 36 : (isLife ? 45 : 60);
     let NUM_DAYS = 28;
@@ -558,7 +559,7 @@ document.addEventListener('DOMContentLoaded', () => {
         }
         isCloudSyncInFlight = true;
         try {
-            const deptId = (appConfig && appConfig.deptId) ? appConfig.deptId : 'master';
+            const deptId = (appConfig && appConfig.deptId === 'life_admin') ? 'life' : ((appConfig && appConfig.deptId) ? appConfig.deptId : 'master');
             const masterRaw = localStorage.getItem(STORAGE_KEY_STAFF_MASTER);
             const staffMaster = masterRaw ? JSON.parse(masterRaw) : null;
             const curDate = document.getElementById('termStartDate')?.value || currentWorkingStartDate || '2026-04-01';
@@ -629,12 +630,12 @@ document.addEventListener('DOMContentLoaded', () => {
             return false;
         }
         try {
-            const deptId = (appConfig && appConfig.deptId) ? appConfig.deptId : 'master';
+            const deptId = (appConfig && appConfig.deptId === 'life_admin') ? 'life' : ((appConfig && appConfig.deptId) ? appConfig.deptId : 'master');
             setCloudStatusBadge('syncing', '☁️ クラウド同期中...');
 
             // ★ マスターテーブルの場合: 全病棟(1f, 2f, 3f, south, st)の最新クラウドデータも一括取得してLocalStorageを最新化！
             if (isMaster) {
-                const subDepts = ['1f', '2f', '3f', 'south', 'st'];
+                const subDepts = ['1f', '2f', '3f', 'south', 'st', 'life'];
                 await Promise.allSettled(subDepts.map(async subId => {
                     try {
                         const r = await fetch(`/api/cloud_sync?deptId=${encodeURIComponent(subId)}&t=${Date.now()}`, { cache: 'no-store' });
@@ -652,7 +653,7 @@ document.addEventListener('DOMContentLoaded', () => {
                         // オフラインまたは通信失敗時はローカルキャッシュをそのまま維持
                     }
                 }));
-            } else if (!isST && currentFloor) {
+            } else if (!isST && !isLife && currentFloor && currentFloor !== '生活') {
                 // ★ 各病棟テーブル（1F, 2F, 3F, 南）の場合:
                 // 1) ST専用テーブルの最新クラウドデータを自動取得してLocalStorageを同期！
                 try {
@@ -5162,10 +5163,37 @@ document.addEventListener('DOMContentLoaded', () => {
         const numDays = term.dates.length;
         const curStartDate = document.getElementById('termStartDate')?.value || currentWorkingStartDate || '2026-04-01';
 
+
         const checkTitle = document.getElementById('checkTitleDisplay');
         if (checkTitle) {
-            checkTitle.textContent = `🏢 全フロア統合（各階サマリー＆勤務詳細集約）`;
+            checkTitle.innerHTML = `🏢 全フロア統合（各階サマリー＆勤務詳細集約） <span style="font-size:0.85rem; font-weight:normal; margin-left:1.5rem; background:#ffffff; padding:4px 10px; border-radius:6px; border:1px solid #bae6fd; display:inline-flex; align-items:center; gap:6px;">📅 表示ターム: <select id="masterTermSelect" style="padding:2px 6px; font-weight:700; color:#0369a1; border:1px solid #0284c7; border-radius:4px; background:#f0f9ff; cursor:pointer;"></select></span>`;
+            const mSelect = document.getElementById('masterTermSelect');
+            if (mSelect) {
+                mSelect.innerHTML = '';
+                GLOBAL_TERMS.forEach(t => {
+                    const opt = document.createElement('option');
+                    opt.value = t.startDate;
+                    opt.textContent = t.label;
+                    if (t.startDate === curStartDate) opt.selected = true;
+                    mSelect.appendChild(opt);
+                });
+                mSelect.onchange = () => {
+                    const chosen = mSelect.value;
+                    const mainSelect = document.getElementById('termSelect');
+                    if (mainSelect) {
+                        mainSelect.value = chosen;
+                        mainSelect.dispatchEvent(new Event('change'));
+                    } else {
+                        currentWorkingStartDate = chosen;
+                        const dateInput = document.getElementById('termStartDate');
+                        if (dateInput) dateInput.value = chosen;
+                        localStorage.setItem(STORAGE_KEY_LAST_ACTIVE, chosen);
+                        renderMasterIntegrationView();
+                    }
+                };
+            }
         }
+
 
         const floorConfigs = [
             { id: '1f', floorKey: '1F', label: '1階', bg: '#f0f8ff', headerBg: '#e0f2fe', border: '#bae6fd', badgeColor: '#0369a1' },
