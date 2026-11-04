@@ -4143,10 +4143,28 @@ document.addEventListener('DOMContentLoaded', () => {
                             const termObj = cloudState.terms[targetDate];
                             window._cloudMem.set(stKey, JSON.stringify(termObj));
                             loadLinkedSTData(targetDate);
-                            // 画面更新
+                            // 画面更新: STデータ到着時にテーブルを即時再描画（空欄表示を物理防止）
                             if (lastSolveResult && lastSolveResult.grid) {
                                 renderOutputTable(lastSolveResult.grid, lastSolveResult.stats);
                                 renderStatsDashboard(lastSolveResult.stats);
+                            } else if (lastScheduler && lastScheduler.grid) {
+                                const currentStats = lastScheduler.calculateStats(lastScheduler.grid);
+                                renderOutputTable(lastScheduler.grid, currentStats);
+                                renderStatsDashboard(currentStats);
+                            } else {
+                                // テーブル再描画
+                                const outTbl = document.getElementById('outputTable');
+                                if (outTbl && typeof renderOutputTable === 'function') {
+                                    try {
+                                        const savedRaw = localStorage.getItem(`${STORAGE_KEY_PREFIX}${targetDate}`);
+                                        if (savedRaw) {
+                                            const savedData = JSON.parse(savedRaw);
+                                            if (savedData && savedData.outputGrid) {
+                                                renderOutputTable(savedData.outputGrid, null);
+                                            }
+                                        }
+                                    } catch (e) {}
+                                }
                             }
                         }
                     })
@@ -4630,9 +4648,11 @@ document.addEventListener('DOMContentLoaded', () => {
                     for (let d = 0; d < NUM_DAYS; d++) {
                         const cell = (grid && grid[s] && grid[s][d]) ? grid[s][d] : { symbol: '' };
                         const displaySym = cell.symbol ? cell.symbol.replace(/[◦•･◯〇●]/g, '○') : '';
-                        const cls = cell.isFixed ? 'day-cell fixed-cell' : 'day-cell auto-cell';
+                        const originalWish = (staffList[s] && staffList[s].days && staffList[s].days[d]) ? staffList[s].days[d] : '';
+                        const isCellFixed = !!((cell.isFixed && originalWish !== '' && !isWorkSymbol(originalWish)) || (originalWish !== '' && !isWorkSymbol(originalWish) && originalWish === displaySym));
+                        const cls = isCellFixed ? 'day-cell fixed-cell' : 'day-cell auto-cell';
                         const thickCls = ((d + 1) % 7 === 0) ? 'border-thick-right' : '';
-                        const titleText = cell.isFixed ? '🔒 事前固定希望枠（赤字・太字保持）' : 'システム自動配置';
+                        const titleText = isCellFixed ? '🔒 事前固定希望枠（赤字・太字保持）' : 'システム自動配置';
                         bodyHtml += `<td class="${cls} ${thickCls}" data-s="${s}" data-d="${d}" title="${titleText}" style="${rowBorderB}">${displaySym}</td>`;
                     }
 
@@ -4664,7 +4684,9 @@ document.addEventListener('DOMContentLoaded', () => {
                     for (let d = 0; d < NUM_DAYS; d++) {
                         const cell = (grid && grid[s] && grid[s][d]) ? grid[s][d] : { symbol: '' };
                         const displaySym = cell.symbol ? cell.symbol.replace(/[◦•･◯〇●]/g, '○') : '';
-                        const cls = cell.isFixed ? 'day-cell fixed-cell' : 'day-cell auto-cell';
+                        const originalWish = (staffList[s] && staffList[s].days && staffList[s].days[d]) ? staffList[s].days[d] : '';
+                        const isCellFixed = !!((cell.isFixed && originalWish !== '' && !isWorkSymbol(originalWish)) || (originalWish !== '' && !isWorkSymbol(originalWish) && originalWish === displaySym));
+                        const cls = isCellFixed ? 'day-cell fixed-cell' : 'day-cell auto-cell';
                         const thickCls = ((d + 1) % 7 === 0) ? 'border-thick-right' : '';
                         bodyHtml += `<td class="${cls} ${thickCls}" data-s="${s}" data-d="${d}">${displaySym}</td>`;
                     }
@@ -4695,9 +4717,11 @@ document.addEventListener('DOMContentLoaded', () => {
                 for (let d = 0; d < NUM_DAYS; d++) {
                     const cell = grid[s][d];
                     const displaySym = cell.symbol ? cell.symbol.replace(/[◦•･◯〇●]/g, '○') : '';
-                    const cls = cell.isFixed ? 'day-cell fixed-cell' : 'day-cell auto-cell';
+                    const originalWish = (staffList[s] && staffList[s].days && staffList[s].days[d]) ? staffList[s].days[d] : '';
+                    const isCellFixed = !!((cell.isFixed && originalWish !== '' && !isWorkSymbol(originalWish)) || (originalWish !== '' && !isWorkSymbol(originalWish) && originalWish === displaySym));
+                    const cls = isCellFixed ? 'day-cell fixed-cell' : 'day-cell auto-cell';
                     const thickCls = ((d + 1) % 7 === 0) ? 'border-thick-right' : '';
-                    const titleText = cell.isFixed ? '🔒 事前固定希望枠（赤字・太字保持）' : 'システム自動配置';
+                    const titleText = isCellFixed ? '🔒 事前固定希望枠（赤字・太字保持）' : 'システム自動配置';
                     bodyHtml += `<td class="${cls} ${thickCls} ${rowBottomCls}" data-s="${s}" data-d="${d}" title="${titleText}">${displaySym}</td>`;
                 }
 

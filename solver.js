@@ -780,8 +780,9 @@ class ShiftScheduler {
         for (let s = 0; s < this.numStaff; s++) {
             const row = [];
             const staff = this.staffList[s];
+            const isStUnassigned = this.isST && (staff.isUnused || !['1F', '2F', '3F', '南'].includes((staff.floor || '').trim()));
             for (let d = 0; d < this.numDays; d++) {
-                if (staff.isUnused) {
+                if (staff.isUnused || isStUnassigned) {
                     row.push({
                         symbol: '',
                         isFixed: false,
@@ -791,9 +792,12 @@ class ShiftScheduler {
                 }
                 const initSym = staff.days[d] || '';
                 const isExcluded = isExcludeSymbol(initSym);
+                const isWork = isWorkSymbol(initSym);
+                // ★ 通常勤務（○等）は事前固定希望枠ではなく、公休配置・早番配置の対象（isFixed: false）
+                const isFixed = (initSym !== '' && !isWork);
                 row.push({
-                    symbol: isExcluded ? SYMBOLS.EXCLUDE : initSym,
-                    isFixed: initSym !== '', // 手動入力された希望勤務および「ー」は完全ロック
+                    symbol: isExcluded ? SYMBOLS.EXCLUDE : (isWork ? '' : initSym),
+                    isFixed: isFixed,
                     isExcluded: isExcluded
                 });
             }
@@ -1265,6 +1269,13 @@ class ShiftScheduler {
                     for (let d = 0; d < this.numDays; d++) {
                         if (this.grid[s][d].isFixed || this.grid[s][d].symbol !== '') continue;
 
+                        // フロア内で既に2名以上が公休なら3人目は休めない（フロア最低出勤2名以上維持）
+                        let flOffCount = 0;
+                        floorStaff.forEach(oS => {
+                            if (oS !== s && isFullOffSymbol(this.grid[oS][d].symbol)) flOffCount++;
+                        });
+                        if (flOffCount >= 2) continue;
+
                         // 3連休以上にならないようにチェック
                         let consecutiveOff = 0;
                         for (let checkD = Math.max(0, d - 2); checkD <= Math.min(this.numDays - 1, d + 2); checkD++) {
@@ -1272,23 +1283,25 @@ class ShiftScheduler {
                         }
                         if (consecutiveOff >= 3) continue;
 
-                        // その日のフロア出勤実数
+                        // その日のフロア出勤実数（未定枠は通常勤務WORKとして計算し公休集中を防止）
                         let flRealLoad = 0;
                         floorStaff.forEach(oS => {
-                            const oSym = (oS === s) ? SYMBOLS.WORK : this.grid[oS][d].symbol;
-                            flRealLoad += this.getStaffRealWorkAmt(oS, oSym);
+                            const sym = this.grid[oS][d].symbol;
+                            const effectiveSym = (oS === s) ? SYMBOLS.WORK : (sym === '' ? SYMBOLS.WORK : sym);
+                            flRealLoad += this.getStaffRealWorkAmt(oS, effectiveSym);
                         });
 
-                        // その日のST全体出勤実数
+                        // その日のST全体出勤実数（未定枠は通常勤務WORKとして計算）
                         let totalRealLoad = 0;
                         for (let oS = 0; oS < this.numStaff; oS++) {
                             if (this.staffList[oS].isUnused) continue;
-                            const oSym = (oS === s) ? SYMBOLS.WORK : this.grid[oS][d].symbol;
-                            totalRealLoad += this.getStaffRealWorkAmt(oS, oSym);
+                            const sym = this.grid[oS][d].symbol;
+                            const effectiveSym = (oS === s) ? SYMBOLS.WORK : (sym === '' ? SYMBOLS.WORK : sym);
+                            totalRealLoad += this.getStaffRealWorkAmt(oS, effectiveSym);
                         }
 
-                        // 出勤実数が厚い日ほど高いスコア（土日・平日の区別なく完全均等化）
-                        const score = flRealLoad * 10 + totalRealLoad;
+                        // 出勤実数が厚い日ほど高いスコア。フロア公休が0人の日を最優先（flOffCount === 0）
+                        const score = (flOffCount === 0 ? 100 : 0) + flRealLoad * 10 + totalRealLoad;
                         if (score > bestScore) {
                             bestScore = score;
                             bestDay = d;
@@ -1516,9 +1529,22 @@ class ShiftScheduler {
                 for (let k = 0; k < need && k < offFt.length; k++) {
                     const s = offFt[k];
                     let swapped = false;
+                    const fl = this.staffList[s].floor;
                     for (let otherD = 0; otherD < this.numDays; otherD++) {
                         if (otherD === d) continue;
                         if (!isWorkSymbol(this.grid[s][otherD].symbol) || this.grid[s][otherD].isFixed) continue;
+
+                        // フロア出勤人数の安全保護: otherDで2名未満、またはdで4名以上になるスワップは絶対禁止！
+                        let flWorkOtherD = 0;
+                        let flWorkD = 0;
+                        for (let oS = 0; oS < this.numStaff; oS++) {
+                            if (!this.staffList[oS].isUnused && this.staffList[oS].floor === fl) {
+                                if (isWorkSymbol(this.grid[oS][otherD].symbol)) flWorkOtherD++;
+                                if (isWorkSymbol(this.grid[oS][d].symbol)) flWorkD++;
+                            }
+                        }
+                        if (flWorkOtherD <= 2 || flWorkD >= 3) continue;
+
                         const otherFtWorkCount = fullTimeStaff.filter(otherS => isWorkSymbol(this.grid[otherS][otherD].symbol)).length;
                         if (otherFtWorkCount > TARGET_DAILY_FULLTIME) {
                             const symWork = this.grid[s][otherD].symbol === '早' ? '早' : '○';
@@ -1528,26 +1554,28 @@ class ShiftScheduler {
                             break;
                         }
                     }
-                    if (!swapped) {
-                        for (let otherD = 0; otherD < this.numDays; otherD++) {
-                            if (otherD === d) continue;
-                            if (!isWorkSymbol(this.grid[s][otherD].symbol) || this.grid[s][otherD].isFixed) continue;
-                            const symWork = this.grid[s][otherD].symbol === '早' ? '早' : '○';
-                            this.grid[s][d] = { symbol: symWork, isFixed: false };
-                            this.grid[s][otherD] = { symbol: '休', isFixed: false };
-                            break;
-                        }
-                    }
                 }
             } else if (workingFt.length > TARGET_DAILY_FULLTIME) {
                 const excess = workingFt.length - TARGET_DAILY_FULLTIME;
                 for (let k = 0; k < excess && k < workingFt.length; k++) {
                     const s = workingFt[k];
                     if (this.grid[s][d].isFixed) continue;
+                    const fl = this.staffList[s].floor;
 
                     for (let otherD = 0; otherD < this.numDays; otherD++) {
                         if (otherD === d) continue;
                         if (!isFullOffSymbol(this.grid[s][otherD].symbol) || this.grid[s][otherD].isFixed) continue;
+
+                        // フロア出勤人数の安全保護: dで2名未満、またはotherDで4名以上になるスワップは絶対禁止！
+                        let flWorkD = 0;
+                        let flWorkOtherD = 0;
+                        for (let oS = 0; oS < this.numStaff; oS++) {
+                            if (!this.staffList[oS].isUnused && this.staffList[oS].floor === fl) {
+                                if (isWorkSymbol(this.grid[oS][d].symbol)) flWorkD++;
+                                if (isWorkSymbol(this.grid[oS][otherD].symbol)) flWorkOtherD++;
+                            }
+                        }
+                        if (flWorkD <= 2 || flWorkOtherD >= 3) continue;
 
                         const otherFtWorkCount = fullTimeStaff.filter(otherS => isWorkSymbol(this.grid[otherS][otherD].symbol)).length;
                         if (otherFtWorkCount < TARGET_DAILY_FULLTIME) {
@@ -1908,7 +1936,7 @@ class ShiftScheduler {
      */
     solveBaseSchedule(options = {}) {
         if (this.isST) {
-            return this.solveST(Object.assign({}, options, { assignSpecial: false }));
+            return this.solveST(Object.assign({}, options, { assignSpecial: true }));
         }
         if (this.isLife) {
             return this.solveLife(options);
