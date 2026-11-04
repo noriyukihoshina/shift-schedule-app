@@ -713,9 +713,26 @@ document.addEventListener('DOMContentLoaded', () => {
                         const stCloud = j && (j.cloudState || j.data);
                         if (stCloud && stCloud.terms && typeof stCloud.terms === 'object') {
                             Object.keys(stCloud.terms).forEach(tDate => {
-                                if (stCloud.terms[tDate]) {
-                                    window.localStorage.setItem(`shift_schedule_st_term_${tDate}`, JSON.stringify(stCloud.terms[tDate]));
+                                const cloudTerm = stCloud.terms[tDate];
+                                if (!cloudTerm) return;
+                                const localStKey = shift_schedule_st_term_;
+                                const localRaw = window.localStorage.getItem(localStKey);
+                                if (localRaw) {
+                                    try {
+                                        const localData = JSON.parse(localRaw);
+                                        const localHasOutput = !!(localData && localData.outputGrid && Array.isArray(localData.outputGrid) && localData.outputGrid.length > 0 && localData.outputGrid.some(r => r && r.some(c => (c.symbol || c) !== '')));
+                                        const cloudHasOutput = !!(cloudTerm.outputGrid && Array.isArray(cloudTerm.outputGrid) && cloudTerm.outputGrid.length > 0 && cloudTerm.outputGrid.some(r => r && r.some(c => (c.symbol || c) !== '')));
+                                        if (localHasOutput && !cloudHasOutput) {
+                                            return; // クラウドが空ならローカルのST勤務表を厳格保護
+                                        }
+                                        const localTime = new Date(localData.updatedAt || 0).getTime();
+                                        const cloudTime = new Date(cloudTerm.updatedAt || 0).getTime();
+                                        if (localTime > cloudTime && localHasOutput) {
+                                            return; // ローカルのSTデータが新しければ上書き遮断
+                                        }
+                                    } catch(e) {}
                                 }
+                                window.localStorage.setItem(localStKey, JSON.stringify(cloudTerm));
                             });
                             loadLinkedSTData(currentWorkingStartDate);
                             loadLinkedLifeData(currentWorkingStartDate);
@@ -740,22 +757,30 @@ document.addEventListener('DOMContentLoaded', () => {
                     }
                 } catch (e) {}
 
-                // 2) 全体マスター(master)の最新クラウドデータも取得し、共通スタッフマスタ(トグル・役職・セクション)を同期！
+            if (!isMaster && !isST && !isLife) {
                 try {
-                    const rMaster = await fetch(`/api/cloud_sync?deptId=master&t=${Date.now()}`, { cache: 'no-store' });
+                    const rMaster = await fetch(/api/cloud_sync?deptId=master&t=, { cache: 'no-store' });
                     if (rMaster.ok) {
                         const jMaster = await rMaster.json();
                         const mCloud = jMaster && (jMaster.cloudState || jMaster.data);
                         if (mCloud && Array.isArray(mCloud.staffMaster) && mCloud.staffMaster.length > 0) {
                             const curLocalMaster = window.localStorage.getItem(STORAGE_KEY_STAFF_MASTER);
-                            let needMasterSync = !curLocalMaster;
+                            let localHasSettings = false;
                             if (curLocalMaster) {
                                 try {
                                     const lList = JSON.parse(curLocalMaster);
-                                    needMasterSync = lList.every((s, i) => (!s.name || s.name === `スタッフ ${String(i+1).padStart(2,'0')}`) && !s.can8 && !s.isChief && !s.isHalf);
-                                } catch(e) { needMasterSync = true; }
+                                    if (Array.isArray(lList) && lList.length > 0) {
+                                        localHasSettings = lList.some(s => 
+                                            s.isUnused || s.can8 || s.noEarly || s.noLate || s.noEve ||
+                                            s.canSched || s.isSectionChief || s.isChief || s.isSubChief || 
+                                            s.isHalf || s.isZeroCount || s.isFirstYear || s.isFullTime || 
+                                            s.allow6Consec || s.section || s.lifeSection || s.haSection || s.jobTitle ||
+                                            (s.name && !s.name.startsWith('スタッフ ') && !s.name.startsWith('ST ') && !s.name.startsWith('生活期'))
+                                        );
+                                    }
+                                } catch(e) {}
                             }
-                            if (needMasterSync) {
+                            if (!localHasSettings && !curLocalMaster) {
                                 window.localStorage.setItem(STORAGE_KEY_STAFF_MASTER, JSON.stringify(mCloud.staffMaster));
                                 applyMasterArrayToStaffList(mCloud.staffMaster);
                             }

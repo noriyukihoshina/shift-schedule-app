@@ -2105,52 +2105,19 @@ class ShiftScheduler {
 
             let requirements = [];
             if (this.isSouth) {
-                // 南病棟特殊ルール:
-                // ・遅: 南2に1名、南3に1名ずつだけ配置、合計2名
-                // ・E: 南2に1名、南3に1名ずつだけ配置、合計2名
-                // ・早: 南2に1名、南3に1名ずつだけ配置、合計2名（ST早番は南2または南3どちらにカウントしてもOK）
+                // 南病棟最新仕様:
+                // ・遅: 南2に1名、南3に1名、合計2名
+                // ・E: 南2に1名、南3に1名、合計2名
+                // ・早: 南2に1名、南3に1名、合計2名（ST早番とは完全独立・毎日確実にPOから2名配置）
                 requirements = [
                     { type: SYMBOLS.LATE, count: 1, targetFloor: '南2', label: '南2遅番', key: 'late', noFlag: 'noLate', matchSyms: [SYMBOLS.LATE] },
                     { type: SYMBOLS.LATE, count: 1, targetFloor: '南3', label: '南3遅番', key: 'late', noFlag: 'noLate', matchSyms: [SYMBOLS.LATE] },
                     { type: SYMBOLS.EVE, count: 1, targetFloor: '南2', label: '南2イブニング(E)', key: 'eve', noFlag: 'noEve', matchSyms: [SYMBOLS.EVE] },
-                    { type: SYMBOLS.EVE, count: 1, targetFloor: '南3', label: '南3イブニング(E)', key: 'eve', noFlag: 'noEve', matchSyms: [SYMBOLS.EVE] }
+                    { type: SYMBOLS.EVE, count: 1, targetFloor: '南3', label: '南3イブニング(E)', key: 'eve', noFlag: 'noEve', matchSyms: [SYMBOLS.EVE] },
+                    { type: SYMBOLS.EARLY, count: 1, targetFloor: '南2', label: '南2早番', key: 'early', noFlag: 'noEarly', matchSyms: [SYMBOLS.EARLY] },
+                    { type: SYMBOLS.EARLY, count: 1, targetFloor: '南3', label: '南3早番', key: 'early', noFlag: 'noEarly', matchSyms: [SYMBOLS.EARLY] }
                 ];
-
-                const rawStEarly = (this.stDailyEarly && this.stDailyEarly[d]) ? this.stDailyEarly[d] : 0;
-                const effectiveStEarly = Math.min(1, rawStEarly);
-                if (effectiveStEarly === 1) {
-                    // ST早番がある場合（最大1名充当）: 南2または南3のどちらか一方にSTを充当し、もう一方にPO早番1名を必ず配置！
-                    let s2HasEarly = false, s3HasEarly = false;
-                    for (let s = 0; s < this.numStaff; s++) {
-                        if (this.staffList[s].isUnused) continue;
-                        if (this.grid[s][d].symbol === SYMBOLS.EARLY) {
-                            if (getSubFloor(s) === '南2') s2HasEarly = true;
-                            if (getSubFloor(s) === '南3') s3HasEarly = true;
-                        }
-                    }
-                    if (s2HasEarly && s3HasEarly) {
-                        // 両方に事前PO早番希望がある場合
-                        requirements.push({ type: SYMBOLS.EARLY, count: 1, targetFloor: '南2', label: '南2早番', key: 'early', noFlag: 'noEarly', matchSyms: [SYMBOLS.EARLY] });
-                        requirements.push({ type: SYMBOLS.EARLY, count: 1, targetFloor: '南3', label: '南3早番', key: 'early', noFlag: 'noEarly', matchSyms: [SYMBOLS.EARLY] });
-                    } else if (s2HasEarly && !s3HasEarly) {
-                        // 南2に既にPO早番があるため、ST早番は南3に充当（南2にPO早番1名要求）
-                        requirements.push({ type: SYMBOLS.EARLY, count: 1, targetFloor: '南2', label: '南2早番', key: 'early', noFlag: 'noEarly', matchSyms: [SYMBOLS.EARLY] });
-                    } else if (s3HasEarly && !s2HasEarly) {
-                        // 南3に既にPO早番があるため、ST早番は南2に充当（南3にPO早番1名要求）
-                        requirements.push({ type: SYMBOLS.EARLY, count: 1, targetFloor: '南3', label: '南3早番', key: 'early', noFlag: 'noEarly', matchSyms: [SYMBOLS.EARLY] });
-                    } else {
-                        // どちらも事前希望なしの場合: 交互に割り当てて、もう片方にPO早番1名を配置
-                        if (d % 2 === 0) {
-                            requirements.push({ type: SYMBOLS.EARLY, count: 1, targetFloor: '南2', label: '南2早番', key: 'early', noFlag: 'noEarly', matchSyms: [SYMBOLS.EARLY] });
-                        } else {
-                            requirements.push({ type: SYMBOLS.EARLY, count: 1, targetFloor: '南3', label: '南3早番', key: 'early', noFlag: 'noEarly', matchSyms: [SYMBOLS.EARLY] });
-                        }
-                    }
-                } else {
-                    // ST早番なし: 南2に1名、南3に1名
-                    requirements.push({ type: SYMBOLS.EARLY, count: 1, targetFloor: '南2', label: '南2早番', key: 'early', noFlag: 'noEarly', matchSyms: [SYMBOLS.EARLY] });
-                    requirements.push({ type: SYMBOLS.EARLY, count: 1, targetFloor: '南3', label: '南3早番', key: 'early', noFlag: 'noEarly', matchSyms: [SYMBOLS.EARLY] });
-                }
+            
             } else {
                 // 1階・2階・3階: PT早＋OT早＋ST早の合計が3つ（遅は1、Eは2）
                 // 同階所属のSTスタッフ特殊勤務がある場合、PO必要枠から差し引いて合計定数を厳格維持！
@@ -5130,21 +5097,9 @@ class ShiftScheduler {
                     const s2Eve   = s2Staff.filter(s => this.grid[s][d].symbol === SYMBOLS.EVE).length;
                     const s3Eve   = s3Staff.filter(s => this.grid[s][d].symbol === SYMBOLS.EVE).length;
 
-                    let stEarlyCount = 0;
-                    if (this.stDailyEarly && this.stDailyEarly[d]) {
-                        stEarlyCount = this.stDailyEarly[d];
-                    }
-                    const effectiveStEarly = Math.min(1, stEarlyCount);
-
-                    let earlyValid = false;
-                    if (effectiveStEarly === 0) {
-                        earlyValid = (s2Early === 1 && s3Early === 1);
-                    } else {
-                        // ST早番が1名以上の場合: STをどちらかに充当し、もう一方にPO早番1名
-                        earlyValid = (s2Early === 1 && s3Early === 0) || (s2Early === 0 && s3Early === 1);
-                    }
+                    const earlyValid = (s2Early === 1 && s3Early === 1);
                     if (!earlyValid) {
-                        errors.push(`【${dateLabel}】南病棟早番要件を満たしていません（南2に1名、南3に1名。ST早番含めて計2名。現況: 南2=${s2Early}名, 南3=${s3Early}名, ST=${stEarlyCount}名）。`);
+                        errors.push(`【${dateLabel}】南病棟早番要件を満たしていません（南2に1名、南3に1名、計2名。現状: 南2=${s2Early}名, 南3=${s3Early}名）。`);
                     }
                     if (s2Late !== 1 || s3Late !== 1) {
                         errors.push(`【${dateLabel}】南病棟遅番要件を満たしていません（南2に1名、南3に1名。現況: 南2=${s2Late}名, 南3=${s3Late}名）。`);
@@ -5782,61 +5737,31 @@ function validateScheduleGrid(grid, staffList, options = {}) {
                 const s2Eve   = s2Staff.filter(s => getSym(s, d) === SYMBOLS.EVE).length;
                 const s3Eve   = s3Staff.filter(s => getSym(s, d) === SYMBOLS.EVE).length;
 
-                let stEarlyCount = 0;
-                const effectiveStData = options.stStaffData || options.linkedStStaffData;
-                if (effectiveStData && effectiveStData.staffList) {
-                    effectiveStData.staffList.forEach((st, stIdx) => {
-                        if (!st.isUnused) {
-                            const stRow = (effectiveStData.grid && effectiveStData.grid[stIdx]) ? effectiveStData.grid[stIdx] : (st.days || []);
-                            const c = stRow[d] || { symbol: '' };
-                            const sSym = (c && typeof c === 'object') ? c.symbol : (c || '');
-                            if (sSym === SYMBOLS.EARLY) stEarlyCount++;
-                        }
-                    });
-                }
-                if (stEarlyCount > 1) {
-                    const reason = `${dateLabel}の南病棟所属ST早番が${stEarlyCount}名です（同日2名は希望以外NG）`;
-                    errors.push(`【${dateLabel}】${reason}。`);
-                    conflictCells.push({ dayIndex: d, footerStat: 'early', reason: reason });
-                }
-
                 if (isFinal) {
-                    // 早番チェック（南2に1名、南3に1名。ST早番は南2または南3どちらにカウントしてもOK。充当は最大1名で、もう一方はPOから必ず1名出す）
-                    let earlyValid = false;
-                    if (stEarlyCount === 0) {
-                        earlyValid = (s2Early === 1 && s3Early === 1);
-                    } else {
-                        // ST早番が1名以上の場合: STをどちらかに充当し、もう一方にPOが1名
-                        earlyValid = (s2Early === 1 && s3Early === 0) || (s2Early === 0 && s3Early === 1);
-                    }
+                    // 南病棟最新仕様: 早番は南2に1名、南3に1名、計2名（POから確実に配置。ST早番とは完全独立）
+                    const earlyValid = (s2Early === 1 && s3Early === 1);
                     if (!earlyValid) {
-                        const reason = `${dateLabel}の南病棟早番要件を満たしていません（南2に1名、南3に1名。ST早番含めて計2名。現況: 南2=${s2Early}名, 南3=${s3Early}名, ST=${stEarlyCount}名）`;
+                        const reason = `${dateLabel}の南病棟早番要件を満たしていません（南2に1名、南3に1名、計2名。現状: 南2=${s2Early}名, 南3=${s3Early}名）`;
                         errors.push(`【${dateLabel}】${reason}。`);
                         conflictCells.push({ dayIndex: d, footerStat: 'early', reason: reason });
                     }
                     if (s2Late !== 1 || s3Late !== 1) {
-                        const reason = `${dateLabel}の南病棟遅番要件を満たしていません（南2に1名、南3に1名。現況: 南2=${s2Late}名, 南3=${s3Late}名）`;
+                        const reason = `${dateLabel}の南病棟遅番要件を満たしていません（南2に1名、南3に1名。現状: 南2=${s2Late}名, 南3=${s3Late}名）`;
                         errors.push(`【${dateLabel}】${reason}。`);
                         conflictCells.push({ dayIndex: d, footerStat: 'late', reason: reason });
                     }
                     if (s2Eve !== 1 || s3Eve !== 1) {
-                        const reason = `${dateLabel}の南病棟E番要件を満たしていません（南2に1名、南3に1名。現況: 南2=${s2Eve}名, 南3=${s3Eve}名）`;
+                        const reason = `${dateLabel}の南病棟E番要件を満たしていません（南2に1名、南3に1名。現状: 南2=${s2Eve}名, 南3=${s3Eve}名）`;
                         errors.push(`【${dateLabel}】${reason}。`);
                         conflictCells.push({ dayIndex: d, footerStat: 'eve', reason: reason });
                     }
                 } else {
-                    // 修正作業エリア: 全日0名は許容するが、既に特殊勤務が入っている日での不足または超過は指摘＆網掛け
-                    const totalEarlyToday = s2Early + s3Early + stEarlyCount;
+                    // 修正作業エリア: 全日0名は許容するが、既に特殊勤務が入っている日での不足または超過は指摘・網掛け
+                    const totalEarlyToday = s2Early + s3Early;
                     if (totalEarlyToday > 0) {
-                        let earlyValid = false;
-                        if (stEarlyCount === 0) {
-                            earlyValid = (s2Early === 1 && s3Early === 1);
-                        } else {
-                            // ST早番が1名以上の場合: STをどちらかに充当し、もう一方にPOが1名
-                            earlyValid = (s2Early === 1 && s3Early === 0) || (s2Early === 0 && s3Early === 1);
-                        }
+                        const earlyValid = (s2Early === 1 && s3Early === 1);
                         if (!earlyValid) {
-                            const reason = `${dateLabel}の南病棟早番要件を満たしていません（南2に1名、南3に1名。ST早番含めて計2名。現況: 南2=${s2Early}名, 南3=${s3Early}名, ST=${stEarlyCount}名）`;
+                            const reason = `${dateLabel}の南病棟早番要件を満たしていません（南2に1名、南3に1名、計2名。現状: 南2=${s2Early}名, 南3=${s3Early}名）`;
                             errors.push(`【${dateLabel}】${reason}。`);
                             conflictCells.push({ dayIndex: d, footerStat: 'early', reason: reason });
                         }
