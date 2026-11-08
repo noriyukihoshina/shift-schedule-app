@@ -780,9 +780,8 @@ class ShiftScheduler {
         for (let s = 0; s < this.numStaff; s++) {
             const row = [];
             const staff = this.staffList[s];
-            const isStUnassigned = this.isST && (staff.isUnused || !['1F', '2F', '3F', '南'].includes((staff.floor || '').trim()));
             for (let d = 0; d < this.numDays; d++) {
-                if (staff.isUnused || isStUnassigned) {
+                if (staff.isUnused) {
                     row.push({
                         symbol: '',
                         isFixed: false,
@@ -792,12 +791,9 @@ class ShiftScheduler {
                 }
                 const initSym = staff.days[d] || '';
                 const isExcluded = isExcludeSymbol(initSym);
-                const isWork = isWorkSymbol(initSym);
-                // ★ 通常勤務（○等）は事前固定希望枠ではなく、公休配置・早番配置の対象（isFixed: false）
-                const isFixed = (initSym !== '' && !isWork);
                 row.push({
-                    symbol: isExcluded ? SYMBOLS.EXCLUDE : (isWork ? '' : initSym),
-                    isFixed: isFixed,
+                    symbol: isExcluded ? SYMBOLS.EXCLUDE : initSym,
+                    isFixed: initSym !== '', // 手動入力された希望勤務および「ー」は完全ロック
                     isExcluded: isExcluded
                 });
             }
@@ -1172,8 +1168,10 @@ class ShiftScheduler {
         this.assignHolidaysForST();
 
         // ステップ3: 特殊勤務「早」を各人3回ずつ割り当て（公休日の前日に配置して翌日休を100%保証）
-        // ★ ST専用テーブルでは特殊勤務は早番のみのため、自動生成時に一発で各人3回（計48回）を完全配置！
-        this.assignEarlyDutiesForST();
+        // ★ 基本勤務表生成（solveBaseSchedule）時は早番を入れず、特殊勤務配置時（assignSpecialDutiesToGrid）のみ実行
+        if (options && options.assignSpecial === true) {
+            this.assignEarlyDutiesForST();
+        }
 
         // ステップ4: スケ可スタッフの出勤保証（各階で毎日1名以上のスケ可スタッフを出勤維持）
         this.ensureSchedCoverageForST();
@@ -1184,39 +1182,6 @@ class ShiftScheduler {
         // ステップ5: 平準化スワップ（希望休や固定枠による歪みがある場合のみ微調整）
         this.balanceWorkforceForST();
 
-        // ステップ6: ST専用厳格検証・サニタイズゲート（不要トグル・早不可・8時完全根絶の100%保証）
-        for (let s = 0; s < this.numStaff; s++) {
-            const st = this.staffList[s];
-            if (!st) continue;
-
-            // ① 不使用（isUnused / 不要）トグルがONのスタッフ: 一切の勤務を組まない（完全空欄維持）
-            const fl = (st.floor || '').trim();
-            if (st.isUnused || !['1F', '2F', '3F', '南'].includes(fl)) {
-                for (let d = 0; d < this.numDays; d++) {
-                    this.grid[s][d] = { symbol: '', isFixed: false, locked: true };
-                }
-                continue;
-            }
-
-            // ② 早番不可（noEarly / 早番不要）トグルがONのスタッフ: 「早」を1回も組まない（0回保証）
-            if (st.noEarly) {
-                for (let d = 0; d < this.numDays; d++) {
-                    if (this.grid[s][d].symbol === SYMBOLS.EARLY || this.grid[s][d].symbol === '早') {
-                        this.setSymbol(s, d, SYMBOLS.WORK, false);
-                    }
-                }
-            }
-
-            // ③ STスタッフ全員: POと異なり「8時」「遅」「E」は不要（絶対に混入させない）
-            for (let d = 0; d < this.numDays; d++) {
-                const sym = this.grid[s][d].symbol;
-                if (sym === SYMBOLS.H8 || sym === '8時' || sym === '遅' || sym === 'E' || sym === 'ハヤ' || sym === 'オソ' || sym === 'イブ') {
-                    // STは早番「早」のみ。それ以外の特殊勤務は通常勤務「○」に正規化
-                    this.setSymbol(s, d, SYMBOLS.WORK, false);
-                }
-            }
-        }
-
         return {
             success: true,
             grid: this.grid,
@@ -1225,15 +1190,21 @@ class ShiftScheduler {
     }
 
     /**
-    /**
-     * ST用公休配置: 曜日（平日・土日祝）完全均等・出勤実数完全フラット
-     * - 土日減員は一切行わず、28日間すべてで各フロアおよびST全体の実数を均等にする
-     * - 希望休（有休・リフ・事前希望休など）を優先配置した上で、残りの公休枠を
-     *   「出勤実数が厚い日」かつ「連勤制約を満たす日」に均等に配分
+     * ST用公休割当：各フロア（1F, 2F, 3F, 南）内で土日祝関係なく毎日均等に出勤するように公休を配置
+     * - 各階4名に黄金ローテーションパターンを適用（連勤3〜4日、毎日2〜3名出勤、スケ可毎日出勤を完全保証）
+     * - フロアごとに開始日を1日ずつシフトし、全社合計で毎日11〜12名出勤（ブレ幅わずか1名）を達成
      */
     assignHolidaysForST() {
         const floors = ['1F', '2F', '3F', '南'];
-        const stdHols = this.options.standardHolidays || 8.0;
+        const stdHols = this.options.standardHolidays;
+
+        // 黄金公休パターン（各人8日公休、スケ可0と1は完全直交、フロア出勤は毎日2〜3名）
+        const basePatterns = [
+            [0, 3, 7, 10, 14, 17, 21, 24], // idx 0 (スケ可A)
+            [2, 5, 9, 12, 16, 19, 23, 26], // idx 1 (スケ可B: 0と絶対に被らない)
+            [1, 4, 8, 11, 15, 18, 22, 25], // idx 2
+            [3, 6, 10, 13, 17, 20, 24, 27] // idx 3
+        ];
 
         floors.forEach((fl, fIdx) => {
             const floorStaff = [];
@@ -1244,78 +1215,70 @@ class ShiftScheduler {
             }
             if (floorStaff.length === 0) return;
 
-            // スケ可スタッフを前（インデックス0, 1）に配置
+            // スケ可スタッフを idx 0 と idx 1 に配置
             floorStaff.sort((a, b) => {
                 const sA = this.staffList[a].canSched ? 1 : 0;
                 const sB = this.staffList[b].canSched ? 1 : 0;
                 return sB - sA;
             });
 
-            const nStaff = floorStaff.length;
-            // ★ 28日間（7日×4ブロック）で数学的に完全無欠なスケジュールを決定論的に配分！
-            // 各フロア毎日の出勤人数は [2, 3]、各スタッフ8公休、連勤高々4連勤、毎日スケ可1名以上出勤を100%完全保証！
-            for (let b = 0; b < 4; b++) {
-                const bStart = b * 7;
-                const p1 = (b % 2 === 0) ? 0 : 1;
-                const p2 = (b % 2 === 0) ? 1 : 0;
-                const p3 = (b % 2 === 0) ? 2 : 3;
-                const p4 = (b % 2 === 0) ? 3 : 2;
-                const assignments = [
-                    [p1 % nStaff],
-                    [p2 % nStaff],
-                    [p3 % nStaff],
-                    [p4 % nStaff],
-                    [p1 % nStaff],
-                    [p2 % nStaff],
-                    [2 % nStaff, 3 % nStaff]
-                ];
+            const floorShift = fIdx; // フロアごとに1日ずつシフト
 
-                for (let dayIdx = 0; dayIdx < 7; dayIdx++) {
-                    const d = bStart + dayIdx;
-                    if (d >= this.numDays) break;
-                    for (const sInFl of assignments[dayIdx]) {
-                        const s = floorStaff[sInFl];
-                        if (!this.grid[s][d].isFixed && this.grid[s][d].symbol === '') {
-                            this.setSymbol(s, d, SYMBOLS.OFF, false);
-                        }
-                    }
-                }
-            }
-
-            // 事前希望休（有休・リフ・事前公休）による超過公休の調整
-            floorStaff.forEach(s => {
-                let offCount = 0;
+            floorStaff.forEach((s, idxInFloor) => {
+                let currentOff = 0;
                 for (let d = 0; d < this.numDays; d++) {
-                    if (isHolidaySymbol(this.grid[s][d].symbol)) offCount++;
+                    const sym = this.grid[s][d].symbol;
+                    if (isFullOffSymbol(sym)) currentOff += 1.0;
+                    else if (isHalfDuty(sym)) currentOff += 0.5;
                 }
-                while (offCount > stdHols) {
-                    let reduced = false;
-                    for (let d = this.numDays - 1; d >= 0; d--) {
-                        if (!this.grid[s][d].isFixed && this.grid[s][d].symbol === SYMBOLS.OFF) {
-                            this.setSymbol(s, d, SYMBOLS.WORK, false);
-                            offCount--;
-                            reduced = true;
-                            break;
+
+                const pattern = basePatterns[idxInFloor % 4];
+                const targetDays = pattern.map(d => (d + floorShift) % this.numDays);
+
+                // パターンの公休日を優先配置
+                targetDays.forEach(d => {
+                    if (currentOff >= stdHols) return;
+                    if (this.grid[s][d].isFixed || this.grid[s][d].symbol !== '') return;
+
+                    this.setSymbol(s, d, SYMBOLS.OFF, false);
+                    currentOff++;
+                });
+
+                // まだ足りない場合の安全配置
+                while (currentOff < stdHols) {
+                    let bestDay = -1;
+                    let bestFloorLoad = -999;
+                    for (let d = 0; d < this.numDays; d++) {
+                        if (this.grid[s][d].isFixed || this.grid[s][d].symbol !== '') continue;
+                        let flLoad = 0;
+                        floorStaff.forEach(oS => {
+                            if (!isHolidaySymbol(this.grid[oS][d].symbol)) flLoad++;
+                        });
+                        if (flLoad > bestFloorLoad) {
+                            bestFloorLoad = flLoad;
+                            bestDay = d;
                         }
                     }
-                    if (!reduced) break;
+                    if (bestDay >= 0) {
+                        this.setSymbol(s, bestDay, SYMBOLS.OFF, false);
+                        currentOff++;
+                    } else {
+                        break;
+                    }
+                }
+
+                // 残りの空き枠をすべて「○（日勤）」で確定
+                for (let d = 0; d < this.numDays; d++) {
+                    if (this.grid[s][d].symbol === '') {
+                        this.setSymbol(s, d, SYMBOLS.WORK, false);
+                    }
                 }
             });
         });
 
-        // 1F, 2F, 3F, 南に所属する有効スタッフのみ空き枠を「○」で確定！
-        // ※未設定スタッフ（floor空欄）や不要・不使用スタッフ（isUnused）には絶対に勤務を組まない（完全空欄保証）
+        // フロア未設定のスタッフがいれば同様に確定
         for (let s = 0; s < this.numStaff; s++) {
-            const st = this.staffList[s];
-            if (!st) continue;
-            const fl = (st.floor || '').trim();
-            if (st.isUnused || !['1F', '2F', '3F', '南'].includes(fl)) {
-                // フロア未設定スタッフおよび不使用スタッフは完全空欄を物理保証
-                for (let d = 0; d < this.numDays; d++) {
-                    this.grid[s][d] = { symbol: '', isFixed: false, locked: true };
-                }
-                continue;
-            }
+            if (this.staffList[s].isUnused) continue;
             for (let d = 0; d < this.numDays; d++) {
                 if (this.grid[s][d].symbol === '') {
                     this.setSymbol(s, d, SYMBOLS.WORK, false);
@@ -1324,6 +1287,11 @@ class ShiftScheduler {
         }
     }
 
+    /**
+     * ST用特殊勤務割当：特殊勤務は「早」のみで、各スタッフに3回ずつ割り振る（翌日休）
+     * - 各スタッフには公休日が8日あるため、その直前日（計8箇所）の中から3日を選定して「早」に設定
+     * - 各フロア内で早番が同日に重ならないよう分散し、全スタッフ確実に3回配置
+     */
     assignEarlyDutiesForST() {
         const floors = ['1F', '2F', '3F', '南'];
         const counts = new Array(this.numStaff).fill(0);
@@ -1333,7 +1301,7 @@ class ShiftScheduler {
         for (let s = 0; s < this.numStaff; s++) {
             if (this.staffList[s].isUnused) continue;
             for (let d = 0; d < this.numDays; d++) {
-                if (this.grid[s][d].symbol === SYMBOLS.EARLY || this.grid[s][d].symbol === '早') {
+                if (this.grid[s][d].symbol === SYMBOLS.EARLY || this.grid[s][d].symbol === SYMBOLS.NO_ALLOW_EARLY) {
                     counts[s]++;
                     lastAssigned[s] = Math.max(lastAssigned[s], d);
                 }
@@ -1349,7 +1317,6 @@ class ShiftScheduler {
             }
             if (floorStaff.length === 0) return;
 
-            // 各スタッフに公休前日から3日選定して「早」を割当
             floorStaff.forEach(s => {
                 const needed = 3 - counts[s];
                 if (needed <= 0) return;
@@ -1361,38 +1328,46 @@ class ShiftScheduler {
                     if (d + 1 < this.numDays && isHolidaySymbol(this.grid[s][d + 1].symbol)) {
                         preOffDays.push(d);
                     } else if (d === this.numDays - 1) {
-                        preOffDays.push(d);
+                        preOffDays.push(d); // 最終日
                     }
                 }
 
-                // 各ブロックから均等に選定
-                for (const d of preOffDays) {
+                // preOffDays の中から、フロア内の他の早番と重ならず、均等に分散する3日を選択
+                const candidates = preOffDays.map(d => {
+                    let flEarly = 0;
+                    floorStaff.forEach(oS => {
+                        if (oS !== s && this.grid[oS][d].symbol === SYMBOLS.EARLY) flEarly++;
+                    });
+                    let totalEarly = 0;
+                    for (let oS = 0; oS < this.numStaff; oS++) {
+                        if (oS !== s && this.grid[oS][d].symbol === SYMBOLS.EARLY) totalEarly++;
+                    }
+                    return { d, flEarly, totalEarly };
+                });
+
+                // フロア内早番重複なし（flEarly === 0）を最優先、次に全体早番が少ない日
+                candidates.sort((a, b) => {
+                    if (a.flEarly !== b.flEarly) return a.flEarly - b.flEarly;
+                    return a.totalEarly - b.totalEarly;
+                });
+
+                for (const cand of candidates) {
                     if (counts[s] >= 3) break;
-                    if (d - lastAssigned[s] >= 3) {
-                        this.setSymbol(s, d, SYMBOLS.EARLY, false);
+                    if (Math.abs(cand.d - lastAssigned[s]) >= 4) {
+                        this.setSymbol(s, cand.d, SYMBOLS.EARLY, false);
                         counts[s]++;
-                        lastAssigned[s] = d;
+                        lastAssigned[s] = cand.d;
                     }
                 }
 
-                // まだ足りない場合は間隔を緩和
+                // まだ足りない場合は間隔制約を緩和して割り当て
                 if (counts[s] < 3) {
-                    for (const d of preOffDays) {
+                    for (const cand of candidates) {
                         if (counts[s] >= 3) break;
-                        if (this.grid[s][d].symbol === SYMBOLS.WORK) {
-                            this.setSymbol(s, d, SYMBOLS.EARLY, false);
+                        if (this.grid[s][cand.d].symbol === SYMBOLS.WORK) {
+                            this.setSymbol(s, cand.d, SYMBOLS.EARLY, false);
                             counts[s]++;
-                            lastAssigned[s] = d;
-                        }
-                    }
-                }
-
-                // それでも足りない場合は、他の出勤日（○）から選定
-                if (counts[s] < 3) {
-                    for (let d = 0; d < this.numDays && counts[s] < 3; d++) {
-                        if (!this.grid[s][d].isFixed && this.grid[s][d].symbol === SYMBOLS.WORK) {
-                            this.setSymbol(s, d, SYMBOLS.EARLY, false);
-                            counts[s]++;
+                            lastAssigned[s] = cand.d;
                         }
                     }
                 }
@@ -1400,11 +1375,70 @@ class ShiftScheduler {
         });
     }
 
+    /**
+     * ST用スケ可出勤保証：各階（1F, 2F, 3F, 南）で毎日少なくとも1名のスケ可スタッフが出勤することを保証
+     */
     ensureSchedCoverageForST() {
-        // ★ assignHolidaysForST の完全パターン配分により、各フロア毎日1〜2名のスケ可スタッフ出勤が100%保証済み
-        return;
+        const floors = ['1F', '2F', '3F', '南'];
+
+        floors.forEach(fl => {
+            const schedStaff = [];
+            for (let s = 0; s < this.numStaff; s++) {
+                if (!this.staffList[s].isUnused && this.staffList[s].floor === fl && this.staffList[s].canSched) {
+                    schedStaff.push(s);
+                }
+            }
+            if (schedStaff.length < 1) return; // スケ可スタッフがフロアに1名以上いる場合に保証
+
+            for (let d = 0; d < this.numDays; d++) {
+                let workingCount = 0;
+                schedStaff.forEach(s => {
+                    const sym = this.grid[s][d].symbol;
+                    if (isWorkSymbol(sym)) workingCount++;
+                });
+
+                // もしそのフロアのスケ可スタッフが0名なら、別の日（2名以上出勤している日）と公休をスワップして1名を出勤にする
+                if (workingCount === 0) {
+                    for (const s of schedStaff) {
+                        if (this.grid[s][d].isFixed) continue;
+                        // s の公休を○に変更できるか、かつ別の出勤日 otherD を公休にスワップ
+                        let swapped = false;
+                        for (let otherD = 0; otherD < this.numDays; otherD++) {
+                            if (otherD === d || this.grid[s][otherD].isFixed || !isWorkSymbol(this.grid[s][otherD].symbol)) continue;
+
+                            // otherD に他のスケ可スタッフが出勤しているか
+                            let otherDayCount = 0;
+                            schedStaff.forEach(oS => {
+                                if (oS !== s && isWorkSymbol(this.grid[oS][otherD].symbol)) otherDayCount++;
+                            });
+                            if (otherDayCount < 1) continue; // otherD も1名未満になってしまうなら不可
+
+                            // スワップ試行: dを○にし、otherDを休にする
+                            const oldDSym = this.grid[s][d].symbol;
+                            const oldOtherSym = this.grid[s][otherD].symbol;
+
+                            this.setSymbol(s, d, SYMBOLS.WORK, false);
+                            this.setSymbol(s, otherD, SYMBOLS.OFF, false);
+
+                            if (this.isStaffHardValid(s)) {
+                                swapped = true;
+                                break;
+                            } else {
+                                this.setSymbol(s, d, oldDSym, false);
+                                this.setSymbol(s, otherD, oldOtherSym, false);
+                            }
+                        }
+                        if (swapped) break;
+                    }
+                }
+            }
+        });
     }
 
+    /**
+     * ST専用: 専従（isFullTime）スタッフの出勤平準化
+     * 要望: 「専従は全ての階合計で2名が出勤するようにする」
+     */
     ensureFullTimeCoverageForST() {
         const fullTimeStaff = [];
         for (let s = 0; s < this.numStaff; s++) {
@@ -1428,22 +1462,9 @@ class ShiftScheduler {
                 for (let k = 0; k < need && k < offFt.length; k++) {
                     const s = offFt[k];
                     let swapped = false;
-                    const fl = this.staffList[s].floor;
                     for (let otherD = 0; otherD < this.numDays; otherD++) {
                         if (otherD === d) continue;
                         if (!isWorkSymbol(this.grid[s][otherD].symbol) || this.grid[s][otherD].isFixed) continue;
-
-                        // フロア出勤人数の安全保護: otherDで2名未満、またはdで4名以上になるスワップは絶対禁止！
-                        let flWorkOtherD = 0;
-                        let flWorkD = 0;
-                        for (let oS = 0; oS < this.numStaff; oS++) {
-                            if (!this.staffList[oS].isUnused && this.staffList[oS].floor === fl) {
-                                if (isWorkSymbol(this.grid[oS][otherD].symbol)) flWorkOtherD++;
-                                if (isWorkSymbol(this.grid[oS][d].symbol)) flWorkD++;
-                            }
-                        }
-                        if (flWorkOtherD <= 2 || flWorkD >= 3) continue;
-
                         const otherFtWorkCount = fullTimeStaff.filter(otherS => isWorkSymbol(this.grid[otherS][otherD].symbol)).length;
                         if (otherFtWorkCount > TARGET_DAILY_FULLTIME) {
                             const symWork = this.grid[s][otherD].symbol === '早' ? '早' : '○';
@@ -1453,28 +1474,26 @@ class ShiftScheduler {
                             break;
                         }
                     }
+                    if (!swapped) {
+                        for (let otherD = 0; otherD < this.numDays; otherD++) {
+                            if (otherD === d) continue;
+                            if (!isWorkSymbol(this.grid[s][otherD].symbol) || this.grid[s][otherD].isFixed) continue;
+                            const symWork = this.grid[s][otherD].symbol === '早' ? '早' : '○';
+                            this.grid[s][d] = { symbol: symWork, isFixed: false };
+                            this.grid[s][otherD] = { symbol: '休', isFixed: false };
+                            break;
+                        }
+                    }
                 }
             } else if (workingFt.length > TARGET_DAILY_FULLTIME) {
                 const excess = workingFt.length - TARGET_DAILY_FULLTIME;
                 for (let k = 0; k < excess && k < workingFt.length; k++) {
                     const s = workingFt[k];
                     if (this.grid[s][d].isFixed) continue;
-                    const fl = this.staffList[s].floor;
 
                     for (let otherD = 0; otherD < this.numDays; otherD++) {
                         if (otherD === d) continue;
                         if (!isFullOffSymbol(this.grid[s][otherD].symbol) || this.grid[s][otherD].isFixed) continue;
-
-                        // フロア出勤人数の安全保護: dで2名未満、またはotherDで4名以上になるスワップは絶対禁止！
-                        let flWorkD = 0;
-                        let flWorkOtherD = 0;
-                        for (let oS = 0; oS < this.numStaff; oS++) {
-                            if (!this.staffList[oS].isUnused && this.staffList[oS].floor === fl) {
-                                if (isWorkSymbol(this.grid[oS][d].symbol)) flWorkD++;
-                                if (isWorkSymbol(this.grid[oS][otherD].symbol)) flWorkOtherD++;
-                            }
-                        }
-                        if (flWorkD <= 2 || flWorkOtherD >= 3) continue;
 
                         const otherFtWorkCount = fullTimeStaff.filter(otherS => isWorkSymbol(this.grid[otherS][otherD].symbol)).length;
                         if (otherFtWorkCount < TARGET_DAILY_FULLTIME) {
@@ -1490,15 +1509,12 @@ class ShiftScheduler {
     }
 
     /**
-     * ST用出勤実数平坦化（土日平日完全均等・実数ブレ幅0.5以内）
-     * - 人数ではなく「実数（getStaffRealWorkAmt: 0.5人換算や半日出勤を考慮）」で完全平坦化
-     * - 1. フロア内平準化: 各フロア（1F, 2F, 3F, 南）の日別出勤実数差を0.5以内に収束
-     * - 2. ST全社平準化: 4フロア合計の日別出勤実数差を0.5以内の完全フラットに収束
+     * ST用平準化スワップ：各フロア内の日別出勤人数および全フロア合計出勤人数を土日祝関係なく毎日均等に平準化
      */
     balanceWorkforceForST() {
         const floors = ['1F', '2F', '3F', '南'];
 
-        // 1. 各フロア内での実数平坦化スワップ
+        // 1. 各フロア内での平準化
         floors.forEach(fl => {
             const floorStaff = [];
             for (let s = 0; s < this.numStaff; s++) {
@@ -1508,27 +1524,29 @@ class ShiftScheduler {
             }
             if (floorStaff.length <= 1) return;
 
-            for (let iter = 0; iter < 150; iter++) {
+            for (let iter = 0; iter < 100; iter++) {
                 let improved = false;
+                // 日別出勤数を計算
                 const dailyLoads = [];
                 for (let d = 0; d < this.numDays; d++) {
-                    let realLoad = 0;
+                    let cnt = 0;
                     floorStaff.forEach(s => {
-                        realLoad += this.getStaffRealWorkAmt(s, this.grid[s][d].symbol);
+                        if (isWorkSymbol(this.grid[s][d].symbol)) cnt++;
                     });
-                    dailyLoads.push({ d, realLoad });
+                    dailyLoads.push({ d, cnt });
                 }
-                dailyLoads.sort((a, b) => b.realLoad - a.realLoad);
+                dailyLoads.sort((a, b) => b.cnt - a.cnt);
 
                 const maxDay = dailyLoads[0];
                 const minDay = dailyLoads[dailyLoads.length - 1];
-                if (maxDay.realLoad - minDay.realLoad <= 0.51) break; // 実数差0.5以下なら完了
+                if (maxDay.cnt - minDay.cnt <= 1) break; // ブレ幅が1名以内なら完璧
 
+                // maxDay に○で、minDay に休のスタッフを探してスワップ
                 for (const s of floorStaff) {
                     if (this.grid[s][maxDay.d].isFixed || this.grid[s][minDay.d].isFixed) continue;
-                    if (!isWorkSymbol(this.grid[s][maxDay.d].symbol) || !isFullOffSymbol(this.grid[s][minDay.d].symbol)) continue;
+                    if (this.grid[s][maxDay.d].symbol !== SYMBOLS.WORK || this.grid[s][minDay.d].symbol !== SYMBOLS.OFF) continue;
 
-                    // スケジュール担当スタッフの出勤担保
+                    // スケ可スタッフの場合、maxDay を休にしてもスケ可が残るか
                     if (this.staffList[s].canSched) {
                         let remSched = 0;
                         floorStaff.forEach(oS => {
@@ -1537,81 +1555,79 @@ class ShiftScheduler {
                         if (remSched < 1) continue;
                     }
 
-                    const origMaxSym = this.grid[s][maxDay.d].symbol;
-                    const origMinSym = this.grid[s][minDay.d].symbol;
-
-                    this.setSymbol(s, maxDay.d, origMinSym, false);
-                    this.setSymbol(s, minDay.d, origMaxSym, false);
+                    // スワップ試行
+                    this.setSymbol(s, maxDay.d, SYMBOLS.OFF, false);
+                    this.setSymbol(s, minDay.d, SYMBOLS.WORK, false);
 
                     if (this.isStaffHardValid(s)) {
                         improved = true;
                         break;
                     } else {
-                        this.setSymbol(s, maxDay.d, origMaxSym, false);
-                        this.setSymbol(s, minDay.d, origMinSym, false);
+                        this.setSymbol(s, maxDay.d, SYMBOLS.WORK, false);
+                        this.setSymbol(s, minDay.d, SYMBOLS.OFF, false);
                     }
                 }
                 if (!improved) break;
             }
         });
 
-        // 2. ST全社（4フロア合計）の日別出勤実数平坦化
-        for (let iter = 0; iter < 200; iter++) {
+        // 2. 4フロア合計出勤人数の平準化（各フロア2〜3名出勤を維持したまま、全体出勤を11〜12名に収束）
+        for (let iter = 0; iter < 120; iter++) {
             let improved = false;
             const dailyTotals = [];
             for (let d = 0; d < this.numDays; d++) {
-                let realLoad = 0;
+                let cnt = 0;
                 for (let s = 0; s < this.numStaff; s++) {
-                    if (!this.staffList[s].isUnused) {
-                        realLoad += this.getStaffRealWorkAmt(s, this.grid[s][d].symbol);
-                    }
+                    if (!this.staffList[s].isUnused && isWorkSymbol(this.grid[s][d].symbol)) cnt++;
                 }
-                dailyTotals.push({ d, realLoad });
+                dailyTotals.push({ d, cnt });
             }
-            dailyTotals.sort((a, b) => b.realLoad - a.realLoad);
+            dailyTotals.sort((a, b) => b.cnt - a.cnt);
 
             const highD = dailyTotals[0];
             const lowD = dailyTotals[dailyTotals.length - 1];
-            if (highD.realLoad - lowD.realLoad <= 0.51) break; // 全社実数差0.5以下なら完了
+            if (highD.cnt - lowD.cnt <= 1) break;
 
             for (let s = 0; s < this.numStaff; s++) {
                 if (this.staffList[s].isUnused) continue;
                 if (this.grid[s][highD.d].isFixed || this.grid[s][lowD.d].isFixed) continue;
-                if (!isWorkSymbol(this.grid[s][highD.d].symbol) || !isFullOffSymbol(this.grid[s][lowD.d].symbol)) continue;
+                if (this.grid[s][highD.d].symbol !== SYMBOLS.WORK || this.grid[s][lowD.d].symbol !== SYMBOLS.OFF) continue;
 
                 const fl = this.staffList[s].floor;
 
-                // フロア出勤実数の下限担保（極端な減員を防止）
-                let floorLoadHigh = 0;
+                // フロア出勤人数の範囲チェック（2〜3名を維持）
+                let flWorkHigh = 0;
+                let flWorkLow = 0;
                 for (let oS = 0; oS < this.numStaff; oS++) {
                     if (oS !== s && !this.staffList[oS].isUnused && this.staffList[oS].floor === fl) {
-                        floorLoadHigh += this.getStaffRealWorkAmt(oS, this.grid[oS][highD.d].symbol);
+                        if (isWorkSymbol(this.grid[oS][highD.d].symbol)) flWorkHigh++;
+                    }
+                    if (!this.staffList[oS].isUnused && this.staffList[oS].floor === fl) {
+                        if (isWorkSymbol(this.grid[oS][lowD.d].symbol)) flWorkLow++;
                     }
                 }
-                if (floorLoadHigh < 1.5) continue;
+                if (flWorkHigh < 2 || flWorkLow >= 3) continue;
 
+                // スケ可保護
                 if (this.staffList[s].canSched) {
                     let remSched = 0;
                     for (let oS = 0; oS < this.numStaff; oS++) {
-                        if (oS !== s && !this.staffList[oS].isUnused && this.staffList[oS].floor === fl && this.staffList[oS].canSched && isWorkSymbol(this.grid[oS][highD.d].symbol)) {
-                            remSched++;
+                        if (oS !== s && !this.staffList[oS].isUnused && this.staffList[oS].floor === fl && this.staffList[oS].canSched) {
+                            if (isWorkSymbol(this.grid[oS][highD.d].symbol)) remSched++;
                         }
                     }
                     if (remSched < 1) continue;
                 }
 
-                const origHighSym = this.grid[s][highD.d].symbol;
-                const origLowSym = this.grid[s][lowD.d].symbol;
-
-                this.setSymbol(s, highD.d, origLowSym, false);
-                this.setSymbol(s, lowD.d, origHighSym, false);
+                this.setSymbol(s, highD.d, SYMBOLS.OFF, false);
+                this.setSymbol(s, lowD.d, SYMBOLS.WORK, false);
 
                 if (this.isStaffHardValid(s)) {
                     improved = true;
                     break;
                 } else {
-                    this.setSymbol(s, highD.d, origHighSym, false);
-                    this.setSymbol(s, lowD.d, origLowSym, false);
+                    this.setSymbol(s, highD.d, SYMBOLS.WORK, false);
+                    this.setSymbol(s, lowD.d, SYMBOLS.OFF, false);
                 }
             }
             if (!improved) break;
@@ -1835,7 +1851,7 @@ class ShiftScheduler {
      */
     solveBaseSchedule(options = {}) {
         if (this.isST) {
-            return this.solveST(Object.assign({}, options, { assignSpecial: true }));
+            return this.solveST(Object.assign({}, options, { assignSpecial: false }));
         }
         if (this.isLife) {
             return this.solveLife(options);
@@ -1912,10 +1928,12 @@ class ShiftScheduler {
             }
         }
 
-        // ステップ1: 8時勤務（1名/日）を優先配置！（南病棟含む全通常病棟で毎日1名必須配置）
-        const h8Result = this.assign8ClockDuties(options);
-        if (!h8Result.success && !force) {
-            return h8Result;
+        // ステップ1: 8時勤務（1名/日）を優先配置！（8時可フラグのある貴重なスタッフから均等に選出。南病棟は8時不要）
+        if (!this.isSouth) {
+            const h8Result = this.assign8ClockDuties(options);
+            if (!h8Result.success && !force) {
+                return h8Result;
+            }
         }
 
         // ステップ2: 毎日の特殊勤務（遅1, E2, 早3）を配置し、翌日を自動的に「休」に設定
@@ -2004,19 +2022,52 @@ class ShiftScheduler {
 
             let requirements = [];
             if (this.isSouth) {
-                // 南病棟最新仕様:
-                // ・遅: 南2に1名、南3に1名、合計2名
-                // ・E: 南2に1名、南3に1名、合計2名
-                // ・早: 南2に1名、南3に1名、合計2名（ST早番とは完全独立・毎日確実にPOから2名配置）
+                // 南病棟特殊ルール:
+                // ・遅: 南2に1名、南3に1名ずつだけ配置、合計2名
+                // ・E: 南2に1名、南3に1名ずつだけ配置、合計2名
+                // ・早: 南2に1名、南3に1名ずつだけ配置、合計2名（ST早番は南2または南3どちらにカウントしてもOK）
                 requirements = [
                     { type: SYMBOLS.LATE, count: 1, targetFloor: '南2', label: '南2遅番', key: 'late', noFlag: 'noLate', matchSyms: [SYMBOLS.LATE] },
                     { type: SYMBOLS.LATE, count: 1, targetFloor: '南3', label: '南3遅番', key: 'late', noFlag: 'noLate', matchSyms: [SYMBOLS.LATE] },
                     { type: SYMBOLS.EVE, count: 1, targetFloor: '南2', label: '南2イブニング(E)', key: 'eve', noFlag: 'noEve', matchSyms: [SYMBOLS.EVE] },
-                    { type: SYMBOLS.EVE, count: 1, targetFloor: '南3', label: '南3イブニング(E)', key: 'eve', noFlag: 'noEve', matchSyms: [SYMBOLS.EVE] },
-                    { type: SYMBOLS.EARLY, count: 1, targetFloor: '南2', label: '南2早番', key: 'early', noFlag: 'noEarly', matchSyms: [SYMBOLS.EARLY] },
-                    { type: SYMBOLS.EARLY, count: 1, targetFloor: '南3', label: '南3早番', key: 'early', noFlag: 'noEarly', matchSyms: [SYMBOLS.EARLY] }
+                    { type: SYMBOLS.EVE, count: 1, targetFloor: '南3', label: '南3イブニング(E)', key: 'eve', noFlag: 'noEve', matchSyms: [SYMBOLS.EVE] }
                 ];
-            
+
+                const rawStEarly = (this.stDailyEarly && this.stDailyEarly[d]) ? this.stDailyEarly[d] : 0;
+                const effectiveStEarly = Math.min(1, rawStEarly);
+                if (effectiveStEarly === 1) {
+                    // ST早番がある場合（最大1名充当）: 南2または南3のどちらか一方にSTを充当し、もう一方にPO早番1名を必ず配置！
+                    let s2HasEarly = false, s3HasEarly = false;
+                    for (let s = 0; s < this.numStaff; s++) {
+                        if (this.staffList[s].isUnused) continue;
+                        if (this.grid[s][d].symbol === SYMBOLS.EARLY) {
+                            if (getSubFloor(s) === '南2') s2HasEarly = true;
+                            if (getSubFloor(s) === '南3') s3HasEarly = true;
+                        }
+                    }
+                    if (s2HasEarly && s3HasEarly) {
+                        // 両方に事前PO早番希望がある場合
+                        requirements.push({ type: SYMBOLS.EARLY, count: 1, targetFloor: '南2', label: '南2早番', key: 'early', noFlag: 'noEarly', matchSyms: [SYMBOLS.EARLY] });
+                        requirements.push({ type: SYMBOLS.EARLY, count: 1, targetFloor: '南3', label: '南3早番', key: 'early', noFlag: 'noEarly', matchSyms: [SYMBOLS.EARLY] });
+                    } else if (s2HasEarly && !s3HasEarly) {
+                        // 南2に既にPO早番があるため、ST早番は南3に充当（南2にPO早番1名要求）
+                        requirements.push({ type: SYMBOLS.EARLY, count: 1, targetFloor: '南2', label: '南2早番', key: 'early', noFlag: 'noEarly', matchSyms: [SYMBOLS.EARLY] });
+                    } else if (s3HasEarly && !s2HasEarly) {
+                        // 南3に既にPO早番があるため、ST早番は南2に充当（南3にPO早番1名要求）
+                        requirements.push({ type: SYMBOLS.EARLY, count: 1, targetFloor: '南3', label: '南3早番', key: 'early', noFlag: 'noEarly', matchSyms: [SYMBOLS.EARLY] });
+                    } else {
+                        // どちらも事前希望なしの場合: 交互に割り当てて、もう片方にPO早番1名を配置
+                        if (d % 2 === 0) {
+                            requirements.push({ type: SYMBOLS.EARLY, count: 1, targetFloor: '南2', label: '南2早番', key: 'early', noFlag: 'noEarly', matchSyms: [SYMBOLS.EARLY] });
+                        } else {
+                            requirements.push({ type: SYMBOLS.EARLY, count: 1, targetFloor: '南3', label: '南3早番', key: 'early', noFlag: 'noEarly', matchSyms: [SYMBOLS.EARLY] });
+                        }
+                    }
+                } else {
+                    // ST早番なし: 南2に1名、南3に1名
+                    requirements.push({ type: SYMBOLS.EARLY, count: 1, targetFloor: '南2', label: '南2早番', key: 'early', noFlag: 'noEarly', matchSyms: [SYMBOLS.EARLY] });
+                    requirements.push({ type: SYMBOLS.EARLY, count: 1, targetFloor: '南3', label: '南3早番', key: 'early', noFlag: 'noEarly', matchSyms: [SYMBOLS.EARLY] });
+                }
             } else {
                 // 1階・2階・3階: PT早＋OT早＋ST早の合計が3つ（遅は1、Eは2）
                 // 同階所属のSTスタッフ特殊勤務がある場合、PO必要枠から差し引いて合計定数を厳格維持！
@@ -3615,7 +3666,7 @@ class ShiftScheduler {
      * ステップ2: 8時勤務（毎日1名）の配置（限定リソースを最優先で割り当て）
      */
     assign8ClockDuties(options = {}) {
-        // 南病棟も1F〜3Fと同様に通常病棟として毎日1名8時勤務を必ず配置！
+        if (this.isSouth) return { success: true };
         const force = options && options.force === true;
         const counts = new Array(this.numStaff).fill(0);
         const lastAssignedDay = new Array(this.numStaff).fill(-10);
@@ -4996,9 +5047,21 @@ class ShiftScheduler {
                     const s2Eve   = s2Staff.filter(s => this.grid[s][d].symbol === SYMBOLS.EVE).length;
                     const s3Eve   = s3Staff.filter(s => this.grid[s][d].symbol === SYMBOLS.EVE).length;
 
-                    const earlyValid = (s2Early === 1 && s3Early === 1);
+                    let stEarlyCount = 0;
+                    if (this.stDailyEarly && this.stDailyEarly[d]) {
+                        stEarlyCount = this.stDailyEarly[d];
+                    }
+                    const effectiveStEarly = Math.min(1, stEarlyCount);
+
+                    let earlyValid = false;
+                    if (effectiveStEarly === 0) {
+                        earlyValid = (s2Early === 1 && s3Early === 1);
+                    } else {
+                        // ST早番が1名以上の場合: STをどちらかに充当し、もう一方にPO早番1名
+                        earlyValid = (s2Early === 1 && s3Early === 0) || (s2Early === 0 && s3Early === 1);
+                    }
                     if (!earlyValid) {
-                        errors.push(`【${dateLabel}】南病棟早番要件を満たしていません（南2に1名、南3に1名、計2名。現状: 南2=${s2Early}名, 南3=${s3Early}名）。`);
+                        errors.push(`【${dateLabel}】南病棟早番要件を満たしていません（南2に1名、南3に1名。ST早番含めて計2名。現況: 南2=${s2Early}名, 南3=${s3Early}名, ST=${stEarlyCount}名）。`);
                     }
                     if (s2Late !== 1 || s3Late !== 1) {
                         errors.push(`【${dateLabel}】南病棟遅番要件を満たしていません（南2に1名、南3に1名。現況: 南2=${s2Late}名, 南3=${s3Late}名）。`);
@@ -5636,31 +5699,61 @@ function validateScheduleGrid(grid, staffList, options = {}) {
                 const s2Eve   = s2Staff.filter(s => getSym(s, d) === SYMBOLS.EVE).length;
                 const s3Eve   = s3Staff.filter(s => getSym(s, d) === SYMBOLS.EVE).length;
 
+                let stEarlyCount = 0;
+                const effectiveStData = options.stStaffData || options.linkedStStaffData;
+                if (effectiveStData && effectiveStData.staffList) {
+                    effectiveStData.staffList.forEach((st, stIdx) => {
+                        if (!st.isUnused) {
+                            const stRow = (effectiveStData.grid && effectiveStData.grid[stIdx]) ? effectiveStData.grid[stIdx] : (st.days || []);
+                            const c = stRow[d] || { symbol: '' };
+                            const sSym = (c && typeof c === 'object') ? c.symbol : (c || '');
+                            if (sSym === SYMBOLS.EARLY) stEarlyCount++;
+                        }
+                    });
+                }
+                if (stEarlyCount > 1) {
+                    const reason = `${dateLabel}の南病棟所属ST早番が${stEarlyCount}名です（同日2名は希望以外NG）`;
+                    errors.push(`【${dateLabel}】${reason}。`);
+                    conflictCells.push({ dayIndex: d, footerStat: 'early', reason: reason });
+                }
+
                 if (isFinal) {
-                    // 南病棟最新仕様: 早番は南2に1名、南3に1名、計2名（POから確実に配置。ST早番とは完全独立）
-                    const earlyValid = (s2Early === 1 && s3Early === 1);
+                    // 早番チェック（南2に1名、南3に1名。ST早番は南2または南3どちらにカウントしてもOK。充当は最大1名で、もう一方はPOから必ず1名出す）
+                    let earlyValid = false;
+                    if (stEarlyCount === 0) {
+                        earlyValid = (s2Early === 1 && s3Early === 1);
+                    } else {
+                        // ST早番が1名以上の場合: STをどちらかに充当し、もう一方にPOが1名
+                        earlyValid = (s2Early === 1 && s3Early === 0) || (s2Early === 0 && s3Early === 1);
+                    }
                     if (!earlyValid) {
-                        const reason = `${dateLabel}の南病棟早番要件を満たしていません（南2に1名、南3に1名、計2名。現状: 南2=${s2Early}名, 南3=${s3Early}名）`;
+                        const reason = `${dateLabel}の南病棟早番要件を満たしていません（南2に1名、南3に1名。ST早番含めて計2名。現況: 南2=${s2Early}名, 南3=${s3Early}名, ST=${stEarlyCount}名）`;
                         errors.push(`【${dateLabel}】${reason}。`);
                         conflictCells.push({ dayIndex: d, footerStat: 'early', reason: reason });
                     }
                     if (s2Late !== 1 || s3Late !== 1) {
-                        const reason = `${dateLabel}の南病棟遅番要件を満たしていません（南2に1名、南3に1名。現状: 南2=${s2Late}名, 南3=${s3Late}名）`;
+                        const reason = `${dateLabel}の南病棟遅番要件を満たしていません（南2に1名、南3に1名。現況: 南2=${s2Late}名, 南3=${s3Late}名）`;
                         errors.push(`【${dateLabel}】${reason}。`);
                         conflictCells.push({ dayIndex: d, footerStat: 'late', reason: reason });
                     }
                     if (s2Eve !== 1 || s3Eve !== 1) {
-                        const reason = `${dateLabel}の南病棟E番要件を満たしていません（南2に1名、南3に1名。現状: 南2=${s2Eve}名, 南3=${s3Eve}名）`;
+                        const reason = `${dateLabel}の南病棟E番要件を満たしていません（南2に1名、南3に1名。現況: 南2=${s2Eve}名, 南3=${s3Eve}名）`;
                         errors.push(`【${dateLabel}】${reason}。`);
                         conflictCells.push({ dayIndex: d, footerStat: 'eve', reason: reason });
                     }
                 } else {
-                    // 修正作業エリア: 全日0名は許容するが、既に特殊勤務が入っている日での不足または超過は指摘・網掛け
-                    const totalEarlyToday = s2Early + s3Early;
+                    // 修正作業エリア: 全日0名は許容するが、既に特殊勤務が入っている日での不足または超過は指摘＆網掛け
+                    const totalEarlyToday = s2Early + s3Early + stEarlyCount;
                     if (totalEarlyToday > 0) {
-                        const earlyValid = (s2Early === 1 && s3Early === 1);
+                        let earlyValid = false;
+                        if (stEarlyCount === 0) {
+                            earlyValid = (s2Early === 1 && s3Early === 1);
+                        } else {
+                            // ST早番が1名以上の場合: STをどちらかに充当し、もう一方にPOが1名
+                            earlyValid = (s2Early === 1 && s3Early === 0) || (s2Early === 0 && s3Early === 1);
+                        }
                         if (!earlyValid) {
-                            const reason = `${dateLabel}の南病棟早番要件を満たしていません（南2に1名、南3に1名、計2名。現状: 南2=${s2Early}名, 南3=${s3Early}名）`;
+                            const reason = `${dateLabel}の南病棟早番要件を満たしていません（南2に1名、南3に1名。ST早番含めて計2名。現況: 南2=${s2Early}名, 南3=${s3Early}名, ST=${stEarlyCount}名）`;
                             errors.push(`【${dateLabel}】${reason}。`);
                             conflictCells.push({ dayIndex: d, footerStat: 'early', reason: reason });
                         }
@@ -5684,8 +5777,7 @@ function validateScheduleGrid(grid, staffList, options = {}) {
                 }
             } else {
                 // 1階〜3階: PT+OT+ST合算で早3, 遅1, E2, 8時1
-                // ★ STはPOと異なり「8時」「遅」「E」は不要（絶対に合算しない。早番「早」のみ合算）
-                let stEarlyCount = 0;
+                let stEarlyCount = 0, stLateCount = 0, stEveCount = 0, stH8Count = 0;
                 const effectiveStData = options.stStaffData || options.linkedStStaffData;
                 if (effectiveStData && effectiveStData.staffList) {
                     effectiveStData.staffList.forEach((st, stIdx) => {
@@ -5693,14 +5785,17 @@ function validateScheduleGrid(grid, staffList, options = {}) {
                             const stRow = (effectiveStData.grid && effectiveStData.grid[stIdx]) ? effectiveStData.grid[stIdx] : (st.days || []);
                             const c = stRow[d] || { symbol: '' };
                             const sSym = (c && typeof c === 'object') ? c.symbol : (c || '');
-                            if (sSym === SYMBOLS.EARLY || sSym === '早') stEarlyCount++;
+                            if (sSym === SYMBOLS.EARLY) stEarlyCount++;
+                            if (sSym === SYMBOLS.LATE) stLateCount++;
+                            if (sSym === SYMBOLS.EVE) stEveCount++;
+                            if (sSym === SYMBOLS.H8) stH8Count++;
                         }
                     });
                 }
                 const totalEarly = earlyCount + stEarlyCount;
-                const totalLate = lateCount; // STは遅番なし（POから1名）
-                const totalEve = eveCount;   // STはEなし（POから2名）
-                const totalH8 = h8Count;     // STは8時なし（POから1名）
+                const totalLate = lateCount + stLateCount;
+                const totalEve = eveCount + stEveCount;
+                const totalH8 = h8Count + stH8Count;
 
                 if (isFinal) {
                     // 最終チェック＆完成: 完全充足を厳格チェック（ハヤ・オソ・イブはカウントしない）

@@ -14,7 +14,7 @@ document.addEventListener('DOMContentLoaded', () => {
     // ★ 正規13ターム定義 ＆ セレクター制御
     // ==========================================
     function generateAllTerms() {
-        const years = [2026, 2027];
+        const years = [2025, 2026, 2027];
         const allTerms = [];
 
         years.forEach(year => {
@@ -218,7 +218,6 @@ document.addEventListener('DOMContentLoaded', () => {
                 };
             });
             window.localStorage.setItem(STORAGE_KEY_STAFF_MASTER, JSON.stringify(masterList));
-            if (typeof scheduleCloudSync === "function") scheduleCloudSync();
         } catch (e) {
             console.error('スタッフマスターの保存に失敗:', e);
         }
@@ -253,15 +252,6 @@ document.addEventListener('DOMContentLoaded', () => {
                 enforceRoleExclusivity(staffList[idx]);
             }
         });
-        // 生活期の場合、スタッフ01〜04番（管理トグル）のONを恒久復元・保証
-        if (isLife) {
-            for (let k = 0; k <= 3; k++) {
-                if (staffList[k] && (!staffList[k].lifeSection || staffList[k].lifeSection === '')) {
-                    staffList[k].lifeSection = '管理';
-                    staffList[k].isZeroCount = true;
-                }
-            }
-        }
         if (staffList.length > NUM_STAFF) {
             staffList = staffList.slice(0, NUM_STAFF);
         }
@@ -271,34 +261,13 @@ document.addEventListener('DOMContentLoaded', () => {
     function loadStaffMaster() {
         try {
             let raw = window.localStorage.getItem(STORAGE_KEY_STAFF_MASTER);
-            if (!raw && !isST && !isLife) {
+            if (!raw && !isST) {
                 // 旧キーからのフォールバック救済（※ STは他病棟キーと混同しないようフォールバック禁止）
                 raw = window.localStorage.getItem('shift_schedule_staff_master');
             }
-            if (!raw) {
-                if (isLife) {
-                    // 生活期の初期スタッフマスターを自動構築・保存
-                    saveStaffMaster();
-                }
-                return false;
-            }
+            if (!raw) return false;
             const masterList = JSON.parse(raw);
-            const res = applyMasterArrayToStaffList(masterList);
-            if (isLife) {
-                // 生活期のスタッフ01〜04に管理トグルがONになっているか最終検証・補正
-                let modified = false;
-                for (let k = 0; k <= 3; k++) {
-                    if (staffList[k] && staffList[k].lifeSection !== '管理') {
-                        staffList[k].lifeSection = '管理';
-                        staffList[k].isZeroCount = true;
-                        modified = true;
-                    }
-                }
-                if (modified) {
-                    saveStaffMaster();
-                }
-            }
-            return res;
+            return applyMasterArrayToStaffList(masterList);
         } catch (e) {
             console.error('スタッフマスターの読込に失敗:', e);
             return false;
@@ -382,8 +351,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const isLife = !!appConfig.isLife || (appConfig.deptId === 'life' || appConfig.deptId === 'life_admin');
     const isSouth = (appConfig.floor === '南' || appConfig.deptId === 'south');
     const currentFloor = appConfig.floor || (appConfig.deptId === '1f' ? '1F' : (appConfig.deptId === '2f' ? '2F' : (appConfig.deptId === '3f' ? '3F' : (appConfig.deptId === 'south' ? '南' : (isLife ? '生活期' : '')))));
-    const effectiveDeptId = (appConfig.deptId === 'life_admin') ? 'life' : (appConfig.deptId || 'master');
-    const deptPrefix = effectiveDeptId ? `${effectiveDeptId}_` : '';
+    const deptPrefix = appConfig.deptId ? `${appConfig.deptId}_` : '';
     // ★ スタッフ数上限: STは36名、生活期は45名（46人目以降不要）、通常病棟POは60名
     const NUM_STAFF = isST ? 36 : (isLife ? 45 : 60);
     let NUM_DAYS = 28;
@@ -468,7 +436,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 staffList.push({
                     id: i,
                     name: `ST ${String(i).padStart(2, '0')}`,
-                    isUnused: (i > 16 || !floor), // 17〜36番目およびフロア未設定は確実に不使用（不要）
+                    isUnused: (i > 16),      // 17〜36番目は初期状態で不使用
                     floor: floor,           // '1F', '2F', '3F', '南' (択一)
                     section: '',
                     can8: false,
@@ -493,15 +461,14 @@ document.addEventListener('DOMContentLoaded', () => {
                     days: new Array(NUM_DAYS).fill('')
                 });
             } else {
-                // 通常のPT/OTスタッフ初期化（生活期初期値：01〜04番は管理トグルON、41〜44番は各病棟応援ハ1〜ハ4）
+                // 通常のPT/OTスタッフ初期化（生活期初期値：41〜44番は各病棟応援ハ1〜ハ4）
                 const isDefaultHa1 = isLife && (i === 41);
                 const isDefaultHa2 = isLife && (i === 42);
                 const isDefaultHa3 = isLife && (i === 43);
                 const isDefaultHa4 = isLife && (i === 44);
-                const isDefaultLifeManage = isLife && (i >= 1 && i <= 4);
                 const defaultHaSec = isDefaultHa1 ? 'ハ1' : (isDefaultHa2 ? 'ハ2' : (isDefaultHa3 ? 'ハ3' : (isDefaultHa4 ? 'ハ4' : '')));
-                const defaultLifeSec = isDefaultLifeManage ? '管理' : '';
                 const defaultStaffName = defaultHaSec ? `${defaultHaSec} スタッフ` : `スタッフ ${String(i).padStart(2, '0')}`;
+
                 staffList.push({
                     id: i,
                     name: defaultStaffName,
@@ -517,9 +484,9 @@ document.addEventListener('DOMContentLoaded', () => {
                     isChief: (i === 2 || i === 3),       // ★ 主任（係長不在時に1名以上出勤）
                     isSubChief: (i === 4 || i === 5),    // ★ 副主任（係長主任不在時A1名B1名出勤）
                     isHalf: false,                       // ★ 0.5（出勤実数を0.5人換算）
-                    isZeroCount: isDefaultLifeManage ? true : false, // ★ 管理トグルON時は0人換算
+                    isZeroCount: false,                  // ★ 0（出勤実数を0人換算）
                     isFirstYear: false,                  // ★ 1年目
-                    lifeSection: defaultLifeSec,         // ★ 生活期セクション（01〜04は管理）
+                    lifeSection: '',                     // ★ 生活期セクション
                     haSection: defaultHaSec,             // ★ ハセクション（ハ1〜ハ4）
                     jobTitle: '',                        // ★ 職種（PT/OT/ST）
                     isFullTime: (i <= 10),               // ★ 専従
@@ -591,7 +558,7 @@ document.addEventListener('DOMContentLoaded', () => {
         }
         isCloudSyncInFlight = true;
         try {
-            const deptId = (appConfig && appConfig.deptId === 'life_admin') ? 'life' : ((appConfig && appConfig.deptId) ? appConfig.deptId : 'master');
+            const deptId = (appConfig && appConfig.deptId) ? appConfig.deptId : 'master';
             const masterRaw = localStorage.getItem(STORAGE_KEY_STAFF_MASTER);
             const staffMaster = masterRaw ? JSON.parse(masterRaw) : null;
             const curDate = document.getElementById('termStartDate')?.value || currentWorkingStartDate || '2026-04-01';
@@ -623,7 +590,6 @@ document.addEventListener('DOMContentLoaded', () => {
             const resp = await fetch('/api/cloud_sync', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                keepalive: true,
                 body: JSON.stringify({
                     deptId,
                     staffMaster,
@@ -663,12 +629,12 @@ document.addEventListener('DOMContentLoaded', () => {
             return false;
         }
         try {
-            const deptId = (appConfig && appConfig.deptId === 'life_admin') ? 'life' : ((appConfig && appConfig.deptId) ? appConfig.deptId : 'master');
+            const deptId = (appConfig && appConfig.deptId) ? appConfig.deptId : 'master';
             setCloudStatusBadge('syncing', '☁️ クラウド同期中...');
 
             // ★ マスターテーブルの場合: 全病棟(1f, 2f, 3f, south, st)の最新クラウドデータも一括取得してLocalStorageを最新化！
             if (isMaster) {
-                const subDepts = ['1f', '2f', '3f', 'south', 'st', 'life'];
+                const subDepts = ['1f', '2f', '3f', 'south', 'st'];
                 await Promise.allSettled(subDepts.map(async subId => {
                     try {
                         const r = await fetch(`/api/cloud_sync?deptId=${encodeURIComponent(subId)}&t=${Date.now()}`, { cache: 'no-store' });
@@ -677,35 +643,16 @@ document.addEventListener('DOMContentLoaded', () => {
                         const subCloud = j && (j.cloudState || j.data);
                         if (subCloud && subCloud.terms && typeof subCloud.terms === 'object') {
                             Object.keys(subCloud.terms).forEach(tDate => {
-                                if (!subCloud.terms[tDate] || tDate.startsWith('2025-')) return;
-                                const localKey = `shift_schedule_${subId}_term_${tDate}`;
-                                const localRaw = window.localStorage.getItem(localKey);
-                                if (localRaw) {
-                                    try {
-                                        const localData = JSON.parse(localRaw);
-                                        // ローカルに既に勤務表（outputGrid）があり、クラウド側がnull/空の場合は絶対に上書きしない！
-                                        // 実勤務記号の有無を厳密判定
-                                        const checkHasRealWork = (g) => Array.isArray(g) && g.some(row => Array.isArray(row) && row.some(cell => { const s = (cell && cell.symbol) ? cell.symbol : (cell || ''); return s && s.trim() !== ''; }));
-                                        const localHasRealWork = checkHasRealWork(localData.outputGrid);
-                                        const cloudHasRealWork = checkHasRealWork(subCloud.terms[tDate].outputGrid);
-                                        if (localHasRealWork && !cloudHasRealWork) {
-                                            return; // クラウド側が空ならローカルの完成勤務表を絶対保護
-                                        }
-                                        const localTime = new Date(localData.updatedAt || 0).getTime();
-                                        const cloudTime = new Date(subCloud.terms[tDate].updatedAt || 0).getTime();
-                                        if (localTime > cloudTime && localHasRealWork) {
-                                            return; // ローカルが新しく完成しているため上書き遮断
-                                        }
-                                    } catch (e) {}
+                                if (subCloud.terms[tDate]) {
+                                    window.localStorage.setItem(`shift_schedule_${subId}_term_${tDate}`, JSON.stringify(subCloud.terms[tDate]));
                                 }
-                                window.localStorage.setItem(localKey, JSON.stringify(subCloud.terms[tDate]));
                             });
                         }
                     } catch (e) {
                         // オフラインまたは通信失敗時はローカルキャッシュをそのまま維持
                     }
                 }));
-            } else if (!isST && !isLife && currentFloor && currentFloor !== '生活') {
+            } else if (!isST && currentFloor) {
                 // ★ 各病棟テーブル（1F, 2F, 3F, 南）の場合:
                 // 1) ST専用テーブルの最新クラウドデータを自動取得してLocalStorageを同期！
                 try {
@@ -715,52 +662,17 @@ document.addEventListener('DOMContentLoaded', () => {
                         const stCloud = j && (j.cloudState || j.data);
                         if (stCloud && stCloud.terms && typeof stCloud.terms === 'object') {
                             Object.keys(stCloud.terms).forEach(tDate => {
-                                const cloudTerm = stCloud.terms[tDate];
-                                if (!cloudTerm || tDate.startsWith('2025-')) return;
-                                const localStKey = `shift_schedule_st_term_${tDate}`;
-                                const localRaw = window.localStorage.getItem(localStKey);
-                                if (localRaw) {
-                                    try {
-                                        const localData = JSON.parse(localRaw);
-                                        const localHasOutput = !!(localData && localData.outputGrid && Array.isArray(localData.outputGrid) && localData.outputGrid.length > 0 && localData.outputGrid.some(r => r && r.some(c => (c.symbol || c) !== '')));
-                                        const cloudHasOutput = !!(cloudTerm.outputGrid && Array.isArray(cloudTerm.outputGrid) && cloudTerm.outputGrid.length > 0 && cloudTerm.outputGrid.some(r => r && r.some(c => (c.symbol || c) !== '')));
-                                        if (localHasOutput && !cloudHasOutput) {
-                                            return; // クラウドが空ならローカルのST勤務表を厳格保護
-                                        }
-                                        const localTime = new Date(localData.updatedAt || 0).getTime();
-                                        const cloudTime = new Date(cloudTerm.updatedAt || 0).getTime();
-                                        if (localTime > cloudTime && localHasOutput) {
-                                            return; // ローカルのSTデータが新しければ上書き遮断
-                                        }
-                                    } catch(e) {}
+                                if (stCloud.terms[tDate]) {
+                                    window.localStorage.setItem(`shift_schedule_st_term_${tDate}`, JSON.stringify(stCloud.terms[tDate]));
                                 }
-                                window.localStorage.setItem(localStKey, JSON.stringify(cloudTerm));
                             });
                             loadLinkedSTData(currentWorkingStartDate);
                             loadLinkedLifeData(currentWorkingStartDate);
-                            // ★ STデータ同期完了直後に、病棟テーブルの集計・ST行を即時更新再描画！
-                            if (lastScheduler) {
-                                lastScheduler.stDailyWork = getLinkedSTDailyWork();
-                                lastScheduler.stDailyHeadCount = getLinkedSTDailyHeadCount();
-                                lastScheduler.stDailyFtWork = getLinkedSTDailyFtWork();
-                                lastScheduler.stDailyEarly = getLinkedSTDailyEarly();
-                                lastScheduler.stDailyLate = getLinkedSTDailyLate();
-                                lastScheduler.stDailyEve = getLinkedSTDailyEve();
-                                lastScheduler.stFloorFtCount = getLinkedSTFloorFtCount();
-                            }
-                            const curGrid = (lastSolveResult && lastSolveResult.grid) || (lastScheduler && lastScheduler.grid);
-                            if (curGrid) {
-                                const newStats = lastScheduler ? lastScheduler.calculateStats(curGrid) : null;
-                                renderOutputTable(curGrid, newStats);
-                                if (newStats) renderStatsDashboard(newStats);
-                            }
-                            renderInputTable();
                         }
                     }
                 } catch (e) {}
-            }
 
-            if (!isMaster && !isST && !isLife) {
+                // 2) 全体マスター(master)の最新クラウドデータも取得し、共通スタッフマスタ(トグル・役職・セクション)を同期！
                 try {
                     const rMaster = await fetch(`/api/cloud_sync?deptId=master&t=${Date.now()}`, { cache: 'no-store' });
                     if (rMaster.ok) {
@@ -768,22 +680,14 @@ document.addEventListener('DOMContentLoaded', () => {
                         const mCloud = jMaster && (jMaster.cloudState || jMaster.data);
                         if (mCloud && Array.isArray(mCloud.staffMaster) && mCloud.staffMaster.length > 0) {
                             const curLocalMaster = window.localStorage.getItem(STORAGE_KEY_STAFF_MASTER);
-                            let localHasSettings = false;
+                            let needMasterSync = !curLocalMaster;
                             if (curLocalMaster) {
                                 try {
                                     const lList = JSON.parse(curLocalMaster);
-                                    if (Array.isArray(lList) && lList.length > 0) {
-                                        localHasSettings = lList.some(s => 
-                                            s.isUnused || s.can8 || s.noEarly || s.noLate || s.noEve ||
-                                            s.canSched || s.isSectionChief || s.isChief || s.isSubChief || 
-                                            s.isHalf || s.isZeroCount || s.isFirstYear || s.isFullTime || 
-                                            s.allow6Consec || s.section || s.lifeSection || s.haSection || s.jobTitle ||
-                                            (s.name && !s.name.startsWith('スタッフ ') && !s.name.startsWith('ST ') && !s.name.startsWith('生活期'))
-                                        );
-                                    }
-                                } catch(e) {}
+                                    needMasterSync = lList.every((s, i) => (!s.name || s.name === `スタッフ ${String(i+1).padStart(2,'0')}`) && !s.can8 && !s.isChief && !s.isHalf);
+                                } catch(e) { needMasterSync = true; }
                             }
-                            if (!localHasSettings && !curLocalMaster) {
+                            if (needMasterSync) {
                                 window.localStorage.setItem(STORAGE_KEY_STAFF_MASTER, JSON.stringify(mCloud.staffMaster));
                                 applyMasterArrayToStaffList(mCloud.staffMaster);
                             }
@@ -847,73 +751,39 @@ document.addEventListener('DOMContentLoaded', () => {
                 // - showToastMsg（手動更新）または isInitialBoot（起動時）
                 // - またはローカルが未編集の初期デフォルト（名前がスタッフ01かつトグルが空）の場合
                 // ➔ クラウドのトグル設定・マスタを確実に復元・画面へ即座に反映！
-                // ★ ローカルスタッフマスター（トグル設定等）の絶対保護ロック！
-                // ローカルにすでに有意な設定（トグルON、役職、セクション、独自氏名など）が存在する場合、
-                // ページ初期起動（isInitialBoot）であってもクラウドの古いデータで上書きすることを物理遮断！
                 const localMasterRaw = window.localStorage.getItem(STORAGE_KEY_STAFF_MASTER);
-                let localHasMeaningfulSettings = false;
-                if (localMasterRaw) {
+                let shouldApplyMaster = (!localMasterRaw || showToastMsg || isInitialBoot);
+                if (localMasterRaw && !showToastMsg && !isInitialBoot) {
                     try {
-                        const lList = JSON.parse(localMasterRaw);
-                        if (Array.isArray(lList) && lList.length > 0) {
-                            localHasMeaningfulSettings = lList.some(s => 
-                                s.isUnused || s.can8 || s.noEarly || s.canSched || 
-                                s.isSectionChief || s.isChief || s.isSubChief || 
-                                s.isHalf || s.isZeroCount || s.isFirstYear || 
-                                s.isFullTime || s.allow6Consec || s.section || 
-                                s.lifeSection || s.haSection || s.jobTitle ||
-                                (s.name && !s.name.startsWith('スタッフ ') && !s.name.startsWith('ST ') && !s.name.startsWith('生活期 '))
-                            );
-                        }
-                    } catch (e) {}
-                }
-
-                let shouldApplyMaster = false;
-                if (showToastMsg) {
-                    // ユーザーが手動で「クラウドから復元」を押した場合は強制復元
-                    shouldApplyMaster = true;
-                } else if (!localMasterRaw) {
-                    // ローカルにまだ何も存在しない初回アクセス時
-                    shouldApplyMaster = true;
-                } else if (!localHasMeaningfulSettings) {
-                    // ローカルに有意な設定がまだ一切なく初期デフォルトの場合のみ、クラウドから最新を取得
-                    shouldApplyMaster = true;
+                        const localList = JSON.parse(localMasterRaw);
+                        const isLocalDefault = Array.isArray(localList) && localList.every((s, i) => (!s.name || s.name === `スタッフ ${String(i+1).padStart(2,'0')}`) && !s.can8 && !s.isChief && !s.isHalf);
+                        if (isLocalDefault) shouldApplyMaster = true;
+                    } catch (e) {
+                        shouldApplyMaster = true;
+                    }
                 }
 
                 if (shouldApplyMaster && Array.isArray(cloud.staffMaster) && cloud.staffMaster.length > 0) {
                     window.localStorage.setItem(STORAGE_KEY_STAFF_MASTER, JSON.stringify(cloud.staffMaster));
                     applyMasterArrayToStaffList(cloud.staffMaster);
-                } else if (localHasMeaningfulSettings && (!cloud.staffMaster || cloud.staffMaster.length === 0)) {
-                    // ローカルに有意な設定があるのにクラウド側が空の場合は、ローカルの最新設定をクラウドへ自動逆プッシュ！
-                    pushStateToCloud(true);
                 }
 
-                // 2. 全保存タームデータのクラウド復元（ローカル編集データの絶対保護）
+                // 2. 全保存タームデータのクラウド復元
                 if (cloud.terms && typeof cloud.terms === 'object') {
                     Object.keys(cloud.terms).forEach(tDate => {
-                        if (tDate.startsWith('2025-')) return;
                         if (cloud.terms[tDate]) {
                             const curLocal = window.localStorage.getItem(`${STORAGE_KEY_PREFIX}${tDate}`);
-                            let localTermHasData = false;
-                            if (curLocal) {
+                            let shouldApplyTerm = (!curLocal || showToastMsg || isInitialBoot);
+                            if (curLocal && !showToastMsg && !isInitialBoot) {
                                 try {
-                                    const lT = JSON.parse(curLocal);
-                                    const hasGrid = lT.outputGrid && lT.outputGrid.length > 0 && lT.outputGrid.some(row => Array.isArray(row) && row.some(c => (c && (c.symbol || c))));
-                                    const hasDays = lT.staffList && lT.staffList.some(s => s.days && s.days.some(d => d));
-                                    const hasStaffSettings = lT.staffList && lT.staffList.some(s => s.isUnused || s.can8 || s.noEarly || s.isSectionChief || s.isChief || s.isSubChief || s.lifeSection || s.haSection || s.isZeroCount || s.isHalf);
-                                    if (hasGrid || hasDays || hasStaffSettings) localTermHasData = true;
-                                } catch (e) {}
+                                    const localT = JSON.parse(curLocal);
+                                    const isLocalEmpty = !localT.outputGrid || localT.outputGrid.length === 0;
+                                    const hasCloudData = (cloud.terms[tDate].outputGrid && cloud.terms[tDate].outputGrid.length > 0) || (cloud.terms[tDate].staffList && cloud.terms[tDate].staffList.some(s => s.days && s.days.some(d => d)));
+                                    if (isLocalEmpty && hasCloudData) shouldApplyTerm = true;
+                                } catch (e) {
+                                    shouldApplyTerm = true;
+                                }
                             }
-
-                            let shouldApplyTerm = false;
-                            if (showToastMsg) {
-                                shouldApplyTerm = true;
-                            } else if (!curLocal) {
-                                shouldApplyTerm = true;
-                            } else if (!localTermHasData) {
-                                shouldApplyTerm = true;
-                            }
-
                             if (shouldApplyTerm) {
                                 window.localStorage.setItem(`${STORAGE_KEY_PREFIX}${tDate}`, JSON.stringify(cloud.terms[tDate]));
                             }
@@ -979,44 +849,43 @@ document.addEventListener('DOMContentLoaded', () => {
     function getSavedTerms() {
         try {
             const termSet = new Set();
-            // 1. 記録された一覧（2025年度は完全除外）
+            // 1. 記録された一覧
             const raw = localStorage.getItem(STORAGE_KEY_SAVED_TERMS);
             if (raw) {
                 const arr = JSON.parse(raw);
-                if (Array.isArray(arr)) {
-                    arr.forEach(t => {
-                        if (t && !t.startsWith('2025-')) termSet.add(t);
-                    });
-                }
+                if (Array.isArray(arr)) arr.forEach(t => termSet.add(t));
             }
-            // 2. localStorage全体から shift_schedule_term_ キーをスキャン（2025年度は完全除外＆自動抹消）
-            const keysToRemove = [];
-            for (let k = 0; k < localStorage.length; k++) {
-                const key = localStorage.key(k);
-                if (key && key.startsWith(STORAGE_KEY_PREFIX)) {
-                    const datePart = key.replace(STORAGE_KEY_PREFIX, "");
-                    if (datePart && datePart.startsWith("2025-")) {
-                        keysToRemove.push(key);
-                    } else if (datePart && /^\d{4}-\d{2}-\d{2}$/.test(datePart)) {
+            // 2. localStorage全体の shift_schedule_term_ キーを自動スキャンして取りこぼしを完全防止
+            for (let i = 0; i < localStorage.length; i++) {
+                const k = localStorage.key(i);
+                if (k && k.startsWith(STORAGE_KEY_PREFIX)) {
+                    const datePart = k.replace(STORAGE_KEY_PREFIX, '');
+                    if (datePart && /^\d{4}-\d{2}-\d{2}$/.test(datePart)) {
                         termSet.add(datePart);
                     }
                 }
             }
-            keysToRemove.forEach(k => { try { localStorage.removeItem(k); } catch(e){} });
-            return Array.from(termSet).filter(t => !t.startsWith('2025-')).sort((a, b) => a.localeCompare(b));
+            // 3. 現在日付（未保存でもスロットとして追加）
+            const curDate = document.getElementById('termStartDate')?.value || currentWorkingStartDate;
+            if (curDate && /^\d{4}-\d{2}-\d{2}$/.test(curDate)) {
+                termSet.add(curDate);
+            }
+
+            const sorted = Array.from(termSet).sort();
+            localStorage.setItem(STORAGE_KEY_SAVED_TERMS, JSON.stringify(sorted));
+            return sorted;
         } catch (e) {
             return [];
         }
     }
+
     function updateSavedTermsList(startDate) {
         try {
-            if (startDate && !startDate.startsWith('2025-')) {
-                let terms = getSavedTerms();
-                if (!terms.includes(startDate)) {
-                    terms.push(startDate);
-                    terms.sort();
-                    localStorage.setItem(STORAGE_KEY_SAVED_TERMS, JSON.stringify(terms));
-                }
+            let terms = getSavedTerms();
+            if (!terms.includes(startDate)) {
+                terms.push(startDate);
+                terms.sort();
+                localStorage.setItem(STORAGE_KEY_SAVED_TERMS, JSON.stringify(terms));
             }
             renderSavedTermsSelect();
         } catch (e) {
@@ -1097,11 +966,6 @@ document.addEventListener('DOMContentLoaded', () => {
                     isChief: !!(s.chief || s.isChief),
                     isSubChief: !!s.isSubChief,
                     isHalf: !!s.isHalf,
-                    isZeroCount: !!s.isZeroCount,
-                    isFirstYear: !!s.isFirstYear,
-                    lifeSection: s.lifeSection || '',
-                    haSection: s.haSection || '',
-                    jobTitle: s.jobTitle || '',
                     isFullTime: !!s.isFullTime,
                     prevName: s.prevName || '',
                     remarks: s.remarks || '',
@@ -1109,22 +973,9 @@ document.addEventListener('DOMContentLoaded', () => {
                     prevDays: [...s.prevDays],
                     days: [...s.days]
                 })),
-                // ★ 既存の勤務表（outputGrid）を絶対に消失させない永続保護ロック！
-                outputGrid: (() => {
-                    if (lastSolveResult && lastSolveResult.grid) {
-                        return lastSolveResult.grid.map(row => row.map(c => ({ ...c })));
-                    }
-                    try {
-                        const existingRaw = localStorage.getItem(`${STORAGE_KEY_PREFIX}${startDate}`);
-                        if (existingRaw) {
-                            const existingData = JSON.parse(existingRaw);
-                            if (existingData && existingData.outputGrid && Array.isArray(existingData.outputGrid)) {
-                                return existingData.outputGrid;
-                            }
-                        }
-                    } catch (e) {}
-                    return null;
-                })(),
+                outputGrid: (lastSolveResult && lastSolveResult.grid) 
+                    ? lastSolveResult.grid.map(row => row.map(c => ({ ...c }))) 
+                    : null,
                 activeTab: activeTab,
                 dayOffsets: [...dayOffsets],
                 sectionTeamLeveledRev45: true,
@@ -1132,7 +983,6 @@ document.addEventListener('DOMContentLoaded', () => {
             };
 
             localStorage.setItem(`${STORAGE_KEY_PREFIX}${startDate}`, JSON.stringify(data));
-            if (typeof scheduleCloudSync === "function") scheduleCloudSync();
             localStorage.setItem(STORAGE_KEY_LAST_ACTIVE, startDate);
 
             updateSavedTermsList(startDate);
@@ -1184,13 +1034,9 @@ document.addEventListener('DOMContentLoaded', () => {
             data.staffList.forEach((s, idx) => {
                 if (staffList[idx]) {
                     staffList[idx].name = cleanTextValue(s.name) || staffList[idx].name;
-                    const defaultUnused = isST ? (idx >= 16) : (isLife ? false : (idx >= 48));
-                    staffList[idx].isUnused = s.isUnused !== undefined ? !!s.isUnused : defaultUnused;
-                    staffList[idx].floor = s.floor !== undefined ? s.floor : staffList[idx].floor;
+                    staffList[idx].isUnused = s.isUnused !== undefined ? !!s.isUnused : (idx >= 48);
+                    staffList[idx].floor = s.floor || staffList[idx].floor || '';
                     staffList[idx].section = s.section || '';
-                    staffList[idx].lifeSection = s.lifeSection || '';
-                    staffList[idx].haSection = s.haSection || '';
-                    staffList[idx].jobTitle = s.jobTitle || '';
                     staffList[idx].can8 = s.can8 !== undefined ? !!s.can8 : staffList[idx].can8;
                     staffList[idx].noEarly = !!s.noEarly;
                     staffList[idx].noLate = !!s.noLate;
@@ -1200,8 +1046,6 @@ document.addEventListener('DOMContentLoaded', () => {
                     staffList[idx].isChief = !!(s.isChief || s.chief);
                     staffList[idx].isSubChief = !!s.isSubChief;
                     staffList[idx].isHalf = !!s.isHalf;
-                    staffList[idx].isZeroCount = !!s.isZeroCount;
-                    staffList[idx].isFirstYear = !!s.isFirstYear;
                     staffList[idx].isFullTime = s.isFullTime !== undefined ? !!s.isFullTime : staffList[idx].isFullTime;
                     staffList[idx].prevName = cleanTextValue(s.prevName || '');
                     staffList[idx].remarks = cleanTextValue(s.remarks || '');
@@ -2482,11 +2326,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 // 当ターム 1日〜28日
                 for (let d = 0; d < NUM_DAYS; d++) {
                     const c = rowData[d] || { symbol: '' };
-                    let sym = c.symbol ? c.symbol.replace(/[\u25e6\u2022\uff65\u25ef\u3007\u25cf]/g, '\u25cb') : '';
-                    // STはPOと異なり8時・遅・Eは不要！早番のみ許可、他は通常勤務「○」に完全サニタイズ
-                    if (sym === '8時' || sym === '遅' || sym === 'E' || sym === 'ハヤ' || sym === 'オソ' || sym === 'イブ') {
-                        sym = '○';
-                    }
+                    const sym = c.symbol ? c.symbol.replace(/[◦•･◯〇●]/g, '○') : '';
                     const thickCls = ((d + 1) % 7 === 0) ? 'border-thick-right' : '';
 
                     // ★ 事前固定希望（本人が希望入力した枠）のみ赤字・太字（fixed-cell）！自動生成された公休等は通常文字
@@ -3492,12 +3332,6 @@ document.addEventListener('DOMContentLoaded', () => {
             }
 
             currentWorkingStartDate = selectedDate;
-            const startDateInput = document.getElementById('termStartDate');
-            if (startDateInput) startDateInput.value = selectedDate;
-            const termSelect = document.getElementById('termSelect');
-            if (termSelect) termSelect.value = selectedDate;
-            localStorage.setItem(STORAGE_KEY_LAST_ACTIVE, selectedDate);
-
             const loaded = loadTermFromStorage(selectedDate);
             if (loaded) {
                 showToast(`💾 保存済み期間（${selectedDate}～）を呼び出しました`);
@@ -3508,7 +3342,6 @@ document.addEventListener('DOMContentLoaded', () => {
 
             // 呼出後は選択肢を「(保存済み期間の呼出)」にリセット（次回も同じ期間を選択可能にする）
             renderSavedTermsSelect();
-            if (isMaster) renderMasterIntegrationView();
         });
     }
 
@@ -4207,15 +4040,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 raw = window._cloudMem.get(stKey);
             }
         }
-        // ★ ローカルデータが存在しても、outputGridが空またはnullなら不完全データとみなしクラウドから強制再取得！
-        let hasValidOutputGrid = false;
-        if (raw) {
-            try {
-                const parsed = JSON.parse(raw);
-                hasValidOutputGrid = !!(parsed && parsed.outputGrid && Array.isArray(parsed.outputGrid) && parsed.outputGrid.length > 0 && parsed.outputGrid.some(row => row && row.some(cell => (cell.symbol || cell) !== '')));
-            } catch (e) {}
-        }
-        if (!raw || !hasValidOutputGrid) {
+        if (!raw) {
             // クラウドからSTの最新データをバックグラウンド取得して再読込（※PO側からSTのローカルストレージは一切汚染せずメモリキャッシュのみに保持）
             if (!window._stFetchInFlight) {
                 window._stFetchInFlight = true;
@@ -4228,28 +4053,10 @@ document.addEventListener('DOMContentLoaded', () => {
                             const termObj = cloudState.terms[targetDate];
                             window._cloudMem.set(stKey, JSON.stringify(termObj));
                             loadLinkedSTData(targetDate);
-                            // 画面更新: STデータ到着時にテーブルを即時再描画（空欄表示を物理防止）
+                            // 画面更新
                             if (lastSolveResult && lastSolveResult.grid) {
                                 renderOutputTable(lastSolveResult.grid, lastSolveResult.stats);
                                 renderStatsDashboard(lastSolveResult.stats);
-                            } else if (lastScheduler && lastScheduler.grid) {
-                                const currentStats = lastScheduler.calculateStats(lastScheduler.grid);
-                                renderOutputTable(lastScheduler.grid, currentStats);
-                                renderStatsDashboard(currentStats);
-                            } else {
-                                // テーブル再描画
-                                const outTbl = document.getElementById('outputTable');
-                                if (outTbl && typeof renderOutputTable === 'function') {
-                                    try {
-                                        const savedRaw = localStorage.getItem(`${STORAGE_KEY_PREFIX}${targetDate}`);
-                                        if (savedRaw) {
-                                            const savedData = JSON.parse(savedRaw);
-                                            if (savedData && savedData.outputGrid) {
-                                                renderOutputTable(savedData.outputGrid, null);
-                                            }
-                                        }
-                                    } catch (e) {}
-                                }
                             }
                         }
                     })
@@ -4270,30 +4077,16 @@ document.addEventListener('DOMContentLoaded', () => {
             const matchingGrid = [];
 
             data.staffList.forEach((st, idx) => {
-                // 不使用（isUnused / 不要）でなく、かつ当病棟フロア（1F, 2F, 3F, 南）に所属するSTのみ抽出
+                // 不使用でなく、かつ当病棟フロア（1F, 2F, 3F, 南）に所属するST
                 if (!st.isUnused && (st.floor === currentFloor || (st.floor && st.floor.includes(currentFloor)))) {
                     matchingStaff.push(st);
-                    let row = [];
                     if (data.outputGrid && Array.isArray(data.outputGrid[idx])) {
-                        row = data.outputGrid[idx].map(c => {
-                            const sym = (c && typeof c === 'object') ? (c.symbol || '') : (c || '');
-                            // STはPOと異なり8時・遅・Eは不要！早番「早」のみ許可し、他は通常勤務「○」にサニタイズ
-                            if (sym === '8時' || sym === '遅' || sym === 'E' || sym === 'ハヤ' || sym === 'オソ' || sym === 'イブ') {
-                                return { symbol: '○', isFixed: false };
-                            }
-                            return (typeof c === 'object') ? { ...c } : { symbol: sym, isFixed: false };
-                        });
+                        matchingGrid.push(data.outputGrid[idx]);
                     } else if (Array.isArray(st.days)) {
-                        row = st.days.map(sym => {
-                            if (sym === '8時' || sym === '遅' || sym === 'E' || sym === 'ハヤ' || sym === 'オソ' || sym === 'イブ') {
-                                return { symbol: '○', isFixed: false };
-                            }
-                            return { symbol: sym, isFixed: false };
-                        });
+                        matchingGrid.push(st.days.map(sym => ({ symbol: sym, isFixed: false })));
                     } else {
-                        row = new Array(NUM_DAYS).fill({ symbol: '' });
+                        matchingGrid.push(new Array(NUM_DAYS).fill({ symbol: '' }));
                     }
-                    matchingGrid.push(row);
                 }
             });
 
@@ -4494,23 +4287,8 @@ document.addEventListener('DOMContentLoaded', () => {
                         if (cloudState.terms && cloudState.terms[targetDate]) {
                             window._cloudMem.set(lifeKey, JSON.stringify(cloudState.terms[targetDate]));
                         }
-                        if (cloudState.staffMaster && Array.isArray(cloudState.staffMaster) && cloudState.staffMaster.length > 0) {
-                            // ★ 空データ上書き防止二重保護（既存のローカル設定を破壊させない）
-                            const localLifeRaw = localStorage.getItem('shift_schedule_life_staff_master');
-                            let shouldUpdate = true;
-                            if (localLifeRaw) {
-                                try {
-                                    const localM = JSON.parse(localLifeRaw);
-                                    const hasLocalConfig = Array.isArray(localM) && localM.some(s => s.lifeSection || s.haSection);
-                                    const cloudHasConfig = cloudState.staffMaster.some(s => s.lifeSection || s.haSection);
-                                    if (hasLocalConfig && !cloudHasConfig) {
-                                        shouldUpdate = false; // 空データによる設定破壊を物理遮断
-                                    }
-                                } catch (e) {}
-                            }
-                            if (shouldUpdate) {
-                                try { localStorage.setItem('shift_schedule_life_staff_master', JSON.stringify(cloudState.staffMaster)); } catch (e) {}
-                            }
+                        if (cloudState.staffMaster) {
+                            try { localStorage.setItem('shift_schedule_life_staff_master', JSON.stringify(cloudState.staffMaster)); } catch (e) {}
                         }
                         loadLinkedLifeData(targetDate);
                         if (lastSolveResult && lastSolveResult.grid) {
@@ -4733,11 +4511,9 @@ document.addEventListener('DOMContentLoaded', () => {
                     for (let d = 0; d < NUM_DAYS; d++) {
                         const cell = (grid && grid[s] && grid[s][d]) ? grid[s][d] : { symbol: '' };
                         const displaySym = cell.symbol ? cell.symbol.replace(/[◦•･◯〇●]/g, '○') : '';
-                        const originalWish = (staffList[s] && staffList[s].days && staffList[s].days[d]) ? staffList[s].days[d] : '';
-                        const isCellFixed = !!((cell.isFixed && originalWish !== '' && !isWorkSymbol(originalWish)) || (originalWish !== '' && !isWorkSymbol(originalWish) && originalWish === displaySym));
-                        const cls = isCellFixed ? 'day-cell fixed-cell' : 'day-cell auto-cell';
+                        const cls = cell.isFixed ? 'day-cell fixed-cell' : 'day-cell auto-cell';
                         const thickCls = ((d + 1) % 7 === 0) ? 'border-thick-right' : '';
-                        const titleText = isCellFixed ? '🔒 事前固定希望枠（赤字・太字保持）' : 'システム自動配置';
+                        const titleText = cell.isFixed ? '🔒 事前固定希望枠（赤字・太字保持）' : 'システム自動配置';
                         bodyHtml += `<td class="${cls} ${thickCls}" data-s="${s}" data-d="${d}" title="${titleText}" style="${rowBorderB}">${displaySym}</td>`;
                     }
 
@@ -4755,8 +4531,37 @@ document.addEventListener('DOMContentLoaded', () => {
                 });
             });
 
-            // ★ ST専用テーブルでは未設定予備枠（17〜36番目等）は出力テーブルから完全に除外（表示不要）
-            // （※フロアが1F/2F/3F/南のいずれかに正しく設定されたスタッフのみを各階グループに表示）
+            // ★ 万が一どのフロアにも属していないスタッフがいた場合のフォールバック表示（行消滅を物理防止）
+            const unassignedStaffIndices = validStaffIndices.filter(s => !matchedStaffSet.has(s));
+            if (unassignedStaffIndices.length > 0) {
+                unassignedStaffIndices.forEach((s, idxInFl) => {
+                    const staff = staffList[s];
+                    const staffStat = (stats && stats.staffStats && stats.staffStats[s]) || { workDays:0, offDays:0, paidDays:0, refDays:0, early:0, late:0, eve:0, h8:0 };
+                    bodyHtml += `<tr>`;
+                    if (idxInFl === 0) {
+                        bodyHtml += `<td class="sticky-col-1 border-thick-right" rowspan="${unassignedStaffIndices.length}" style="background:#fef2f2; color:#b91c1c; font-weight:800; font-size:0.95rem; text-align:center; vertical-align:middle;">未設定</td>`;
+                    }
+                    bodyHtml += `<td class="sticky-col-2 border-thick-right" style="text-align:left; padding-left:8px; font-weight:700;">${escapeHtmlText(staff.name)}</td>`;
+                    for (let d = 0; d < NUM_DAYS; d++) {
+                        const cell = (grid && grid[s] && grid[s][d]) ? grid[s][d] : { symbol: '' };
+                        const displaySym = cell.symbol ? cell.symbol.replace(/[◦•･◯〇●]/g, '○') : '';
+                        const cls = cell.isFixed ? 'day-cell fixed-cell' : 'day-cell auto-cell';
+                        const thickCls = ((d + 1) % 7 === 0) ? 'border-thick-right' : '';
+                        bodyHtml += `<td class="${cls} ${thickCls}" data-s="${s}" data-d="${d}">${displaySym}</td>`;
+                    }
+                    bodyHtml += `
+                        <td class="stat-cell" data-s="${s}" data-stat="work">${staffStat.workDays}</td>
+                        <td class="stat-cell" data-s="${s}" data-stat="off">${staffStat.offDays}</td>
+                        <td class="stat-cell" data-s="${s}" data-stat="paid">${staffStat.paidDays}</td>
+                        <td class="stat-cell" data-s="${s}" data-stat="ref">${staffStat.refDays}</td>
+                        <td class="stat-cell" data-s="${s}" data-stat="early">${staffStat.early}</td>
+                        <td class="stat-cell" data-s="${s}" data-stat="late">-</td>
+                        <td class="stat-cell" data-s="${s}" data-stat="eve">-</td>
+                        <td class="stat-cell" data-s="${s}" data-stat="h8">-</td>
+                        <td class="remarks-cell" style="min-width:220px; max-width:320px; text-align:left; font-size:0.8rem; color:#475569; padding:2px 8px;">${escapeHtmlText(staff.remarks || '')}</td>
+                    </tr>`;
+                });
+            }
         } else {
             validStaffIndices.forEach((s, outIdx) => {
                 const staff = staffList[s];
@@ -4771,11 +4576,9 @@ document.addEventListener('DOMContentLoaded', () => {
                 for (let d = 0; d < NUM_DAYS; d++) {
                     const cell = grid[s][d];
                     const displaySym = cell.symbol ? cell.symbol.replace(/[◦•･◯〇●]/g, '○') : '';
-                    const originalWish = (staffList[s] && staffList[s].days && staffList[s].days[d]) ? staffList[s].days[d] : '';
-                    const isCellFixed = !!((cell.isFixed && originalWish !== '' && !isWorkSymbol(originalWish)) || (originalWish !== '' && !isWorkSymbol(originalWish) && originalWish === displaySym));
-                    const cls = isCellFixed ? 'day-cell fixed-cell' : 'day-cell auto-cell';
+                    const cls = cell.isFixed ? 'day-cell fixed-cell' : 'day-cell auto-cell';
                     const thickCls = ((d + 1) % 7 === 0) ? 'border-thick-right' : '';
-                    const titleText = isCellFixed ? '🔒 事前固定希望枠（赤字・太字保持）' : 'システム自動配置';
+                    const titleText = cell.isFixed ? '🔒 事前固定希望枠（赤字・太字保持）' : 'システム自動配置';
                     bodyHtml += `<td class="${cls} ${thickCls} ${rowBottomCls}" data-s="${s}" data-d="${d}" title="${titleText}">${displaySym}</td>`;
                 }
 
@@ -4828,11 +4631,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
                 for (let d = 0; d < NUM_DAYS; d++) {
                     const c = rowData[d] || { symbol: '' };
-                    let sym = c.symbol ? c.symbol.replace(/[◦•･◯〇●]/g, '○') : '';
-                    // STはPOと異なり8時・遅・Eは不要！早番のみ許可、他は通常勤務「○」に完全サニタイズ
-                    if (sym === '8時' || sym === '遅' || sym === 'E' || sym === 'ハヤ' || sym === 'オソ' || sym === 'イブ') {
-                        sym = '○';
-                    }
+                    const sym = c.symbol ? c.symbol.replace(/[◦•･◯〇●]/g, '○') : '';
                     const thickCls = ((d + 1) % 7 === 0) ? 'border-thick-right' : '';
 
                     if (sym === '休') stOffCount++;
@@ -5255,8 +5054,21 @@ document.addEventListener('DOMContentLoaded', () => {
                 } else {
                     poLate = dStat.late;
                 }
-                // STはPOと異なり遅番不要のため合算なし
-                lateVal = poLate;
+                // ST遅番人数を合算
+                let stLateCount = 0;
+                if (linkedStLateArr && linkedStLateArr[d] !== undefined) {
+                    stLateCount = linkedStLateArr[d];
+                } else if (linkedStStaffData && linkedStStaffData.staffList && linkedStStaffData.grid) {
+                    linkedStStaffData.staffList.forEach((st, sIdx) => {
+                        if (st.isUnused) return;
+                        const row = linkedStStaffData.grid[sIdx] || [];
+                        const c = row[d] || { symbol: '' };
+                        const sym = (c && typeof c === 'object') ? (c.symbol || '') : (c || '');
+                        const wish = (st.days && st.days[d]) ? st.days[d] : '';
+                        if (sym === '遅' || wish === '遅') stLateCount++;
+                    });
+                }
+                lateVal = poLate + stLateCount;
             }
             footHtml += `<td class="${thickCls} col-day-fixed" data-d="${d}" data-footer-stat="late" style="width:52px; min-width:52px; max-width:52px; color:#334155; font-weight:700;">${lateVal}</td>`;
         }
@@ -5283,8 +5095,21 @@ document.addEventListener('DOMContentLoaded', () => {
                 } else {
                     poEve = dStat.eve;
                 }
-                // STはPOと異なりE不要のため合算なし
-                eveVal = poEve;
+                // ST E番人数を合算
+                let stEveCount = 0;
+                if (linkedStEveArr && linkedStEveArr[d] !== undefined) {
+                    stEveCount = linkedStEveArr[d];
+                } else if (linkedStStaffData && linkedStStaffData.staffList && linkedStStaffData.grid) {
+                    linkedStStaffData.staffList.forEach((st, sIdx) => {
+                        if (st.isUnused) return;
+                        const row = linkedStStaffData.grid[sIdx] || [];
+                        const c = row[d] || { symbol: '' };
+                        const sym = (c && typeof c === 'object') ? (c.symbol || '') : (c || '');
+                        const wish = (st.days && st.days[d]) ? st.days[d] : '';
+                        if (sym === 'E' || sym === 'イ' || sym === 'イブ' || wish === 'E' || wish === 'イ' || wish === 'イブ') stEveCount++;
+                    });
+                }
+                eveVal = poEve + stEveCount;
             }
             footHtml += `<td class="${thickCls} col-day-fixed" data-d="${d}" data-footer-stat="eve" style="width:52px; min-width:52px; max-width:52px; color:#334155; font-weight:700;">${eveVal}</td>`;
         }
@@ -5337,37 +5162,10 @@ document.addEventListener('DOMContentLoaded', () => {
         const numDays = term.dates.length;
         const curStartDate = document.getElementById('termStartDate')?.value || currentWorkingStartDate || '2026-04-01';
 
-
         const checkTitle = document.getElementById('checkTitleDisplay');
         if (checkTitle) {
-            checkTitle.innerHTML = `🏢 全フロア統合（各階サマリー＆勤務詳細集約） <span style="font-size:0.85rem; font-weight:normal; margin-left:1.5rem; background:#ffffff; padding:4px 10px; border-radius:6px; border:1px solid #bae6fd; display:inline-flex; align-items:center; gap:6px;">📅 表示ターム: <select id="masterTermSelect" style="padding:2px 6px; font-weight:700; color:#0369a1; border:1px solid #0284c7; border-radius:4px; background:#f0f9ff; cursor:pointer;"></select></span>`;
-            const mSelect = document.getElementById('masterTermSelect');
-            if (mSelect) {
-                mSelect.innerHTML = '';
-                GLOBAL_TERMS.forEach(t => {
-                    const opt = document.createElement('option');
-                    opt.value = t.startDate;
-                    opt.textContent = t.label;
-                    if (t.startDate === curStartDate) opt.selected = true;
-                    mSelect.appendChild(opt);
-                });
-                mSelect.onchange = () => {
-                    const chosen = mSelect.value;
-                    const mainSelect = document.getElementById('termSelect');
-                    if (mainSelect) {
-                        mainSelect.value = chosen;
-                        mainSelect.dispatchEvent(new Event('change'));
-                    } else {
-                        currentWorkingStartDate = chosen;
-                        const dateInput = document.getElementById('termStartDate');
-                        if (dateInput) dateInput.value = chosen;
-                        localStorage.setItem(STORAGE_KEY_LAST_ACTIVE, chosen);
-                        renderMasterIntegrationView();
-                    }
-                };
-            }
+            checkTitle.textContent = `🏢 全フロア統合（各階サマリー＆勤務詳細集約）`;
         }
-
 
         const floorConfigs = [
             { id: '1f', floorKey: '1F', label: '1階', bg: '#f0f8ff', headerBg: '#e0f2fe', border: '#bae6fd', badgeColor: '#0369a1' },
@@ -5571,7 +5369,7 @@ document.addEventListener('DOMContentLoaded', () => {
                     }
                 }
 
-                // 所属STスタッフ集計の合算（STはPOと異なり8時・遅・Eは不要！早番のみ合算）
+                // 所属STスタッフ集計の合算（1〜3階・南病棟ともにPT+OT+ST合算で早・遅・E・8時を集計）
                 for (let si = 0; si < floorStStaff.length; si++) {
                     const st = floorStStaff[si];
                     const cell = floorStGrid[si] ? floorStGrid[si][d] : null;
@@ -5580,8 +5378,19 @@ document.addEventListener('DOMContentLoaded', () => {
                         earlyCount++;
                         headCount += 1.0;
                         realCount += (st.isHalf ? 0.5 : 1.0);
-                    } else if (isWorkSymbol(sym)) {
-                        // STの一般勤務（8時・遅・E・ハヤ等は存在しないため通常出勤として実数にのみ加算）
+                    } else if (sym === '遅') {
+                        lateCount++;
+                        headCount += 1.0;
+                        realCount += (st.isHalf ? 0.5 : 1.0);
+                    } else if (sym === 'E') {
+                        eveCount++;
+                        headCount += 1.0;
+                        realCount += (st.isHalf ? 0.5 : 1.0);
+                    } else if (sym === '8時') {
+                        h8Count++;
+                        headCount += 1.0;
+                        realCount += (st.isHalf ? 0.5 : 1.0);
+                    } else if (sym === '○' || sym === '出' || sym === '研' || sym === '張' || sym === 'ハヤ' || sym === 'オソ' || sym === 'イブ') {
                         headCount += 1.0;
                         realCount += (st.isHalf ? 0.5 : 1.0);
                     } else if (sym === '○/休' || sym === '休/○' || sym === '○/有' || sym === '有/○' || sym === '〇/休' || sym === '休/〇' || sym === '〇/有' || sym === '有/〇') {
@@ -5676,12 +5485,12 @@ document.addEventListener('DOMContentLoaded', () => {
             }
             html += `<td colspan="9" style="background:#e2e8f0;"></td></tr>`;
 
-            // 定数定義（1〜3階: 早3/遅1/E2/8時1、南: 早2/遅2/E2/8時1 ★南も8時は毎日ピッタリ1名！）
+            // 定数定義（1〜3階: 早3/遅1/E2/8時1、南: 早2/遅2/E2/8時0）
             const isSouthFloor = (fc.id === 'south');
             const targetEarly = isSouthFloor ? 2 : 3;
             const targetLate = isSouthFloor ? 2 : 1;
             const targetEve = 2;
-            const targetH8 = 1; // 1階〜南病棟の全フロア共通で8時は毎日1名！
+            const targetH8 = isSouthFloor ? 0 : 1;
 
             // サマリー行4: 早 (8行目相当)
             html += `<tr style="background:${fc.bg}; font-weight:600;">
@@ -6074,15 +5883,15 @@ document.addEventListener('DOMContentLoaded', () => {
         }
         html += `<td colspan="9" style="background:#f8fafc;"></td></tr>`;
 
-        // 8時（全館定数: 1〜3階各1 + 南1 = 計4名）
+        // 8時（全館定数: 1〜3階各1 + 南0 = 計3名）
         html += `<tr style="background:#f8fafc; font-weight:700; border-bottom:3px solid #334155;">
             <td class="sticky-col-2" style="background:#f8fafc; color:#059669; border-right:2px solid #475569; font-weight:700; width:95px; min-width:95px; max-width:105px;">8時</td>`;
         for (let d = 0; d < numDays; d++) {
             const thickCls = ((d + 1) % 7 === 0) ? 'border-thick-right' : '';
             const cnt = grandH8[d];
-            const isConflict = (cnt !== 4);
+            const isConflict = (cnt !== 3);
             const bgStyle = isConflict ? 'background:#dbeafe !important; color:#1d4ed8 !important;' : 'background:#f8fafc; color:#059669;';
-            const titleStr = isConflict ? `title="⚠️ 全館8時定数エラー: ${cnt}名（定数: 4名）"` : '';
+            const titleStr = isConflict ? `title="⚠️ 全館8時定数エラー: ${cnt}名（定数: 3名）"` : '';
             html += `<td class="${thickCls} col-day-fixed ${isConflict ? 'conflict-highlight' : ''}" ${titleStr} style="width:52px; min-width:52px; max-width:52px; ${bgStyle} font-weight:700; border-bottom:1px solid #cbd5e1; text-align:center;">${cnt}</td>`;
         }
         html += `<td colspan="9" style="background:#f8fafc;"></td></tr>`;
@@ -9245,23 +9054,8 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     });
 
-    // ★ ナビゲーションガード: テーブル切替ボタンをクリックした直後に未送信の変更を即時確定・同期
-    document.querySelectorAll('.dept-nav-btn').forEach(btn => {
-        btn.addEventListener('click', (e) => {
-            saveStaffMaster();
-            saveCurrentTermToStorage();
-            if (cloudSyncTimer) {
-                clearTimeout(cloudSyncTimer);
-                cloudSyncTimer = null;
-                pushStateToCloud(false);
-            }
-        });
-    });
-
     // ★ タブを離れる直前や別ページ（PO病棟等）へ移動する直前に、未送信のクラウド同期があれば即座に送信
     const flushCloudSync = () => {
-        saveStaffMaster();
-        saveCurrentTermToStorage();
         if (cloudSyncTimer) {
             clearTimeout(cloudSyncTimer);
             cloudSyncTimer = null;

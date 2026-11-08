@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>勤務予定表 自動作成システム - マスターテーブル</title>
-    <link rel="stylesheet" href="style.css?v=20261105_fix_v10">
+    <link rel="stylesheet" href="style.css?v=20261029_rev90">
 </head>
 <body class="theme-master">
 
@@ -27,28 +27,35 @@
             </button>
         </div>
     </header>
-        <!-- Table Navigation -->
-        <nav class="dept-nav-container">
+    <!-- Table Navigation -->
+    <nav class="dept-nav-container">
         <span style="font-size:0.8rem; font-weight:700; color:#475569;">テーブル切替:</span>
-        <a href="index.html" class="dept-nav-btn dept-nav-btn-master active">👑 マスターテーブル</a>
-        <a href="1f.html" class="dept-nav-btn dept-nav-btn-1f">1階病棟</a>
-        <a href="2f.html" class="dept-nav-btn dept-nav-btn-2f">2階病棟</a>
-        <a href="3f.html" class="dept-nav-btn dept-nav-btn-3f">3階病棟</a>
-        <a href="south.html" class="dept-nav-btn dept-nav-btn-south">南病棟</a>
-        <a href="ST.html" class="dept-nav-btn dept-nav-btn-st">ST</a>
-        <a href="life.html" class="dept-nav-btn dept-nav-btn-life">生活期</a>
+        <a href="index.html" class="dept-nav-btn active" style="background:#fefce8; border-color:#fef08a; color:#854d0e;">👑 マスターテーブル</a>
+        <a href="1f.html" class="dept-nav-btn " style="background:#f0f9ff; border-color:#bae6fd; color:#0369a1;">1階病棟</a>
+        <a href="2f.html" class="dept-nav-btn " style="background:#fff7ed; border-color:#fed7aa; color:#c2410c;">2階病棟</a>
+        <a href="3f.html" class="dept-nav-btn " style="background:#f0fdf4; border-color:#bbf7d0; color:#15803d;">3階病棟</a>
+        <a href="south.html" class="dept-nav-btn " style="background:#faf5ff; border-color:#e9d5ff; color:#7e22ce;">南病棟</a>
+        <a href="ST.html" class="dept-nav-btn dept-nav-st " style="background:#fdf2f8; border-color:#fbcfe8; color:#be185d;">ST</a>
+        <a href="life.html" class="dept-nav-btn dept-nav-life" style="background:#f0fdfa; border-color:#99f6e4; color:#0f766e;">生活期</a>
     </nav>
+    <!-- Table Navigation -->
+    <!-- Table Navigation -->
+    <!-- Table Navigation -->
+    <!-- Table Navigation -->
+    <!-- Table Navigation -->
+    <!-- Table Navigation -->
+    <!-- Table Navigation -->
+    <!-- Table Navigation -->
+    <!-- Table Navigation -->
+    <!-- Table Navigation -->
+    <!-- Table Navigation -->
+    <!-- Table Navigation -->
+    <!-- Table Navigation -->
     <!-- ナビゲーションタブ -->
         <!-- Navigation Tabs (Master Table) -->
-        <nav class="dept-nav-container">
-        <span style="font-size:0.8rem; font-weight:700; color:#475569;">テーブル切替:</span>
-        <a href="index.html" class="dept-nav-btn dept-nav-btn-master active">👑 マスターテーブル</a>
-        <a href="1f.html" class="dept-nav-btn dept-nav-btn-1f">1階病棟</a>
-        <a href="2f.html" class="dept-nav-btn dept-nav-btn-2f">2階病棟</a>
-        <a href="3f.html" class="dept-nav-btn dept-nav-btn-3f">3階病棟</a>
-        <a href="south.html" class="dept-nav-btn dept-nav-btn-south">南病棟</a>
-        <a href="ST.html" class="dept-nav-btn dept-nav-btn-st">ST</a>
-        <a href="life.html" class="dept-nav-btn dept-nav-btn-life">生活期</a>
+    <nav class="tab-container">
+        <button class="tab-btn active" data-tab="checkTab">&#x1F3E2; 全フロア統合</button>
+        <button class="tab-btn" data-tab="statsTab">&#x1F4C8; 勤務分析・平準化ダッシュボード</button>
     </nav>
 
     <!-- メインコンテンツ -->
@@ -61,7 +68,20 @@
                 <div style="display: flex; flex-wrap: wrap; gap: 1rem; align-items: center; justify-content: space-between;">
                     <div style="display: flex; align-items: center; gap: 0.75rem; font-size: 0.88rem; flex-wrap: wrap;">
                         <span style="font-weight: 700; color: #1e293b;">📅 対象期間（ターム固定）:</span>
-                        <select id="inputTermSelect" style="padding: 4px 8px; border: 1px solid #0284c7; background: #f0f9ff; border-radius: 4px; font-weight: 700; color: #0369a1; font-size: 0.88rem; cursor: pointer;" title="年度ごとの正規13ターム（第1〜12ターム:28日間、第13ターム:29日間）を選択します">
+                        <select id="termSelect" style="padding: 4px 8px; border: 1px solid #0284c7; background: #f0f9ff; border-radius: 4px; font-weight: 700; color: #0369a1; font-size: 0.88rem; cursor: pointer;" title="年度ごとの正規13ターム（第1〜12ターム:28日間、第13ターム:29日間）を選択します">
+                            <option value="2025-04-01">【2025年度 第1ターム】 4/1 〜 4/28 (28日間)</option>
+                            <option value="2025-04-29">【2025年度 第2ターム】 4/29 〜 5/26 (28日間)</option>
+                            <option value="2025-05-27">【2025年度 第3ターム】 5/27 〜 6/23 (28日間)</option>
+                            <option value="2025-06-24">【2025年度 第4ターム】 6/24 〜 7/21 (28日間)</option>
+                            <option value="2025-07-22">【2025年度 第5ターム】 7/22 〜 8/18 (28日間)</option>
+                            <option value="2025-08-19">【2025年度 第6ターム】 8/19 〜 9/15 (28日間)</option>
+                            <option value="2025-09-16">【2025年度 第7ターム】 9/16 〜 10/13 (28日間)</option>
+                            <option value="2025-10-14">【2025年度 第8ターム】 10/14 〜 11/10 (28日間)</option>
+                            <option value="2025-11-11">【2025年度 第9ターム】 11/11 〜 12/8 (28日間)</option>
+                            <option value="2025-12-09">【2025年度 第10ターム】 12/9 〜 1/5 (28日間)</option>
+                            <option value="2026-01-06">【2025年度 第11ターム】 1/6 〜 2/2 (28日間)</option>
+                            <option value="2026-02-03">【2025年度 第12ターム】 2/3 〜 3/2 (28日間)</option>
+                            <option value="2026-03-03">【2025年度 第13ターム】 3/3 〜 3/31 (29日間・年度末調整)</option>
                             <option value="2026-04-01" selected>【2026年度 第1ターム】 4/1 〜 4/28 (28日間)</option>
                             <option value="2026-04-29">【2026年度 第2ターム】 4/29 〜 5/26 (28日間)</option>
                             <option value="2026-05-27">【2026年度 第3ターム】 5/27 〜 6/23 (28日間)</option>
@@ -75,8 +95,21 @@
                             <option value="2027-01-06">【2026年度 第11ターム】 1/6 〜 2/2 (28日間)</option>
                             <option value="2027-02-03">【2026年度 第12ターム】 2/3 〜 3/2 (28日間)</option>
                             <option value="2027-03-03">【2026年度 第13ターム】 3/3 〜 3/31 (29日間・年度末調整)</option>
+                            <option value="2027-04-01">【2027年度 第1ターム】 4/1 〜 4/28 (28日間)</option>
+                            <option value="2027-04-29">【2027年度 第2ターム】 4/29 〜 5/26 (28日間)</option>
+                            <option value="2027-05-27">【2027年度 第3ターム】 5/27 〜 6/23 (28日間)</option>
+                            <option value="2027-06-24">【2027年度 第4ターム】 6/24 〜 7/21 (28日間)</option>
+                            <option value="2027-07-22">【2027年度 第5ターム】 7/22 〜 8/18 (28日間)</option>
+                            <option value="2027-08-19">【2027年度 第6ターム】 8/19 〜 9/15 (28日間)</option>
+                            <option value="2027-09-16">【2027年度 第7ターム】 9/16 〜 10/13 (28日間)</option>
+                            <option value="2027-10-14">【2027年度 第8ターム】 10/14 〜 11/10 (28日間)</option>
+                            <option value="2027-11-11">【2027年度 第9ターム】 11/11 〜 12/8 (28日間)</option>
+                            <option value="2027-12-09">【2027年度 第10ターム】 12/9 〜 1/5 (28日間)</option>
+                            <option value="2028-01-06">【2027年度 第11ターム】 1/6 〜 2/2 (28日間)</option>
+                            <option value="2028-02-03">【2027年度 第12ターム】 2/3 〜 3/1 (28日間)</option>
+                            <option value="2028-03-02">【2027年度 第13ターム】 3/2 〜 3/31 (30日間・年度末調整)</option>
                         </select>
-                        <input type="hidden" id="inputTermStartDate" value="2026-04-01">
+                        <input type="hidden" id="termStartDate" value="2026-04-01">
                         <span style="color: #64748b;">〜 終了日:</span>
                         <span id="termEndDateDisplay" style="font-weight: 700; color: #1e293b;">2026-04-28</span>
                         <span style="background: #e0f2fe; color: #0284c7; padding: 2px 8px; border-radius: 4px; font-weight: 700; font-size: 0.85rem;" id="termTitleBadge">第1ターム (4/1～4/28)</span>
@@ -86,7 +119,7 @@
                     <div style="display: flex; align-items: center; gap: 0.75rem; font-size: 0.88rem; flex-wrap: wrap;">
                         <div style="display: flex; align-items: center; gap: 0.4rem;">
                             <span style="font-weight: 700; color: #1e293b;" title="ブラウザ内に自動保存された他の期間を呼び出します">📁 保存済み期間:</span>
-                            <select id="inputSavedTermsSelect" style="padding: 4px 8px; border: 1px solid #cbd5e1; border-radius: 4px; font-weight: 600; background: white; font-size: 0.82rem;">
+                            <select id="savedTermsSelect" style="padding: 4px 8px; border: 1px solid #cbd5e1; border-radius: 4px; font-weight: 600; background: white; font-size: 0.82rem;">
                                 <option value="">(保存済み期間の呼出)</option>
                             </select>
                         </div>
@@ -320,42 +353,6 @@
 
         <!-- 3. チェックシートタブ（制約検証・修正取込） -->
         <section id="checkTab" class="tab-panel active">
-            <!-- ターム設定バー（マスター統合用: 対象期間選択 ＆ 保存済み期間呼出） -->
-            <div class="toolbar-card" style="margin-bottom: 0.75rem; background: #fefce8; border-left: 4px solid #ca8a04; box-shadow: 0 1px 3px rgba(0,0,0,0.05);">
-                <div style="display: flex; flex-wrap: wrap; gap: 1rem; align-items: center; justify-content: space-between;">
-                    <div style="display: flex; align-items: center; gap: 0.75rem; font-size: 0.88rem; flex-wrap: wrap;">
-                        <span style="font-weight: 800; color: #713f12; font-size: 0.95rem;">📅 対象期間（ターム固定）:</span>
-                        <select id="termSelect" style="padding: 5px 12px; border: 1.5px solid #ca8a04; background: #ffffff; border-radius: 6px; font-weight: 700; color: #854d0e; font-size: 0.92rem; cursor: pointer; box-shadow: 0 1px 2px rgba(0,0,0,0.05);" title="年度ごとの正規13ターム（第1〜12ターム:28日間、第13ターム:29日間）を選択します">
-                            <option value="2026-04-01" selected>【2026年度 第1ターム】 4/1 〜 4/28 (28日間)</option>
-                            <option value="2026-04-29">【2026年度 第2ターム】 4/29 〜 5/26 (28日間)</option>
-                            <option value="2026-05-27">【2026年度 第3ターム】 5/27 〜 6/23 (28日間)</option>
-                            <option value="2026-06-24">【2026年度 第4ターム】 6/24 〜 7/21 (28日間)</option>
-                            <option value="2026-07-22">【2026年度 第5ターム】 7/22 〜 8/18 (28日間)</option>
-                            <option value="2026-08-19">【2026年度 第6ターム】 8/19 〜 9/15 (28日間)</option>
-                            <option value="2026-09-16">【2026年度 第7ターム】 9/16 〜 10/13 (28日間)</option>
-                            <option value="2026-10-14">【2026年度 第8ターム】 10/14 〜 11/10 (28日間)</option>
-                            <option value="2026-11-11">【2026年度 第9ターム】 11/11 〜 12/8 (28日間)</option>
-                            <option value="2026-12-09">【2026年度 第10ターム】 12/9 〜 1/5 (28日間)</option>
-                            <option value="2027-01-06">【2026年度 第11ターム】 1/6 〜 2/2 (28日間)</option>
-                            <option value="2027-02-03">【2026年度 第12ターム】 2/3 〜 3/2 (28日間)</option>
-                            <option value="2027-03-03">【2026年度 第13ターム】 3/3 〜 3/31 (29日間・年度末調整)</option>
-                        </select>
-                        <input type="hidden" id="termStartDate" value="2026-04-01">
-                        <span style="color: #64748b;">〜 終了日:</span>
-                        <span id="termEndDateDisplay" style="font-weight: 700; color: #1e293b;">2026-04-28</span>
-                        <span style="background: #fef08a; color: #854d0e; padding: 2px 8px; border-radius: 4px; font-weight: 700; font-size: 0.85rem;" id="termTitleBadge">第1ターム (4/1～4/28)</span>
-                        <span id="termDaysBadge" style="background: #f1f5f9; color: #475569; padding: 2px 8px; border-radius: 4px; font-weight: 700; font-size: 0.82rem;">28日間</span>
-                    </div>
-                    <div style="display: flex; align-items: center; gap: 0.75rem; font-size: 0.88rem; flex-wrap: wrap;">
-                        <div style="display: flex; align-items: center; gap: 0.4rem;">
-                            <span style="font-weight: 800; color: #1e293b;" title="ブラウザ内に自動保存された他の期間を呼び出します">📁 保存済み期間:</span>
-                            <select id="savedTermsSelect" style="padding: 5px 10px; border: 1.5px solid #cbd5e1; border-radius: 6px; font-weight: 700; background: white; font-size: 0.84rem; cursor: pointer;">
-                                <option value="">(保存済み期間の呼出)</option>
-                            </select>
-                        </div>
-                    </div>
-                </div>
-            </div>
             <!-- ツールバー・操作エリア（統一レイアウト） -->
             <div class="toolbar-card" style="flex-direction: column; align-items: stretch; gap: 10px;">
                 <!-- 1行目: シートタイトル ＆ アクションボタン群 -->
@@ -682,8 +679,8 @@
             theme: 'theme-master'
         };
     </script>
-    <script src="solver.js?v=20261105_fix_v10"></script>
-    <script src="app.js?v=20261105_fix_v10"></script>
+    <script src="solver.js?v=20261029_rev90"></script>
+    <script src="app.js?v=20261029_rev90"></script>
 </body>
 </html>
 
