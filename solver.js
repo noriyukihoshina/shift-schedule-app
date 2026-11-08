@@ -5742,37 +5742,36 @@ function validateScheduleGrid(grid, staffList, options = {}) {
                         conflictCells.push({ dayIndex: d, footerStat: 'eve', reason: reason });
                     }
                 } else {
-                    // 修正作業エリア: 全日0名は許容するが、既に特殊勤務が入っている日での不足または超過は指摘＆網掛け
-                    const totalEarlyToday = s2Early + s3Early + stEarlyCount;
-                    if (totalEarlyToday > 0) {
-                        let earlyValid = false;
-                        if (stEarlyCount === 0) {
-                            earlyValid = (s2Early === 1 && s3Early === 1);
-                        } else {
-                            // ST早番が1名以上の場合: STをどちらかに充当し、もう一方にPOが1名
-                            earlyValid = (s2Early === 1 && s3Early === 0) || (s2Early === 0 && s3Early === 1);
-                        }
-                        if (!earlyValid) {
-                            const reason = `${dateLabel}の南病棟早番要件を満たしていません（南2に1名、南3に1名。ST早番含めて計2名。現況: 南2=${s2Early}名, 南3=${s3Early}名, ST=${stEarlyCount}名）`;
-                            errors.push(`【${dateLabel}】${reason}。`);
-                            conflictCells.push({ dayIndex: d, footerStat: 'early', reason: reason });
-                        }
+                    // 修正作業エリア: これから特殊勤務を入れる段階なので、人数不足エラーは一切出さない（超過のみ検知）
+                    if (s2Early > 1) {
+                        const reason = `${dateLabel}の南2早番が${s2Early}名で定員超過です（上限: 1名）`;
+                        errors.push(`【${dateLabel}】${reason}。`);
+                        conflictCells.push({ dayIndex: d, footerStat: 'early', reason: reason });
                     }
-                    const totalLateToday = s2Late + s3Late;
-                    if (totalLateToday > 0) {
-                        if (s2Late !== 1 || s3Late !== 1) {
-                            const reason = `${dateLabel}の南病棟遅番要件を満たしていません（南2に1名、南3に1名。現況: 南2=${s2Late}名, 南3=${s3Late}名）`;
-                            errors.push(`【${dateLabel}】${reason}。`);
-                            conflictCells.push({ dayIndex: d, footerStat: 'late', reason: reason });
-                        }
+                    if (s3Early > 1) {
+                        const reason = `${dateLabel}の南3早番が${s3Early}名で定員超過です（上限: 1名）`;
+                        errors.push(`【${dateLabel}】${reason}。`);
+                        conflictCells.push({ dayIndex: d, footerStat: 'early', reason: reason });
                     }
-                    const totalEveToday = s2Eve + s3Eve;
-                    if (totalEveToday > 0) {
-                        if (s2Eve !== 1 || s3Eve !== 1) {
-                            const reason = `${dateLabel}の南病棟E番要件を満たしていません（南2に1名、南3に1名。現況: 南2=${s2Eve}名, 南3=${s3Eve}名）`;
-                            errors.push(`【${dateLabel}】${reason}。`);
-                            conflictCells.push({ dayIndex: d, footerStat: 'eve', reason: reason });
-                        }
+                    if (s2Late > 1) {
+                        const reason = `${dateLabel}の南2遅番が${s2Late}名で定員超過です（上限: 1名）`;
+                        errors.push(`【${dateLabel}】${reason}。`);
+                        conflictCells.push({ dayIndex: d, footerStat: 'late', reason: reason });
+                    }
+                    if (s3Late > 1) {
+                        const reason = `${dateLabel}の南3遅番が${s3Late}名で定員超過です（上限: 1名）`;
+                        errors.push(`【${dateLabel}】${reason}。`);
+                        conflictCells.push({ dayIndex: d, footerStat: 'late', reason: reason });
+                    }
+                    if (s2Eve > 1) {
+                        const reason = `${dateLabel}の南2E番が${s2Eve}名で定員超過です（上限: 1名）`;
+                        errors.push(`【${dateLabel}】${reason}。`);
+                        conflictCells.push({ dayIndex: d, footerStat: 'eve', reason: reason });
+                    }
+                    if (s3Eve > 1) {
+                        const reason = `${dateLabel}の南3E番が${s3Eve}名で定員超過です（上限: 1名）`;
+                        errors.push(`【${dateLabel}】${reason}。`);
+                        conflictCells.push({ dayIndex: d, footerStat: 'eve', reason: reason });
                     }
                 }
             } else {
@@ -5820,12 +5819,8 @@ function validateScheduleGrid(grid, staffList, options = {}) {
                         conflictCells.push({ dayIndex: d, footerStat: 'h8', reason: reason });
                     }
                 } else {
-                    // 修正作業エリア: 全日0名は許容するが、既に特殊勤務が入っている日での不足または超過は指摘＆網掛け
-                    if (totalEarly > 0 && totalEarly !== 3) {
-                        const reason = `${dateLabel}の早番（早）が${totalEarly}名です（要件: 3名。PO:${earlyCount}名, ST:${stEarlyCount}名）`;
-                        errors.push(`【${dateLabel}】${reason}。`);
-                        conflictCells.push({ dayIndex: d, footerStat: 'early', reason: reason });
-                    } else if (totalEarly > 3) {
+                    // 修正作業エリア: これから特殊勤務を入れる段階なので、人数不足エラーは一切出さない（超過のみ検知）
+                    if (totalEarly > 3) {
                         const reason = `${dateLabel}の早番（早）が${totalEarly}名で定員超過です（要件: 3名。PO:${earlyCount}名, ST:${stEarlyCount}名）`;
                         errors.push(`【${dateLabel}】${reason}。`);
                         conflictCells.push({ dayIndex: d, footerStat: 'early', reason: reason });
