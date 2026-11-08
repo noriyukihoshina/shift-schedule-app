@@ -1461,6 +1461,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 id: s.id,
                 name: s.name,
                 isUnused: !!s.isUnused,
+                floor: s.floor || '',
                 section: s.section || '',
                 can8: !!s.can8,
                 noEarly: !!s.noEarly,
@@ -1471,6 +1472,11 @@ document.addEventListener('DOMContentLoaded', () => {
                 isChief: !!s.isChief,
                 isSubChief: !!s.isSubChief,
                 isHalf: !!s.isHalf,
+                isZeroCount: !!s.isZeroCount,
+                isFirstYear: !!s.isFirstYear,
+                lifeSection: s.lifeSection || '',
+                haSection: s.haSection || '',
+                jobTitle: s.jobTitle || '',
                 isFullTime: !!s.isFullTime,
                 allow6Consec: !!s.allow6Consec,
                 prevName: s.prevName || '',
@@ -1480,6 +1486,7 @@ document.addEventListener('DOMContentLoaded', () => {
             })),
             startDate: document.getElementById('termStartDate')?.value || currentWorkingStartDate,
             outputGrid: (lastSolveResult && lastSolveResult.grid) ? lastSolveResult.grid.map(row => row.map(c => ({ ...c }))) : null,
+            outputStats: (lastSolveResult && lastSolveResult.stats) ? JSON.parse(JSON.stringify(lastSolveResult.stats)) : null,
             stTermJson: localStorage.getItem(`shift_schedule_st_term_${document.getElementById('termStartDate')?.value || currentWorkingStartDate || '2026-04-01'}`),
             lifeTermJson: localStorage.getItem(`shift_schedule_life_term_${document.getElementById('termStartDate')?.value || currentWorkingStartDate || '2026-04-01'}`)
         };
@@ -1595,6 +1602,11 @@ document.addEventListener('DOMContentLoaded', () => {
                     staffList[idx].isChief = !!s.isChief;
                     staffList[idx].isSubChief = !!s.isSubChief;
                     staffList[idx].isHalf = !!s.isHalf;
+                    staffList[idx].isZeroCount = !!s.isZeroCount;
+                    staffList[idx].isFirstYear = !!s.isFirstYear;
+                    staffList[idx].lifeSection = s.lifeSection || '';
+                    staffList[idx].haSection = s.haSection || '';
+                    staffList[idx].jobTitle = s.jobTitle || '';
                     staffList[idx].isFullTime = !!s.isFullTime;
                     staffList[idx].allow6Consec = !!s.allow6Consec;
                     staffList[idx].prevName = cleanTextValue(s.prevName || '');
@@ -1625,8 +1637,14 @@ document.addEventListener('DOMContentLoaded', () => {
         }
 
         // 出力シートの復元
-        if (state.outputGrid && lastSolveResult) {
-            lastSolveResult.grid = state.outputGrid.map(row => row.map(c => ({ ...c })));
+        if (state.outputGrid) {
+            const restoredGrid = state.outputGrid.map(row => row.map(c => ({ ...c })));
+            if (!lastSolveResult) {
+                lastSolveResult = { grid: restoredGrid, stats: state.outputStats || null };
+            } else {
+                lastSolveResult.grid = restoredGrid;
+                if (state.outputStats) lastSolveResult.stats = state.outputStats;
+            }
             if (lastScheduler) {
                 lastScheduler.grid = lastSolveResult.grid;
                 if (typeof getLinkedSTDailyWork === 'function') lastScheduler.stDailyWork = getLinkedSTDailyWork();
@@ -1641,6 +1659,10 @@ document.addEventListener('DOMContentLoaded', () => {
             } else {
                 renderOutputTable(lastSolveResult.grid, lastSolveResult.stats);
             }
+        } else {
+            // 自動生成前の状態へ復元
+            lastSolveResult = null;
+            resetOutputTable();
         }
         renderInputTable();
 
@@ -3764,6 +3786,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
     if (solveBtn) {
         solveBtn.addEventListener('click', () => {
+            pushHistory(); // ★ 勤務表生成前の状態を記録し、「↩ 戻る」で元に戻せるようにする
             // ★ リフレッシュ休暇自動配分連携:
             // ターム内にリフ対象月が含まれており、まだ必要人数分に達していないグループ（月末最終タームの未消化分含む）があれば自動配分を補完適用！
             const term = getTermInfo();
@@ -3879,6 +3902,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // 第2段階: 特殊勤務を入れるボタン（早3名・遅1名・E2名・8時1名を割り当てて最終完成）
     function handleAssignSpecialDuties() {
+        pushHistory(); // ★ 特殊勤務割り当て前の状態を記録し、「↩ 戻る」で元に戻せるようにする
         const btns = [document.getElementById('assignSpecialBtn'), document.getElementById('outputAssignSpecialBtn')];
         btns.forEach(b => {
             if (b) {
