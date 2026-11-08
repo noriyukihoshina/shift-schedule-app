@@ -466,7 +466,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 const isDefaultHa2 = isLife && (i === 42);
                 const isDefaultHa3 = isLife && (i === 43);
                 const isDefaultHa4 = isLife && (i === 44);
-                const defaultHaSec = isDefaultHa1 ? 'ハ1' : (isDefaultHa2 ? 'ハ2' : (isDefaultHa3 ? 'ハ3' : (isDefaultHa4 ? 'ハ4' : '')));
+                const defaultHaSec = isDefaultHa1 ? 'ハ1' : (isDefaultHa2 ? 'ハ2' : (isDefaultHa3 ? 'ハ3' : (isDefaultHa4 ? 'ハ南' : '')));
                 const defaultStaffName = defaultHaSec ? `${defaultHaSec} スタッフ` : `スタッフ ${String(i).padStart(2, '0')}`;
 
                 staffList.push({
@@ -1901,7 +1901,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 <th class="flag-col" rowspan="2" title="ハ1（土日休み固定、1階へ実数0.5加算）" style="background:#dcfce7; color:#15803d; font-weight:800;">ハ1</th>
                 <th class="flag-col" rowspan="2" title="ハ2（土日休み固定、2階へ実数0.5加算）" style="background:#dcfce7; color:#15803d; font-weight:800;">ハ2</th>
                 <th class="flag-col" rowspan="2" title="ハ3（通所と同じ組み方、3階へ実数0.5加算）" style="background:#dcfce7; color:#15803d; font-weight:800;">ハ3</th>
-                <th class="flag-col" rowspan="2" title="ハ4（通所と同じ組み方、南病棟へ実数0.5加算）" style="background:#fae8ff; color:#86198f; font-weight:800;">ハ4</th>
+                <th class="flag-col" rowspan="2" title="ハ南（通所と同じ組み方、南病棟へ実数0.5加算）" style="background:#fae8ff; color:#86198f; font-weight:800;">ハ南</th>
                 <th class="flag-col" rowspan="2" title="0（実数計算で0人換算）" style="background:#f5d0fe; color:#701a75; font-weight:800;">0</th>
                 <th class="flag-col" rowspan="2" title="0.5（実数計算で0.5人換算）" style="background:#e9d5ff; color:#581c87; font-weight:800;">0.5</th>
                 <th class="flag-col" rowspan="2" title="6連勤例外許可" style="background:#fee2e2; color:#991b1b;">6連勤<br>可</th>
@@ -2141,12 +2141,12 @@ document.addEventListener('DOMContentLoaded', () => {
                 });
 
                 // 3. ハセクション（ハ1・ハ2・ハ3・ハ4: 択一）
-                const haSecs = ['ハ1', 'ハ2', 'ハ3', 'ハ4'];
+                const haSecs = ['ハ1', 'ハ2', 'ハ3', 'ハ南'];
                 haSecs.forEach(haName => {
                     bodyHtml += `
                         <td class="flag-col" style="background:#f0fdf4;">
                             <label class="toggle-switch" title="${haName}">
-                                <input type="checkbox" ${staff.haSection === haName ? 'checked' : ''} data-ha-section="${haName}" data-s="${sIdx}">
+                                <input type="checkbox" ${(staff.haSection === haName || (haName === 'ハ南' && staff.haSection === 'ハ4')) ? 'checked' : ''} data-ha-section="${haName}" data-s="${sIdx}">
                                 <span class="toggle-slider"></span>
                             </label>
                         </td>
@@ -5957,7 +5957,7 @@ document.addEventListener('DOMContentLoaded', () => {
                                 { id: 41, name: '生活期 ハ1', haSection: 'ハ1', isUnused: false },
                                 { id: 42, name: '生活期 ハ2', haSection: 'ハ2', isUnused: false },
                                 { id: 43, name: '生活期 ハ3', haSection: 'ハ3', isUnused: false },
-                                { id: 44, name: '生活期 ハ4', haSection: 'ハ4', isUnused: false }
+                                { id: 44, name: '生活期 ハ南', haSection: 'ハ南', isUnused: false }
                             ];
                         }
                         fData = {
