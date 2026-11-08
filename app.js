@@ -768,25 +768,23 @@ document.addEventListener('DOMContentLoaded', () => {
                     applyMasterArrayToStaffList(cloud.staffMaster);
                 }
 
-                // 2. 全保存タームデータのクラウド復元
+                // 2. 全保存タームデータのクラウド同期（ローカル最新編集データおよび白紙化データの絶対保護）
                 if (cloud.terms && typeof cloud.terms === 'object') {
                     Object.keys(cloud.terms).forEach(tDate => {
                         if (cloud.terms[tDate]) {
                             const curLocal = window.localStorage.getItem(`${STORAGE_KEY_PREFIX}${tDate}`);
-                            let shouldApplyTerm = (!curLocal || showToastMsg || isInitialBoot);
-                            if (curLocal && !showToastMsg && !isInitialBoot) {
+                            if (curLocal) {
                                 try {
-                                    const localT = JSON.parse(curLocal);
-                                    const isLocalEmpty = !localT.outputGrid || localT.outputGrid.length === 0;
-                                    const hasCloudData = (cloud.terms[tDate].outputGrid && cloud.terms[tDate].outputGrid.length > 0) || (cloud.terms[tDate].staffList && cloud.terms[tDate].staffList.some(s => s.days && s.days.some(d => d)));
-                                    if (isLocalEmpty && hasCloudData) shouldApplyTerm = true;
-                                } catch (e) {
-                                    shouldApplyTerm = true;
-                                }
+                                    const lT = JSON.parse(curLocal);
+                                    const localTime = new Date(lT.updatedAt || 0).getTime();
+                                    const cloudTime = new Date(cloud.terms[tDate].updatedAt || 0).getTime();
+                                    // ローカルのタイムスタンプがクラウドと同等以上なら、白紙化状態も含めて絶対に上書きしない
+                                    if (!showToastMsg && localTime >= cloudTime) {
+                                        return;
+                                    }
+                                } catch (e) {}
                             }
-                            if (shouldApplyTerm) {
-                                window.localStorage.setItem(`${STORAGE_KEY_PREFIX}${tDate}`, JSON.stringify(cloud.terms[tDate]));
-                            }
+                            window.localStorage.setItem(`${STORAGE_KEY_PREFIX}${tDate}`, JSON.stringify(cloud.terms[tDate]));
                         }
                     });
                 }
