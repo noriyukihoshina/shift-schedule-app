@@ -1798,172 +1798,79 @@ class ShiftScheduler {
         }
 
         if (unassignedLifeStaff.length > 0) {
-            // 日別の公休者数分布を追跡（日別出勤人数の平準化）
-            const dailyOffCounts = new Array(this.numDays).fill(0);
-            for (let s = 0; s < this.numStaff; s++) {
-                if (this.staffList[s].isUnused) continue;
-                for (let d = 0; d < this.numDays; d++) {
-                    if (isHolidaySymbol(this.grid[s][d].symbol)) {
-                        dailyOffCounts[d]++;
-                    }
-                }
-            }
-
-            unassignedLifeStaff.forEach((s, uIdx) => {
+            unassignedLifeStaff.forEach(s => {
                 const staff = this.staffList[s];
                 const maxConsec = staff.allow6Consec ? 6 : 5;
 
-                // すでに希望等で確定している公休数を計算
-                let currentHols = 0;
-                for (let d = 0; d < this.numDays; d++) {
-                    if (isHolidaySymbol(this.grid[s][d].symbol)) currentHols += 1.0;
-                }
-                let neededOff = Math.max(0, Math.round(stdHols - currentHols));
+                // 通常のPO同様に週単位スケジュールエンジンで公休8日・週休2日・5連勤以下・5連勤後2連休を厳密充足！
+                let solved = this.solveStaffScheduleWeekly(s, stdHols, maxConsec);
 
-                // 週単位（日曜〜土曜の週）ごとに原則2日の公休を配分
-                // 各週で公休を挟むことで5連勤以下を自然かつ確実に保証
-                for (let w = 0; w < this.weekSpans.length && neededOff > 0; w++) {
-                    const wSpan = this.weekSpans[w];
-                    let wFixedOff = 0;
-                    const wBlanks = [];
-                    wSpan.forEach(d => {
-                        if (isHolidaySymbol(this.grid[s][d].symbol)) wFixedOff++;
-                        else if (this.grid[s][d].symbol === '' && !this.grid[s][d].isFixed) {
-                            wBlanks.push(d);
-                        }
-                    });
-
-                    // この週に必要な公休数（通常2日、週日数が3日以下の端数週なら1日）
-                    const weekTargetOff = wSpan.length >= 5 ? 2 : 1;
-                    const wNeeded = Math.min(neededOff, Math.max(0, weekTargetOff - wFixedOff));
-
-                    if (wNeeded > 0 && wBlanks.length > 0) {
-                        // スタッフごとに公休曜日に偏りが出ないようハッシュ＋公休最少日優先
-                        wBlanks.sort((a, b) => {
-                            const diff = dailyOffCounts[a] - dailyOffCounts[b];
-                            if (diff !== 0) return diff;
-                            return ((a * 7 + uIdx * 3) % 11) - ((b * 7 + uIdx * 3) % 11);
-                        });
-
-                        for (let i = 0; i < Math.min(wNeeded, wBlanks.length); i++) {
-                            const targetD = wBlanks[i];
-                            this.grid[s][targetD].symbol = SYMBOLS.OFF;
-                            dailyOffCounts[targetD]++;
-                            neededOff--;
-                        }
-                    }
-                }
-
-                // ターム合計で目標公休数（8日）に届いていない場合、未割当日から平準化配置
-                if (neededOff > 0) {
-                    const allBlanks = [];
+                // もし事前希望で6連勤以上または週6日勤務以上が入力されており、allow6ConsecがOFFの場合:
+                // ハード制約（週休2日・最大5連勤）を満たすため、希望の「○」のうち連勤が長くなっているセルを緩和して再求解
+                if (!solved) {
+                    const tempGridBackup = [];
                     for (let d = 0; d < this.numDays; d++) {
-                        if (this.grid[s][d].symbol === '' && !this.grid[s][d].isFixed) {
-                            allBlanks.push(d);
-                        }
-                    }
-                    allBlanks.sort((a, b) => {
-                        const diff = dailyOffCounts[a] - dailyOffCounts[b];
-                        if (diff !== 0) return diff;
-                        return ((a * 5 + uIdx * 2) % 7) - ((b * 5 + uIdx * 2) % 7);
-                    });
-                    for (let i = 0; i < Math.min(neededOff, allBlanks.length); i++) {
-                        const targetD = allBlanks[i];
-                        this.grid[s][targetD].symbol = SYMBOLS.OFF;
-                        dailyOffCounts[targetD]++;
-                    }
-                }
-
-                // 残りの空き枠はすべて通常勤務「○」
-                for (let d = 0; d < this.numDays; d++) {
-                    if (this.grid[s][d].symbol === '') {
-                        this.grid[s][d].symbol = SYMBOLS.WORK;
-                    }
-                }
-
-                // ★ 連勤厳格解消 & 公休総数維持スワッパー
-                // 前ターム末尾からの連勤を含め、何連勤でも必ず maxConsec 以下になるまで修復
-                for (let iter = 0; iter < 10; iter++) {
-                    let maxStreak = 0;
-                    let streakEnd = -1;
-                    let streakLen = 0;
-
-                    // 前ターム末尾の実績カウント
-                    let initStreak = 0;
-                    if (staff.prevDays && Array.isArray(staff.prevDays)) {
-                        for (let p = staff.prevDays.length - 1; p >= 0; p--) {
-                            if (isWorkSymbol(staff.prevDays[p])) initStreak++;
-                            else break;
-                        }
+                        tempGridBackup.push({ symbol: this.grid[s][d].symbol, isFixed: this.grid[s][d].isFixed });
                     }
 
-                    streakLen = initStreak;
+                    // 5連勤以上の「○」希望をカット
+                    let streak = 0;
                     for (let d = 0; d < this.numDays; d++) {
-                        if (isWorkSymbol(this.grid[s][d].symbol)) {
-                            streakLen++;
-                            if (streakLen > maxStreak) {
-                                maxStreak = streakLen;
-                                streakEnd = d;
+                        if (this.grid[s][d].symbol === SYMBOLS.WORK || this.grid[s][d].symbol === '○') {
+                            streak++;
+                            if (streak >= 5) {
+                                this.grid[s][d].symbol = '';
+                                this.grid[s][d].isFixed = false;
+                                streak = 0;
                             }
                         } else {
-                            streakLen = 0;
+                            streak = 0;
                         }
                     }
 
-                    if (maxStreak <= maxConsec) break; // 連勤制限クリア！
+                    solved = this.solveStaffScheduleWeekly(s, stdHols, maxConsec);
 
-                    // 連勤超過しているブロックの中から、未固定のセルを1つ選んで「休」にする
-                    // 連勤の中央付近を休みにすると前後の連勤を最も小さく分断できる
-                    const streakStart = Math.max(0, streakEnd - (maxStreak - 1));
-                    let cutD = -1;
-                    let bestDist = 999;
-                    const midD = (streakStart + streakEnd) / 2;
-
-                    for (let cd = streakStart; cd <= streakEnd; cd++) {
-                        if (!this.grid[s][cd].isFixed && this.grid[s][cd].symbol === SYMBOLS.WORK) {
-                            const dist = Math.abs(cd - midD);
-                            if (dist < bestDist) {
-                                bestDist = dist;
-                                cutD = cd;
-                            }
+                    // それでも解けない場合のフォールバック（週2休を必ず配分）
+                    if (!solved) {
+                        for (let d = 0; d < this.numDays; d++) {
+                            this.grid[s][d].symbol = tempGridBackup[d].symbol;
+                            this.grid[s][d].isFixed = tempGridBackup[d].isFixed;
                         }
                     }
+                }
 
-                    if (cutD === -1) break; // 固定枠のみでカット不可
-
-                    this.grid[s][cutD].symbol = SYMBOLS.OFF;
-                    dailyOffCounts[cutD]++;
-
-                    // 公休日数が増えたので、既存の休みのうち「○」に変えても新たな連勤（> maxConsec）を生まない未固定セルを1つ選んで「○」に戻す
-                    let swapped = false;
-                    for (let candD = 0; candD < this.numDays; candD++) {
-                        if (candD !== cutD && !this.grid[s][candD].isFixed && this.grid[s][candD].symbol === SYMBOLS.OFF) {
-                            // candD を ○ に仮変更したときの最大連勤をチェック
-                            this.grid[s][candD].symbol = SYMBOLS.WORK;
-                            let testStreak = initStreak;
-                            let testMax = 0;
-                            for (let td = 0; td < this.numDays; td++) {
-                                if (isWorkSymbol(this.grid[s][td].symbol)) {
-                                    testStreak++;
-                                    if (testStreak > testMax) testMax = testStreak;
-                                } else {
-                                    testStreak = 0;
-                                }
-                            }
-                            if (testMax <= maxConsec) {
-                                // 連勤基準クリア！このスワップを採用
-                                dailyOffCounts[candD]--;
-                                swapped = true;
-                                break;
-                            } else {
-                                // 戻す
-                                this.grid[s][candD].symbol = SYMBOLS.OFF;
-                            }
+                if (solved) {
+                    for (let d = 0; d < this.numDays; d++) {
+                        if (!this.grid[s][d].isFixed || this.grid[s][d].symbol === '') {
+                            this.grid[s][d].symbol = solved[d] || SYMBOLS.WORK;
                         }
                     }
+                } else {
+                    // 究極の安全フォールバック: 各週に必ず2日ずつ公休を配置
+                    let curOff = 0;
+                    for (let d = 0; d < this.numDays; d++) {
+                        if (isHolidaySymbol(this.grid[s][d].symbol)) curOff++;
+                    }
+                    let needed = Math.max(0, Math.round(stdHols - curOff));
 
-                    if (!swapped) {
-                        // 連勤基準を崩さないスワップ候補が見つからなかった場合でも、公休が1日増えるのは連勤違反よりも安全
+                    for (let w = 0; w < this.weekSpans.length && needed > 0; w++) {
+                        const wSpan = this.weekSpans[w];
+                        let wOff = 0;
+                        const blanks = [];
+                        wSpan.forEach(d => {
+                            if (isHolidaySymbol(this.grid[s][d].symbol)) wOff++;
+                            else if (!this.grid[s][d].isFixed && this.grid[s][d].symbol === '') blanks.push(d);
+                        });
+                        const toAdd = Math.min(needed, Math.max(0, (wSpan.length >= 5 ? 2 : 1) - wOff));
+                        for (let i = 0; i < toAdd && i < blanks.length; i++) {
+                            this.grid[s][blanks[i]].symbol = SYMBOLS.OFF;
+                            needed--;
+                        }
+                    }
+                    for (let d = 0; d < this.numDays; d++) {
+                        if (this.grid[s][d].symbol === '') {
+                            this.grid[s][d].symbol = SYMBOLS.WORK;
+                        }
                     }
                 }
             });
