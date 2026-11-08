@@ -4895,16 +4895,16 @@ document.addEventListener('DOMContentLoaded', () => {
         // ★ セクション別出勤人数リストの定義（PT A/2, OT A/2, PT B/3, OT B/3, ST, ﾊｰﾌﾏﾝ出勤）
         const isSouthSec = (currentFloor === '南' || appConfig.deptId === 'south');
         const secList = [
-            { name: isSouthSec ? 'PT 2' : 'PT A', label: isSouthSec ? 'PT 2 出勤' : 'PT A 出勤', cls: 'foot-sec-pt-a', color: '#ea580c' },
-            { name: isSouthSec ? 'OT 2' : 'OT A', label: isSouthSec ? 'OT 2 出勤' : 'OT A 出勤', cls: 'foot-sec-ot-a', color: '#ea580c' },
-            { name: isSouthSec ? 'PT 3' : 'PT B', label: isSouthSec ? 'PT 3 出勤' : 'PT B 出勤', cls: 'foot-sec-pt-b', color: '#1d4ed8' },
-            { name: isSouthSec ? 'OT 3' : 'OT B', label: isSouthSec ? 'OT 3 出勤' : 'OT B 出勤', cls: 'foot-sec-ot-b', color: '#1d4ed8' },
-            { name: 'ST',   label: 'ST 出勤',   cls: 'foot-sec-st',   color: '#ec4899' }
+            { name: isSouthSec ? 'PT 2' : 'PT A', label: isSouthSec ? 'PT 2 実数' : 'PT A 実数', cls: 'foot-sec-pt-a', color: '#ea580c' },
+            { name: isSouthSec ? 'OT 2' : 'OT A', label: isSouthSec ? 'OT 2 実数' : 'OT A 実数', cls: 'foot-sec-ot-a', color: '#ea580c' },
+            { name: isSouthSec ? 'PT 3' : 'PT B', label: isSouthSec ? 'PT 3 実数' : 'PT B 実数', cls: 'foot-sec-pt-b', color: '#1d4ed8' },
+            { name: isSouthSec ? 'OT 3' : 'OT B', label: isSouthSec ? 'OT 3 実数' : 'OT B 実数', cls: 'foot-sec-ot-b', color: '#1d4ed8' },
+            { name: 'ST',   label: 'ST 実数',   cls: 'foot-sec-st',   color: '#ec4899' }
         ];
 
         // ★ 添付4準拠: STの下に「ﾊｰﾌﾏﾝ出勤」を作成し、生活期のハ1のトグルONのスタッフが出勤の時には実数0.5を入れる
         if (!isST && !isLife) {
-            secList.push({ name: 'HA', label: 'ﾊｰﾌﾏﾝ出勤', cls: 'foot-sec-ha', color: '#059669' });
+            secList.push({ name: 'HA', label: 'ﾊｰﾌﾏﾝ実数', cls: 'foot-sec-ha', color: '#059669' });
         }
 
         const linkedLifeWorkArr = (!isST && !isLife) ? getLinkedLifeDailyWork() : null;
@@ -5792,12 +5792,12 @@ document.addEventListener('DOMContentLoaded', () => {
             const floorFooterRows = [
                 { label: '出勤人数合計', vals: dailyTotal, color: '#0f172a', bg: '#f1f5f9', bold: true },
                 { label: '実数合計', vals: dailyReal, color: '#0369a1', bg: '#e2e8f0', bold: true },
-                { label: `${secPta} 出勤`, vals: dailyPta, color: '#ea580c', bg: '#fffaf5', bold: false },
-                { label: `${secOta} 出勤`, vals: dailyOta, color: '#ea580c', bg: '#fffaf5', bold: false },
-                { label: `${secPtb} 出勤`, vals: dailyPtb, color: '#1d4ed8', bg: '#f5f8ff', bold: false },
-                { label: `${secOtb} 出勤`, vals: dailyOtb, color: '#1d4ed8', bg: '#f5f8ff', bold: false },
-                { label: 'ST 出勤', vals: dailyStWork, color: '#db2777', bg: '#fdf2f8', bold: false },
-                { label: 'ﾊｰﾌﾏﾝ出勤', vals: dailyHaWork, color: '#059669', bg: '#f0fdf4', bold: false },
+                { label: `${secPta} 実数`, vals: dailyPta, color: '#ea580c', bg: '#fffaf5', bold: false },
+                { label: `${secOta} 実数`, vals: dailyOta, color: '#ea580c', bg: '#fffaf5', bold: false },
+                { label: `${secPtb} 実数`, vals: dailyPtb, color: '#1d4ed8', bg: '#f5f8ff', bold: false },
+                { label: `${secOtb} 実数`, vals: dailyOtb, color: '#1d4ed8', bg: '#f5f8ff', bold: false },
+                { label: 'ST 実数', vals: dailyStWork, color: '#db2777', bg: '#fdf2f8', bold: false },
+                { label: 'ﾊｰﾌﾏﾝ実数', vals: dailyHaWork, color: '#059669', bg: '#f0fdf4', bold: false },
                 { label: '早番', vals: dailyEarly, color: '#ea580c', bg: '#fff7ed', bold: true },
                 { label: '遅番', vals: dailyLate, color: '#0284c7', bg: '#f0f9ff', bold: true },
                 { label: 'E', vals: dailyEve, color: '#7c3aed', bg: '#faf5ff', bold: true },
@@ -8194,7 +8194,7 @@ document.addEventListener('DOMContentLoaded', () => {
             const rowName = cleanTextValue(rawName);
 
             // フッター集計行（出勤人数合計・実数合計・早番等）に達したら終了
-            if (['出勤人数合計', '実数合計', 'PT A 出勤', 'OT A 出勤', 'PT B 出勤', 'OT B 出勤', 'ST 出勤', '早番', '遅番', 'E', '8時', '専従'].some(k => rowName.startsWith(k))) {
+            if (['出勤人数合計', '実数合計', 'PT A 出勤', 'OT A 出勤', 'PT B 出勤', 'OT B 出勤', 'ST 出勤', 'PT A 実数', 'OT A 実数', 'PT B 実数', 'OT B 実数', 'ST 実数', 'ﾊｰﾌﾏﾝ実数', '早番', '遅番', 'E', '8時', '専従'].some(k => rowName.startsWith(k))) {
                 break;
             }
 
