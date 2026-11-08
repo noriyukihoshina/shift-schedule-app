@@ -230,20 +230,22 @@ document.addEventListener('DOMContentLoaded', () => {
                 staffList[idx].name = cleanTextValue(ms.name) || staffList[idx].name;
                 staffList[idx].isUnused = ms.isUnused !== undefined ? !!ms.isUnused : staffList[idx].isUnused;
                 staffList[idx].floor = ms.floor !== undefined ? ms.floor : staffList[idx].floor;
-                staffList[idx].section = ms.section || '';
-                staffList[idx].lifeSection = ms.lifeSection || '';
-                staffList[idx].haSection = ms.haSection || '';
+                staffList[idx].section = ms.section || staffList[idx].section || '';
+                // ★ トグルトリガーによるデータ保護（No.指定ではなく、トグル設定の有無を判定して空上書きを遮断）
+                staffList[idx].lifeSection = ms.lifeSection || staffList[idx].lifeSection || '';
+                staffList[idx].haSection = ms.haSection || staffList[idx].haSection || '';
                 staffList[idx].jobTitle = ms.jobTitle || staffList[idx].jobTitle || '';
                 staffList[idx].can8 = ms.can8 !== undefined ? !!ms.can8 : staffList[idx].can8;
-                staffList[idx].noEarly = !!ms.noEarly;
-                staffList[idx].noLate = !!ms.noLate;
-                staffList[idx].noEve = !!ms.noEve;
+                staffList[idx].noEarly = ms.noEarly !== undefined ? !!ms.noEarly : staffList[idx].noEarly;
+                staffList[idx].noLate = ms.noLate !== undefined ? !!ms.noLate : staffList[idx].noLate;
+                staffList[idx].noEve = ms.noEve !== undefined ? !!ms.noEve : staffList[idx].noEve;
                 staffList[idx].canSched = ms.canSched !== undefined ? !!ms.canSched : staffList[idx].canSched;
-                staffList[idx].isSectionChief = !!ms.isSectionChief;
-                staffList[idx].isChief = !!(ms.isChief || ms.chief);
-                staffList[idx].isSubChief = !!ms.isSubChief;
-                staffList[idx].isHalf = !!ms.isHalf;
-                staffList[idx].isZeroCount = !!ms.isZeroCount;
+                staffList[idx].isSectionChief = ms.isSectionChief !== undefined ? !!ms.isSectionChief : staffList[idx].isSectionChief;
+                staffList[idx].isChief = ms.isChief !== undefined ? !!(ms.isChief || ms.chief) : staffList[idx].isChief;
+                staffList[idx].isSubChief = ms.isSubChief !== undefined ? !!ms.isSubChief : staffList[idx].isSubChief;
+                staffList[idx].isHalf = ms.isHalf !== undefined ? !!ms.isHalf : staffList[idx].isHalf;
+                // 管理トグルONのスタッフは自動的にisZeroCountも保護
+                staffList[idx].isZeroCount = ms.isZeroCount !== undefined ? !!ms.isZeroCount : (staffList[idx].lifeSection === '管理' ? true : staffList[idx].isZeroCount);
                 staffList[idx].isFirstYear = !!ms.isFirstYear;
                 staffList[idx].isFullTime = ms.isFullTime !== undefined ? !!ms.isFullTime : staffList[idx].isFullTime;
                 staffList[idx].allow6Consec = !!ms.allow6Consec;
@@ -461,13 +463,9 @@ document.addEventListener('DOMContentLoaded', () => {
                     days: new Array(NUM_DAYS).fill('')
                 });
             } else {
-                // 通常のPT/OTスタッフ初期化（生活期初期値：41〜44番は各病棟応援ハ1〜ハ4）
-                const isDefaultHa1 = isLife && (i === 41);
-                const isDefaultHa2 = isLife && (i === 42);
-                const isDefaultHa3 = isLife && (i === 43);
-                const isDefaultHa4 = isLife && (i === 44);
-                const defaultHaSec = isDefaultHa1 ? 'ハ1' : (isDefaultHa2 ? 'ハ2' : (isDefaultHa3 ? 'ハ3' : (isDefaultHa4 ? 'ハ南' : '')));
-                const defaultStaffName = defaultHaSec ? `${defaultHaSec} スタッフ` : `スタッフ ${String(i).padStart(2, '0')}`;
+                // スタッフ初期化（生活期も番号固定ではなく、ユーザーがトグルで動的に指定）
+                const defaultStaffName = `スタッフ ${String(i).padStart(2, '0')}`;
+                const defaultHaSec = '';
 
                 staffList.push({
                     id: i,

@@ -687,7 +687,9 @@ class ShiftScheduler {
         if (staff.isZeroCount || staff.lifeSection === '管理' || staff.lifeSection === 'Cl1') {
             return 0;
         }
-        const factor = staff.isHalf ? 0.5 : 1.0;
+        // ★ ハ1〜ハ南のトグルON者は自動的に実数0.5換算（0.5トグルの有無はハーフマンには使用しない）
+        const isHaDuty = !!(staff.haSection && ['ハ1', 'ハ2', 'ハ3', 'ハ4', 'ハ南'].includes(staff.haSection));
+        const factor = (staff.isHalf || isHaDuty) ? 0.5 : 1.0;
         return amt * factor;
     }
 
@@ -1680,8 +1682,10 @@ class ShiftScheduler {
             const sec = staff.lifeSection || '';
             const ha = staff.haSection || '';
 
-            const isPatternA = (sec === '訪問' || sec === '管理' || sec === 'Cl1' || ha === 'ハ1' || ha === 'ハ2');
-            const isPatternB = (sec === '通所' || sec === 'Cl2' || ha === 'ハ3' || ha === 'ハ4' || ha === 'ハ南');
+            // ★ Group A（土日休み固定）: 訪問, 管理, Cl1 のみ（※ハ1, ハ2は業務トグルに従うため除外）
+            const isPatternA = (sec === '訪問' || sec === '管理' || sec === 'Cl1');
+            // ★ Group B（日曜休み固定＋平日分散公休）: 通所, Cl2 のみ（※ハ3, ハ南は業務トグルに従うため除外）
+            const isPatternB = (sec === '通所' || sec === 'Cl2');
 
             if (isPatternA) {
                 // 土日休み固定
@@ -1723,7 +1727,7 @@ class ShiftScheduler {
             if (staff.isUnused) continue;
             const sec = staff.lifeSection || '';
             const ha = staff.haSection || '';
-            if (sec === '通所' || sec === 'Cl2' || ha === 'ハ3' || ha === 'ハ4' || ha === 'ハ南') {
+            if (sec === '通所' || sec === 'Cl2') {
                 patternBStaff.push(s);
             }
         }
@@ -5147,7 +5151,8 @@ class ShiftScheduler {
                 // ★ セクション別出勤実数の集計（時短0.5スタッフや0カウントを正確に反映）
                 let staffRealAmt = 0;
                 if (!staff.isZeroCount && !isExcludedFromWork) {
-                    const factor = staff.isHalf ? 0.5 : 1.0;
+                    const isHaDuty = !!(staff.haSection && ['ハ1', 'ハ2', 'ハ3', 'ハ4', 'ハ南'].includes(staff.haSection));
+                    const factor = (staff.isHalf || isHaDuty) ? 0.5 : 1.0;
                     staffRealAmt = staffWorkAmt * factor;
                 }
 
@@ -5196,7 +5201,8 @@ class ShiftScheduler {
                     amt = 0.5;
                 }
                 if (amt > 0) {
-                    const factor = staff.isHalf ? 0.5 : 1.0;
+                    const isHaDuty = !!(staff.haSection && ['ハ1', 'ハ2', 'ハ3', 'ハ4', 'ハ南'].includes(staff.haSection));
+                    const factor = (staff.isHalf || isHaDuty) ? 0.5 : 1.0;
                     realWorkBase += amt * factor;
                 }
             }
