@@ -2347,38 +2347,40 @@ class ShiftScheduler {
 
                     // ★ ユーザー指示: 8時がある人は特殊勤務（早・遅・E・8時）を「2つに固定」！
                     // counts.h8[s]: 8時回数, counts.total[s]: 早+遅+E回数
+                    // ★ ユーザー指示: 8時がある人は特殊勤務（早・遅・E・8時）を「2つに固定」！
                     const is8ClockStaff = !!this.staffList[s].can8;
                     const grandTotalSpecial = counts.total[s] + counts.h8[s];
-                    if (is8ClockStaff || counts.h8[s] > 0) {
-                        // 8時があるスタッフは、特殊勤務（早・遅・E・8時）の合計が「2回」に達していれば完全除外！
+                    if (counts.h8[s] > 0 || is8ClockStaff) {
+                        // 8時が1回以上ある、または8時担当スタッフは、全特殊勤務合計が「2回」に達したら絶対に追加しない！
                         if (grandTotalSpecial >= 2) continue;
                     }
 
                     // 1. 合計回数ペナルティ（早+遅+E）
                     let totalCountPenalty = 0;
                     if (is8ClockStaff || counts.h8[s] > 0) {
-                        // 8時担当スタッフ: 全特殊勤務の合計がちょうど2回になるように誘導
+                        // ★ ユーザー指示: 8時がある人は特殊勤務（早・遅・E・8時）を「2つに固定」！
+                        // 8時が1回ある人は、早・遅・Eのいずれかをもう1回割り当てて合計【ちょうど2回】に確定させる！
                         if (grandTotalSpecial === 1) {
-                            totalCountPenalty = -1000; // 1回あれば2回目として配置可能
+                            totalCountPenalty = -50000; // 1回あるスタッフは2回目（合計2）の枠として超強力に優先配分！
                         } else if (grandTotalSpecial === 0) {
-                            totalCountPenalty = -3000; // 0回なら優先配置
+                            totalCountPenalty = -5000;
                         } else {
-                            totalCountPenalty = 200000; // 2回以上は配置不可
+                            totalCountPenalty = 999999; // 2回に達したら絶対に追加割当しない（2回固定）
                         }
                     } else {
                         // ★ ユーザー指示: 特殊勤務の合計数が3の人と5の人がいる。ばらつきを極限まで減らして極力全員4回均等配分！
                         if (counts.total[s] >= 5) {
-                            totalCountPenalty = 250000 + (counts.total[s] - 5) * 80000; // 5回以上は超強力禁止
+                            totalCountPenalty = 500000 + (counts.total[s] - 5) * 100000; // 5回以上は絶対禁止
                         } else if (counts.total[s] === 4) {
-                            totalCountPenalty = 45000; // 4回に達したスタッフは強いペナルティで新規割り当てを抑止
+                            totalCountPenalty = 80000; // 4回に達したスタッフは強いペナルティで抑止
                         } else if (counts.total[s] === 3) {
                             totalCountPenalty = 0; // 3回のスタッフは4回目を目指して配置
                         } else if (counts.total[s] === 2) {
-                            totalCountPenalty = -8000;
+                            totalCountPenalty = -12000;
                         } else if (counts.total[s] === 1) {
-                            totalCountPenalty = -16000;
+                            totalCountPenalty = -25000;
                         } else {
-                            totalCountPenalty = -28000; // まだ0〜2回のスタッフを最優先して4回に引き上げる！
+                            totalCountPenalty = -40000; // まだ0〜2回のスタッフを最優先して4回に引き上げる！
                         }
                     }
 
@@ -2704,11 +2706,12 @@ class ShiftScheduler {
         for (let iter = 0; iter < 120; iter++) {
             let improved = false;
 
-            // 各スタッフの現在回数を集計
+            // 各スタッフの現在回数を集計（8時も含めて厳密に集計！）
             const counts = {
                 early: new Array(this.numStaff).fill(0),
                 late: new Array(this.numStaff).fill(0),
                 eve: new Array(this.numStaff).fill(0),
+                h8: new Array(this.numStaff).fill(0),
                 total: new Array(this.numStaff).fill(0)
             };
             for (let s = 0; s < this.numStaff; s++) {
@@ -2718,25 +2721,29 @@ class ShiftScheduler {
                     if (sym === SYMBOLS.EARLY) { counts.early[s]++; counts.total[s]++; }
                     if (sym === SYMBOLS.LATE) { counts.late[s]++; counts.total[s]++; }
                     if (sym === SYMBOLS.EVE) { counts.eve[s]++; counts.total[s]++; }
+                    if (sym === SYMBOLS.H8) { counts.h8[s]++; }
                 }
             }
 
-            // 1. 8時スタッフで合計が3回以上になっている人を減らす（目標: 2回以下）
-            // 2. または一般スタッフで合計が6回以上になっている人を減らす（目標: 4〜5回）
-            // 3. または特定勤務種別で上限を超えている人（遅>=2、E>=3、早>=3）を減らす
+            // ★ ユーザー指示: 8時がある人は特殊勤務（早・遅・E・8時）を「2つに固定」！一般スタッフは4回均等！
             const overStaffList = [];
             for (let s = 0; s < this.numStaff; s++) {
                 if (this.staffList[s].isUnused || this.staffList[s].isSectionChief) continue;
-                const limitTotal = is8(s) ? 2 : 5;
+                const has8 = counts.h8[s] > 0 || is8(s);
+                const grandTotal = counts.total[s] + counts.h8[s];
                 let overScore = 0;
-                if (counts.total[s] > limitTotal) overScore += (counts.total[s] - limitTotal) * 100;
+                if (has8) {
+                    // 8時がある人は全特殊勤務合計が「2回」を超えていたら最優先で減らす！
+                    if (grandTotal > 2) overScore += (grandTotal - 2) * 300;
+                } else {
+                    // 一般スタッフは合計が4回を超えていたら減らす（目標4回）
+                    if (counts.total[s] > 4) overScore += (counts.total[s] - 4) * 100;
+                }
                 if (counts.late[s] > 1) overScore += (counts.late[s] - 1) * 80;
                 if (counts.eve[s] > 2) overScore += (counts.eve[s] - 2) * 50;
-                if (!is8(s) && counts.early[s] > 2) overScore += (counts.early[s] - 2) * 30;
-                if (is8(s) && counts.early[s] > 1) overScore += (counts.early[s] - 1) * 40;
 
                 if (overScore > 0) {
-                    overStaffList.push({ staff: s, overScore, is8: is8(s) });
+                    overStaffList.push({ staff: s, overScore, is8: has8 });
                 }
             }
             overStaffList.sort((a, b) => b.overScore - a.overScore);
@@ -2817,9 +2824,11 @@ class ShiftScheduler {
                             }
                         }
 
-                        const sLowLimit = is8(sLow) ? 2 : 5;
-                        // 合計回数が上限未満のスタッフにのみ譲渡（8時担当者は最大2回で打ち止め）
-                        if (counts.total[sLow] >= sLowLimit) continue;
+                        // ★ ユーザー指示: 8時担当スタッフは「全特殊勤務合計ちょうど2回固定」！一般スタッフは最大4回！
+                        const isLow8 = counts.h8[sLow] > 0 || is8(sLow);
+                        const sLowGrandTotal = counts.total[sLow] + counts.h8[sLow];
+                        const sLowLimit = isLow8 ? 2 : 4;
+                        if (sLowGrandTotal >= sLowLimit) continue;
                         const maxDutyForLow = is8(sLow) ? (currentReq.key === 'early' ? 1 : currentReq.maxNormal) : currentReq.maxNormal;
                         if (counts[currentReq.key][sLow] >= maxDutyForLow) continue;
 
@@ -3760,10 +3769,27 @@ class ShiftScheduler {
      * ステップ2: 8時勤務（毎日1名）の配置（限定リソースを最優先で割り当て）
      */
     assign8ClockDuties(options = {}) {
-        // ★ 南病棟でも南2・南3スタッフから毎日1名8時を選出！
+        // ★ ユーザー指示: 全テーブルで共通でAチームとBチームの8時を完全均等（14回対14回）に配分！
+        // かつ8時担当スタッフの8時回数は最大1〜2回（原則1回）に制限し、特殊勤務合計を2つに固定！
         const force = options && options.force === true;
         const counts = new Array(this.numStaff).fill(0);
         const lastAssignedDay = new Array(this.numStaff).fill(-10);
+
+        // チーム判定ヘルパー (A or B)
+        const getStaffTeam = (s) => {
+            const st = this.staffList[s];
+            if (!st) return 'A';
+            if (this.isSouth) {
+                const fl = st.subFloor || st.floor || '';
+                return (fl === '南3' || fl.includes('南3')) ? 'B' : 'A';
+            }
+            const sec = st.section || '';
+            if (sec.includes('B')) return 'B';
+            if (sec.includes('A')) return 'A';
+            return (s % 2 === 1) ? 'B' : 'A';
+        };
+
+        const team8Counts = { A: 0, B: 0 };
 
         for (let s = 0; s < this.numStaff; s++) {
             for (let d = 0; d < this.numDays; d++) {
@@ -3787,10 +3813,12 @@ class ShiftScheduler {
                 if (this.staffList[s].isUnused) continue;
                 // ★ 係長は特殊勤務(8時含む)なし（事前希望で入力されたもののみ残し、自動割当は行わない）
                 if (this.staffList[s].isSectionChief) continue;
-                // 南病棟では can8 がONのスタッフを最優先。もし該当者がいなければ南2/南3の一般スタッフも候補に含める
+                // ★ ユーザー指示: 全テーブルでAチーム・Bチーム（南病棟なら南2・南3）から完全均等選出
                 if (this.isSouth) {
-                    const hasAnyCan8 = this.staffList.some(st => !st.isUnused && !st.isSectionChief && st.can8);
-                    if (hasAnyCan8 && !this.staffList[s].can8) continue;
+                    const staffTeam = getStaffTeam(s);
+                    // 該当チーム（南2または南3）に can8 スタッフがいるか確認
+                    const teamHasCan8 = this.staffList.some(st => !st.isUnused && !st.isSectionChief && st.can8 && getStaffTeam(this.staffList.indexOf(st)) === staffTeam);
+                    if (teamHasCan8 && !this.staffList[s].can8) continue;
                 } else {
                     if (!this.staffList[s].can8) continue;
                 }
@@ -3814,9 +3842,20 @@ class ShiftScheduler {
                     if (remainingSchedWork < 2) continue;
                 }
 
-                // スコア: 割当回数が少ない順 + 直近に8時に入っていない順（適度にローテーション）
-                let score = counts[s] * 20 - (d - lastAssignedDay[s]);
-                candidates.push({ staffIndex: s, score });
+                // ★ ユーザー指示: 8時の回数は1人最大1回（どうしても不足する場合のみ2回）！3回以上は絶対禁止！
+                if (counts[s] >= 2) continue;
+
+                const team = getStaffTeam(s);
+                // チーム均等化ペナルティ: 8時回数が多いチームには強力なペナルティを付与して交互・均等選出
+                const teamDiff = team8Counts[team] - (team === 'A' ? team8Counts.B : team8Counts.A);
+                const teamPenalty = teamDiff * 5000;
+
+                // 回数ペナルティ: 0回のスタッフを最優先（1回のスタッフは強く抑制）
+                const countPenalty = counts[s] * 10000;
+
+                // スコア: チーム均等 + 割当回数0回優先 + 直近ローテーション
+                let score = countPenalty + teamPenalty - (d - lastAssignedDay[s]);
+                candidates.push({ staffIndex: s, score, team });
             }
 
             if (candidates.length === 0) {
@@ -3831,8 +3870,10 @@ class ShiftScheduler {
 
             candidates.sort((a, b) => a.score - b.score);
             const chosen = candidates[0].staffIndex;
+            const chosenTeam = candidates[0].team;
             this.setSymbol(chosen, d, SYMBOLS.H8, false);
             counts[chosen]++;
+            team8Counts[chosenTeam]++;
             lastAssignedDay[chosen] = d;
         }
 

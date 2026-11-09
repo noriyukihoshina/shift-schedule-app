@@ -495,7 +495,7 @@ document.addEventListener('DOMContentLoaded', () => {
                     isUnused: (isLife ? false : (i > 48)),  // 生活期は45名全員使用、POは49〜60番目不使用
                     floor: currentFloor || '',
                     section: '',         // 'PT A', 'PT B', 'OT A', 'OT B', または ''
-                    can8: (i <= 9),      // 1〜9番目のみ8時可能（現場の運用に完全一致）
+                    can8: (isSouth ? ((i >= 5 && i <= 9) || (i >= 27 && i <= 31)) : (i <= 9)), // 南病棟は南2・南3双方に8時可能スタッフを均等配置
                     noEarly: false,     // 早番不可
                     noLate: false,      // 遅番不可
                     noEve: false,       // E不可

@@ -19,20 +19,537 @@
                 <span id="autoSaveStatusDot" style="width: 8px; height: 8px; background: #10b981; border-radius: 50%; display: inline-block;"></span>
                 <span id="autoSaveStatusText">☁️ クラウド同期確認中...</span>
             </span>
-            
+            <button type="button" id="manualCloudSyncBtn" title="クラウド上の最新データ（別PCでの変更内容）を今すぐ読み込みます" style="background: rgba(255,255,255,0.15); color: #ffffff; border: 1px solid rgba(255,255,255,0.35); padding: 4px 10px; border-radius: 9999px; font-size: 0.78rem; font-weight: 700; cursor: pointer; display: inline-flex; align-items: center; gap: 4px;">
+                🔄 最新同期
+            </button>
+            <button type="button" class="global-print-btn no-print" onclick="window.print()" title="" style="background: #2563eb; color: #ffffff; border: 1px solid #1d4ed8; padding: 4px 14px; border-radius: 9999px; font-size: 0.82rem; font-weight: 700; cursor: pointer; display: inline-flex; align-items: center; gap: 4px; box-shadow: 0 1px 2px rgba(0,0,0,0.1);">
+                🖨️ 印刷
+            </button>
+        </div>
+    </header>
+        <!-- Table Navigation -->
+    <nav class="dept-nav-container">
+        <span style="font-size:0.8rem; font-weight:700; color:#475569;">テーブル切替:</span>
+        <a href="index.html" class="dept-nav-btn nav-master " style="background:#fefce8; border-color:#fef08a; color:#854d0e;">👑 マスターテーブル</a>
+        <a href="1f.html" class="dept-nav-btn nav-1f " style="background:#f0f9ff; border-color:#bae6fd; color:#0369a1;">1階病棟</a>
+        <a href="2f.html" class="dept-nav-btn nav-2f " style="background:#fff7ed; border-color:#fed7aa; color:#c2410c;">2階病棟</a>
+        <a href="3f.html" class="dept-nav-btn nav-3f " style="background:#f0fdf4; border-color:#bbf7d0; color:#15803d;">3階病棟</a>
+        <a href="south.html" class="dept-nav-btn nav-south " style="background:#faf5ff; border-color:#e9d5ff; color:#7e22ce;">南病棟</a>
+        <a href="ST.html" class="dept-nav-btn nav-st dept-nav-st " style="background:#fdf2f8; border-color:#fbcfe8; color:#be185d;">ST</a>
+        <a href="life.html" class="dept-nav-btn nav-life dept-nav-life active" style="background:#f0fdfa; border-color:#99f6e4; color:#0f766e;">生活期</a>
+    </nav>
+    <!-- Table Navigation -->
+    <!-- Table Navigation -->
+    <!-- Table Navigation -->
+    <!-- Table Navigation -->
+    <!-- Table Navigation -->
+    <!-- Table Navigation -->
+    <!-- Table Navigation -->
+    <!-- Table Navigation -->
+    <!-- Table Navigation -->
+    <!-- Table Navigation -->
+    <!-- Table Navigation -->
+    <!-- Table Navigation -->
+    <!-- Table Navigation -->
+    <!-- ナビゲーションタブ -->
+        <!-- Navigation Tabs -->
+    <nav class="tab-container">
+        <button class="tab-btn active" data-tab="inputTab">&#x1F4CB; 希望入力</button>
+        <button class="tab-btn" data-tab="outputTab">&#x270F;&#xFE0F; 修正作業エリア</button>
+        <button class="tab-btn" data-tab="checkTab">&#x1F50D; 最終チェック&完成</button>
+        <button class="tab-btn" data-tab="statsTab">&#x1F4C8; 勤務分析・平準化ダッシュボード</button>
+    </nav>
+
+    <!-- メインコンテンツ -->
+    <main class="main-content">
+
+        <!-- 1. 入力シートタブ -->
+        <section id="inputTab" class="tab-panel active">
+            <!-- ターム設定バー（期間・公休日数・自動保存切替） -->
+            <div class="toolbar-card" style="margin-bottom: 0.75rem; background: #f8fafc; border-left: 4px solid var(--primary);">
+                <div style="display: flex; flex-wrap: wrap; gap: 1rem; align-items: center; justify-content: space-between;">
+                    <div style="display: flex; align-items: center; gap: 0.75rem; font-size: 0.88rem; flex-wrap: wrap;">
+                        <span style="font-weight: 700; color: #1e293b;">📅 対象期間（ターム固定）:</span>
+                        <select id="termSelect" style="padding: 4px 8px; border: 1px solid #0284c7; background: #f0f9ff; border-radius: 4px; font-weight: 700; color: #0369a1; font-size: 0.88rem; cursor: pointer;" title="年度ごとの正規13ターム（第1〜12ターム:28日間、第13ターム:29日間）を選択します">
+                            <option value="2026-01-06">【2025年度 第11ターム】 1/6 〜 2/2 (28日間)</option>
+                            <option value="2026-02-03">【2025年度 第12ターム】 2/3 〜 3/2 (28日間)</option>
+                            <option value="2026-03-03">【2025年度 第13ターム】 3/3 〜 3/31 (29日間・年度末調整)</option>
+                            <option value="2026-04-01" selected>【2026年度 第1ターム】 4/1 〜 4/28 (28日間)</option>
+                            <option value="2026-04-29">【2026年度 第2ターム】 4/29 〜 5/26 (28日間)</option>
+                            <option value="2026-05-27">【2026年度 第3ターム】 5/27 〜 6/23 (28日間)</option>
+                            <option value="2026-06-24">【2026年度 第4ターム】 6/24 〜 7/21 (28日間)</option>
+                            <option value="2026-07-22">【2026年度 第5ターム】 7/22 〜 8/18 (28日間)</option>
+                            <option value="2026-08-19">【2026年度 第6ターム】 8/19 〜 9/15 (28日間)</option>
+                            <option value="2026-09-16">【2026年度 第7ターム】 9/16 〜 10/13 (28日間)</option>
+                            <option value="2026-10-14">【2026年度 第8ターム】 10/14 〜 11/10 (28日間)</option>
+                            <option value="2026-11-11">【2026年度 第9ターム】 11/11 〜 12/8 (28日間)</option>
+                            <option value="2026-12-09">【2026年度 第10ターム】 12/9 〜 1/5 (28日間)</option>
+                            <option value="2027-01-06">【2026年度 第11ターム】 1/6 〜 2/2 (28日間)</option>
+                            <option value="2027-02-03">【2026年度 第12ターム】 2/3 〜 3/2 (28日間)</option>
+                            <option value="2027-03-03">【2026年度 第13ターム】 3/3 〜 3/31 (29日間・年度末調整)</option>
+                            <option value="2027-04-01">【2027年度 第1ターム】 4/1 〜 4/28 (28日間)</option>
+                            <option value="2027-04-29">【2027年度 第2ターム】 4/29 〜 5/26 (28日間)</option>
+                            <option value="2027-05-27">【2027年度 第3ターム】 5/27 〜 6/23 (28日間)</option>
+                            <option value="2027-06-24">【2027年度 第4ターム】 6/24 〜 7/21 (28日間)</option>
+                            <option value="2027-07-22">【2027年度 第5ターム】 7/22 〜 8/18 (28日間)</option>
+                            <option value="2027-08-19">【2027年度 第6ターム】 8/19 〜 9/15 (28日間)</option>
+                            <option value="2027-09-16">【2027年度 第7ターム】 9/16 〜 10/13 (28日間)</option>
+                            <option value="2027-10-14">【2027年度 第8ターム】 10/14 〜 11/10 (28日間)</option>
+                            <option value="2027-11-11">【2027年度 第9ターム】 11/11 〜 12/8 (28日間)</option>
+                            <option value="2027-12-09">【2027年度 第10ターム】 12/9 〜 1/5 (28日間)</option>
+                            <option value="2028-01-06">【2027年度 第11ターム】 1/6 〜 2/2 (28日間)</option>
+                            <option value="2028-02-03">【2027年度 第12ターム】 2/3 〜 3/1 (28日間)</option>
+                            <option value="2028-03-02">【2027年度 第13ターム】 3/2 〜 3/31 (30日間・年度末調整)</option>
+                        </select>
+                        <input type="hidden" id="termStartDate" value="2026-04-01">
+                        <span style="color: #64748b;">〜 終了日:</span>
+                        <span id="termEndDateDisplay" style="font-weight: 700; color: #1e293b;">2026-04-28</span>
+                        <span style="background: #e0f2fe; color: #0284c7; padding: 2px 8px; border-radius: 4px; font-weight: 700; font-size: 0.85rem;" id="termTitleBadge">第1ターム (4/1～4/28)</span>
+                        <span id="termDaysBadge" style="background: #f1f5f9; color: #475569; padding: 2px 8px; border-radius: 4px; font-weight: 700; font-size: 0.82rem;">28日間</span>
+                        <span id="refreshTermBadge" style="display:none; background: #ecfdf5; color: #047857; border: 1px solid #a7f3d0; padding: 2px 8px; border-radius: 4px; font-weight: 700; font-size: 0.82rem;">🌴 リフ対象月</span>
+                    </div>
+                    <div style="display: flex; align-items: center; gap: 0.75rem; font-size: 0.88rem; flex-wrap: wrap;">
+                        
+                        <div style="display: flex; align-items: center; gap: 0.4rem;">
+                            <span style="font-weight: 700; color: #1e293b;">🏖️ 公休枠制限:</span>
+                            <select id="standardHolidaySelect" style="padding: 4px 8px; border: 1px solid #cbd5e1; border-radius: 4px; font-weight: 600; background: white; font-size: 0.82rem;">
+                                <option value="8.0" selected>通常月: 8.0日 (4週8休)</option>
+                                <option value="8.5">3月公休調整: 8.5日</option>
+                                <option value="9.0">リフ月: 9.0日</option>
+                            </select>
+                        </div>
+</div>
+</div>
+</div>
+</div>
+<button type="button" class="btn btn-primary manual-save-btn" style="font-size:0.82rem; padding:4px 14px; font-weight:700; background:#0284c7; color:#ffffff; border:none; border-radius:4px; box-shadow:0 1px 3px rgba(0,0,0,0.1); cursor:pointer; margin-left:8px;">&#x1F4BE; 保存</button></div>
+                        <button type="button" id="resetCurrentTermBtn" class="btn btn-outline" style="font-size: 0.78rem; padding: 3px 8px; color: #dc2626; border-color: #fca5a5; background: #fff5f5;" title="現在表示している期間の希望入力・作成データを白紙（初期化）に戻します">
+                            🗑️ この期間を白紙化
+                        </button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- ツールバー・操作エリア（統一レイアウト） -->
+            <div class="toolbar-card" style="flex-direction: column; align-items: stretch; gap: 10px;">
+                <!-- 1行目: シートタイトル ＆ アクションボタン群 -->
+                <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 10px;">
+                    <div style="display: flex; align-items: center; gap: 0.75rem;">
+                        <span style="font-weight: 800; color: #1e293b; font-size: 1.05rem;">📋 事前希望入力シート</span>
+                        <span style="font-size: 0.8rem; color: #64748b;">
+                            （希望勤務・公休枠を入力するか、Excelから取り込んでください）
+                        </span>
+                    </div>
+                    <div class="action-group" style="display: flex; gap: 8px; flex-wrap: wrap; align-items: center;">
+                        <button class="btn btn-outline" id="autoAssignRefBtn" title="期間内のリフ対象月（上1〜5, 下1〜3）を日割り均等配分し、前ターム実績と照合して二重取得を防止します" style="font-size: 0.82rem; padding: 5px 12px; color: #047857; border-color: #86efac; background: #f0fdf4; font-weight: 700;">
+                            🌴 リフ自動配分
+                        </button>
+                        <button class="btn btn-outline" id="viewRefStatusBtn" title="全スタッフのリフレッシュ休暇（上1〜上5, 下1〜下3）の消化状況・過去取得履歴を一覧確認します" style="font-size: 0.82rem; padding: 5px 12px; color: #0f766e; border-color: #99f6e4; background: #f0fdfa; font-weight: 700;">
+                            📊 リフ消化一覧
+                        </button>
+                        <button class="btn btn-outline" id="syncPrevTermHistoryBtn" title="直前の保存済み勤務表（例: 4/1～4/28）の最終5日間の勤務実績を、自動で「前ターム最終5日間実績」に取り込みます" style="font-size: 0.82rem; padding: 5px 12px; color: #9a3412; border-color: #fdba74; background: #fff7ed; font-weight: 700;">
+                            🔗 前ターム実績を自動取込
+                        </button>
+                        <button class="btn btn-outline" id="downloadBlankTemplateBtn" title="スタッフに配布して希望勤務をPC入力してもらうためのプルダウン付きExcel勤務表をダウンロード" style="font-size: 0.82rem; padding: 5px 12px; color: #166534; border-color: #86efac; background: #f0fdf4; font-weight: 700;">
+                            📄 スタッフ入力用 空白勤務表 (.xlsx)
+                        </button>
+                        <label class="btn btn-outline" title="スタッフが希望を入力したExcelファイル(.xlsx)やCSVファイルを取り込みます" style="font-size: 0.82rem; padding: 5px 12px; color: #1d4ed8; border-color: #93c5fd; background: #eff6ff; cursor: pointer; margin-bottom: 0; font-weight: 700; display: inline-flex; align-items: center; gap: 4px;">
+                            📂 希望シート取込 (.xlsx / .csv)
+                            <input type="file" id="importScheduleFileInput" accept=".xlsx,.csv,.tsv,.txt" style="display: none;">
+                        </label>
+                        <button class="btn btn-outline" id="validateInputBtn" style="font-size: 0.82rem; padding: 5px 12px; color: #1e40af; border-color: #93c5fd; background: #eff6ff; font-weight: 700;" title="入力された事前希望の制約違反（6連勤、週休2日不足、特殊勤務翌日休など）を即座にチェックし、該当セルを青い網掛けで表示します">
+                            🔍 希望の制約チェック
+                        </button>
+                        <button class="btn btn-primary" id="inputSolveBtn" style="font-weight: 700; font-size: 0.85rem; padding: 5px 14px;" title="入力された事前希望と全制約に基づいて、基本勤務表を自動生成します">
+                            ⚡ 勤務表を自動生成する
+                        </button>
                     </div>
                 </div>
 
                 <!-- 2行目: 記号パレット ＆ 編集操作 ＆ 左右スクロール -->
                 <div class="palette-group" style="display: flex; flex-wrap: wrap; gap: 4px; align-items: center; padding-top: 8px; border-top: 1px solid #e2e8f0;">
                     <span class="palette-label" style="font-size: 0.82rem; font-weight: 700; color: #475569;">🎨 記号パレット:</span>
-                    
+                    <button class="palette-btn selected" data-sym="休" title="公休">休</button>
+                    <button class="palette-btn" data-sym="有" title="有給休暇">有</button>
+                    <button class="palette-btn" data-sym="○" title="日勤（基本勤務）">○</button>
+                    <button class="palette-btn" data-sym="ー" title="勤務対象外（異動・退職等。出勤・公休カウントから完全除外）" style="background:#f1f5f9; border-color:#cbd5e1; color:#64748b; font-weight:800;">ー</button>
+                    <button class="palette-btn palette-btn-protect" data-sym="P" title="P（プロテクト保護）: クリックしたセルの勤務を赤文字で固定保護／解除します（他の勤務の誤上書き防止）" style="background:#fdf2f8; border-color:#f472b6; color:#be185d; font-weight:800;">🛡️ P</button>
+                    <button class="palette-btn" data-sym="出張" title="出張">出張</button>
+                    <button class="palette-btn" data-sym="早" title="早番 (7:00〜15:30)">早</button>
+                    <button class="palette-btn" data-sym="遅" title="遅番 (11:00〜19:30)">遅</button>
+                    <button class="palette-btn" data-sym="E" title="イブニング (13:00〜21:30)">E</button>
+                    <button class="palette-btn" data-sym="8時" title="8:00開始勤務">8時</button>
+                    <button class="palette-btn" data-sym="ハヤ" title="手当なし早番 (7:00〜15:30)" style="background:#fff7ed; border-color:#fdba74; color:#c2410c;">ハヤ</button>
+                    <button class="palette-btn" data-sym="オソ" title="手当なし遅番 (11:00〜19:30)" style="background:#f0f9ff; border-color:#7dd3fc; color:#0369a1;">オソ</button>
+                    <button class="palette-btn" data-sym="イブ" title="手当なしイブニング (13:00〜21:30)" style="background:#faf5ff; border-color:#d8b4fe; color:#7e22ce;">イブ</button>
+                    <span style="color: #cbd5e1; margin: 0 4px;">|</span>
+                    <!-- ★ 半日勤務記号 -->
+                    <button class="palette-btn" data-sym="○/休" title="半日出勤 + 半日公休 (各0.5日)" style="background:#f0fdf4; border-color:#86efac; color:#166534;">○/休</button>
+                    <button class="palette-btn" data-sym="休/○" title="半日公休 + 半日出勤 (各0.5日)" style="background:#f0fdf4; border-color:#86efac; color:#166534;">休/○</button>
+                    <button class="palette-btn" data-sym="○/有" title="半日出勤 + 半日有休 (各0.5日)" style="background:#fffbeb; border-color:#fde68a; color:#92400e;">○/有</button>
+                    <button class="palette-btn" data-sym="有/○" title="半日有休 + 半日出勤 (各0.5日)" style="background:#fffbeb; border-color:#fde68a; color:#92400e;">有/○</button>
+                    <span style="color: #cbd5e1; margin: 0 4px;">|</span>
+                    <button class="palette-btn" data-sym="上1" title="夏リフレッシュ休1">上1</button>
+                    <button class="palette-btn" data-sym="上2" title="夏リフレッシュ休2">上2</button>
+                    <button class="palette-btn" data-sym="上3" title="夏リフレッシュ休3">上3</button>
+                    <button class="palette-btn" data-sym="上4" title="夏リフレッシュ休4">上4</button>
+                    <button class="palette-btn" data-sym="上5" title="夏リフレッシュ休5">上5</button>
+                    <span style="color: #cbd5e1; margin: 0 4px;">|</span>
+                    <button class="palette-btn" data-sym="下1" title="冬リフレッシュ休1">下1</button>
+                    <button class="palette-btn" data-sym="下2" title="冬リフレッシュ休2">下2</button>
+                    <button class="palette-btn" data-sym="下3" title="冬リフレッシュ休3">下3</button>
+                    <span style="color: #cbd5e1; margin: 0 4px;">|</span>
+                    <button class="palette-btn" data-sym="CLEAR" title="セルの記号を消去" style="color: #dc2626;">✕ 消去</button>
+                    <span style="color: #cbd5e1; margin: 0 4px;">|</span>
+                    <button class="btn btn-outline" id="undoBtn" disabled title="直前の操作を1つ元に戻します (Ctrl+Z)" style="font-size: 0.82rem; padding: 4px 10px; opacity: 0.5; font-weight: 600;">
+                        ↩ 戻る
+                    </button>
+                    <button class="btn btn-outline" id="redoBtn" disabled title="元に戻した操作をやり直します (Ctrl+Y)" style="font-size: 0.82rem; padding: 4px 10px; opacity: 0.5; font-weight: 600;">
+                        ↪ やり直す
+                    </button>
+                    <span style="color: #cbd5e1; margin: 0 4px;">|</span>
+                    <div style="display: inline-flex; gap: 4px; align-items: center; background: #f8fafc; padding: 2px 6px; border-radius: 6px; border: 1px solid #cbd5e1;">
+                        <span style="font-size: 0.75rem; color: #334155; font-weight: 700;">左右スクロール:</span>
+                        <button type="button" class="scroll-btn" data-target="inputSheetWrapper" data-dir="left" title="表を左（1日〜）へスクロール">
+                            ◀ 左へ
+                        </button>
+                        <button type="button" class="scroll-btn" data-target="inputSheetWrapper" data-dir="right" title="表を右（〜28日・属性）へスクロール">
+                            右へ ▶
+                        </button>
+                    <button type="button" class="btn btn-sm btn-outline-primary copy-mode-btn" id="copyModeToggleBtn" style="font-weight:700; margin-left:8px; padding:2px 8px;" title="セルを選択してCtrl+Cでコピー、別セルでCtrl+Vまたはクリックで貼り付け">📋 コピペモード</button></div>
+                </div>
+
+                <!-- 3行目: ガイドライン・注記 -->
+                <div style="font-size: 0.8rem; color: #64748b; padding-top: 4px;">
+                    💡 セルをクリックすると選択中の記号が入力されます。入力枠は確定時に<strong style="color: #dc2626;">「赤字・太字」</strong>で保持されます。
+                </div>
+            </div>
+
+            <!-- ★ 障壁・エラー発生時の薄いブルー網掛け案内バナー -->
+            <div id="conflictAlertBanner" class="conflict-alert-banner"></div>
+
+            <!-- 入力用スプレッドシートテーブル -->
+            <div class="sheet-wrapper" id="inputSheetWrapper">
+                <table class="sheet-table">
+                    <thead id="inputTableHead"></thead>
+                    <tbody id="inputTableBody"></tbody>
+                </table>
+            </div>
+        </section>
+
+        <!-- 2. 出力シートタブ -->
+        <section id="outputTab" class="tab-panel">
+            <!-- ツールバー・操作エリア（統一レイアウト） -->
+            <div class="toolbar-card" style="flex-direction: column; align-items: stretch; gap: 10px;">
+                <!-- 1行目: シートタイトル ＆ アクションボタン群 -->
+                <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 10px;">
+                    <div style="display: flex; align-items: center; gap: 0.75rem;">
+                        <span id="outputTitleDisplay" style="font-weight: 800; color: #1e293b; font-size: 1.05rem;">✏️ 修正作業エリア（仮自動生成・微修正）</span>
+                    </div>
+                    <div class="action-group" style="display: flex; gap: 8px; flex-wrap: wrap; align-items: center;">
+                        <button class="btn btn-primary" id="copyForExcelBtn" style="font-size: 0.82rem; padding: 5px 12px; font-weight: 700;" title="警告やブロックなしでExcelに直接貼り付け可能！事前希望枠の赤字太字・罫線・自動計算数式を保持してクリップボードにコピーします">
+                            📋 Excelへ一発貼り付け用コピー（赤字・数式付き）
+                        </button>
+                        <label class="btn btn-outline" title="Excel等で微修正した勤務表(.xlsxや.csv)を取り込みます" style="font-size: 0.82rem; padding: 5px 12px; color: #1d4ed8; border-color: #93c5fd; background: #eff6ff; cursor: pointer; margin-bottom: 0; font-weight: 700; display: inline-flex; align-items: center; gap: 4px;">
+                            📂 修正済みシート取り込み (.xlsx / .csv)
+                            <input type="file" id="importModifiedWorkAreaFileInput" accept=".xlsx,.csv,.tsv,.txt" style="display: none;">
+                        </label>
+                        <button class="btn btn-outline" id="validateWorkAreaBtn" style="font-size: 0.82rem; padding: 5px 12px; font-weight: 700; color: #1e40af; border-color: #93c5fd; background: #eff6ff;" title="UI上またはExcelで修正した勤務表の制約（連勤、週休2日、属性人数等）をチェックします（※この段階では特殊勤務が入っていなくてもエラーになりません）">
+                            🔍 チェック
+                        </button>
+                        <button class="btn btn-outline" id="exportExcelBtn" style="font-size: 0.82rem; padding: 5px 12px; font-weight: 600;" title="警告やブロックなしで開ける本物のExcel形式(.xlsx)で勤務表をダウンロード（A3横向き印刷設定・動的数式付き）">
+                            📊 スプレッドシート保存 (.xlsx)
+                        </button>
+                        <button class="btn btn-success" id="outputAssignSpecialBtn" style="background: #059669; border-color: #059669; color: white; font-weight: 700; font-size: 0.82rem; padding: 5px 12px;" title="基本勤務表の「○」から、早3名・遅1名・E2名・8時1名を割り当てて「最終チェック&完成」へ進みます">
+                            ✨ 特殊勤務を入れる
+                        </button>
+                    </div>
+                </div>
+
+                <!-- 2行目: 記号パレット ＆ 編集操作 ＆ 左右スクロール -->
+                <div class="palette-group" style="display: flex; flex-wrap: wrap; gap: 4px; align-items: center; padding-top: 8px; border-top: 1px solid #e2e8f0;">
+                    <span class="palette-label" style="font-size: 0.82rem; font-weight: 700; color: #475569;">🎨 記号パレット:</span>
+                    <button class="palette-btn output-palette-btn selected" data-sym="休" title="公休">休</button>
+                    <button class="palette-btn output-palette-btn" data-sym="有" title="有給休暇">有</button>
+                    <button class="palette-btn output-palette-btn" data-sym="○" title="日勤（基本勤務）">○</button>
+                    <button class="palette-btn output-palette-btn" data-sym="ー" title="勤務対象外（異動・退職等。出勤・公休カウントから完全除外）" style="background:#f1f5f9; border-color:#cbd5e1; color:#64748b; font-weight:800;">ー</button>
+                    <button class="palette-btn output-palette-btn palette-btn-protect" data-sym="P" title="P（プロテクト保護）: クリックしたセルの勤務を赤文字で固定保護／解除します（他の勤務の誤上書き防止）" style="background:#fdf2f8; border-color:#f472b6; color:#be185d; font-weight:800;">🛡️ P</button>
+                    <button class="palette-btn output-palette-btn" data-sym="出張" title="出張">出張</button>
+                    <button class="palette-btn output-palette-btn" data-sym="早" title="早番 (7:00〜15:30)">早</button>
+                    <button class="palette-btn output-palette-btn" data-sym="遅" title="遅番 (11:00〜19:30)">遅</button>
+                    <button class="palette-btn output-palette-btn" data-sym="E" title="イブニング (13:00〜21:30)">E</button>
+                    <button class="palette-btn output-palette-btn" data-sym="8時" title="8:00開始勤務">8時</button>
+                    <button class="palette-btn output-palette-btn" data-sym="ハヤ" title="手当なし早番" style="background:#fff7ed; border-color:#fdba74; color:#c2410c;">ハヤ</button>
+                    <button class="palette-btn output-palette-btn" data-sym="オソ" title="手当なし遅番" style="background:#f0f9ff; border-color:#7dd3fc; color:#0369a1;">オソ</button>
+                    <button class="palette-btn output-palette-btn" data-sym="イブ" title="手当なしイブニング" style="background:#faf5ff; border-color:#d8b4fe; color:#7e22ce;">イブ</button>
+                    <span style="color: #cbd5e1; margin: 0 4px;">|</span>
+                    <!-- ★ 半日勤務記号 -->
+                    <button class="palette-btn output-palette-btn" data-sym="○/休" title="半日出勤 + 半日公休">○/休</button>
+                    <button class="palette-btn output-palette-btn" data-sym="休/○" title="半日公休 + 半日出勤">休/○</button>
+                    <button class="palette-btn output-palette-btn" data-sym="○/有" title="半日出勤 + 半日有休">○/有</button>
+                    <button class="palette-btn output-palette-btn" data-sym="有/○" title="半日有休 + 半日出勤">有/○</button>
+                    <span style="color: #cbd5e1; margin: 0 4px;">|</span>
+                    <button class="palette-btn output-palette-btn" data-sym="上1">上1</button>
+                    <button class="palette-btn output-palette-btn" data-sym="上2">上2</button>
+                    <button class="palette-btn output-palette-btn" data-sym="上3">上3</button>
+                    <button class="palette-btn output-palette-btn" data-sym="上4">上4</button>
+                    <button class="palette-btn output-palette-btn" data-sym="上5">上5</button>
+                    <span style="color: #cbd5e1; margin: 0 4px;">|</span>
+                    <button class="palette-btn output-palette-btn" data-sym="下1">下1</button>
+                    <button class="palette-btn output-palette-btn" data-sym="下2">下2</button>
+                    <button class="palette-btn output-palette-btn" data-sym="下3">下3</button>
+                    <span style="color: #cbd5e1; margin: 0 4px;">|</span>
+                    <button class="palette-btn output-palette-btn" data-sym="CLEAR" title="セルの記号を消去" style="color: #dc2626;">✕ 消去</button>
+                    <span style="color: #cbd5e1; margin: 0 4px;">|</span>
+                    <button class="btn btn-outline" id="outputUndoBtn" disabled title="直前の操作を1つ元に戻します (Ctrl+Z)" style="font-size: 0.82rem; padding: 4px 10px; opacity: 0.5; font-weight: 600;">
+                        ↩ 戻る
+                    </button>
+                    <button class="btn btn-outline" id="outputRedoBtn" disabled title="元に戻した操作をやり直します (Ctrl+Y)" style="font-size: 0.82rem; padding: 4px 10px; opacity: 0.5; font-weight: 600;">
+                        ↪ やり直す
+                    </button>
+                    <span style="color: #cbd5e1; margin: 0 4px;">|</span>
+                    <div style="display: inline-flex; gap: 4px; align-items: center; background: #f8fafc; padding: 2px 6px; border-radius: 6px; border: 1px solid #cbd5e1;">
+                        <span style="font-size: 0.75rem; color: #334155; font-weight: 700;">左右スクロール:</span>
+                        <button type="button" class="scroll-btn" data-target="outputSheetWrapper" data-dir="left" title="表を左（1日〜）へスクロール">
+                            ◀ 左へ
+                        </button>
+                        <button type="button" class="scroll-btn" data-target="outputSheetWrapper" data-dir="right" title="表を右（〜28日・集計）へスクロール">
+                            右へ ▶
+                        </button>
+                    <button type="button" class="btn btn-sm btn-outline-primary copy-mode-btn" id="copyModeToggleBtn" style="font-weight:700; margin-left:8px; padding:2px 8px;" title="セルを選択してCtrl+Cでコピー、別セルでCtrl+Vまたはクリックで貼り付け">📋 コピペモード</button></div>
+                </div>
+
+                <!-- 3行目: ガイドライン・注記 -->
+                <div style="font-size: 0.8rem; color: #64748b; padding-top: 4px;">
+                    💡 仮自動生成された基本勤務表です。Excelに貼り付けて手動微修正、またはUI上で直接編集できます（※この段階では特殊勤務が入っていなくてもエラーになりません）。完了したら「✨ 特殊勤務を入れる」を押してください。
+                </div>
+            </div>
+
+            <!-- ★ 出力シート用 エラー・障壁箇所バナー（薄いブルー網掛け案内） -->
+            <div id="outputConflictAlertBanner" class="conflict-alert-banner"></div>
+
+            <!-- 出力用スプレッドシートテーブル -->
+            <div class="sheet-wrapper" id="outputSheetWrapper">
+                <table class="sheet-table">
+                    <thead id="outputTableHead"></thead>
+                    <tbody id="outputTableBody"></tbody>
+                    <tfoot id="outputTableFoot"></tfoot>
+                </table>
+            </div>
+        </section>
+
+        <!-- 3. チェックシートタブ（制約検証・修正取込） -->
+        <section id="checkTab" class="tab-panel">
+            <!-- ツールバー・操作エリア（統一レイアウト） -->
+            <div class="toolbar-card" style="flex-direction: column; align-items: stretch; gap: 10px;">
+                <!-- 1行目: シートタイトル ＆ アクションボタン群 -->
+                <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 10px;">
+                    <div style="display: flex; align-items: center; gap: 0.75rem;">
+                        <span id="checkTitleDisplay" style="font-weight: 800; color: #1e293b; font-size: 1.05rem;">&#x1F3E2; 全フロア統合</span>
+                    </div>
+                    <div class="action-group" style="display: flex; gap: 8px; flex-wrap: wrap; align-items: center;">
+                        <button class="btn btn-primary" id="checkCopyForExcelBtn" style="font-size: 0.82rem; padding: 5px 12px; font-weight: 700;" title="完成勤務表をExcel貼り付け用にコピーします（赤字太字・数式付き）">
+                            📋 Excelへ一発貼り付け用コピー（赤字・数式付き）
+                        </button>
                         <label class="btn btn-outline" title="Excel等で微修正した完成勤務表(.xlsxや.csv)を取り込みます" style="font-size: 0.82rem; padding: 5px 12px; color: #1d4ed8; border-color: #93c5fd; background: #eff6ff; cursor: pointer; margin-bottom: 0; font-weight: 700; display: inline-flex; align-items: center; gap: 4px;">
                             📂 修正済みシート取り込み (.xlsx / .csv)
                             <input type="file" id="importModifiedScheduleFileInput" accept=".xlsx,.csv,.tsv,.txt" style="display: none;">
                         </label>
-                        
-            <button type="button" class="btn btn-sm btn-outline-primary copy-mode-btn" id="copyModeToggleBtn" style="font-weight:700; margin-left:8px; padding:2px 8px;" title="セルを選択してCtrl+Cでコピー、別セルでCtrl+Vまたはクリックで貼り付け">📋 コピペモード</button></div>
+                        <button class="btn btn-outline" id="validateOutputBtn" style="font-size: 0.82rem; padding: 5px 12px; font-weight: 700; color: #1e40af; border-color: #93c5fd; background: #eff6ff;" title="完成勤務表のすべての制約（連勤、週休2日、属性人数、特殊勤務の配置過不足）を厳格にチェックします">
+                            🔍 チェック
+                        </button>
+                        <button class="btn btn-outline" id="checkExportExcelBtn" style="font-size: 0.82rem; padding: 5px 12px; font-weight: 600;" title="警告やブロックなしで開ける本物のExcel形式(.xlsx)で勤務表をダウンロード（A3横向き印刷設定・動的数式付き）">
+                            📊 スプレッドシート保存 (.xlsx)
+                        </button>
+                        <button class="btn btn-outline" style="font-size: 0.82rem; padding: 5px 12px; font-weight: 600;" onclick="window.print();">
+                            🖨 印刷 / PDF保存
+                        </button>
+                    </div>
+                </div>
+
+                <!-- 2行目: 記号パレット ＆ 編集操作 ＆ 左右スクロール -->
+                <div class="palette-group" style="display: flex; flex-wrap: wrap; gap: 4px; align-items: center; padding-top: 8px; border-top: 1px solid #e2e8f0;">
+                    <span class="palette-label" style="font-size: 0.82rem; font-weight: 700; color: #475569;">🎨 記号パレット:</span>
+                    <button class="palette-btn check-palette-btn selected" data-sym="休" title="公休">休</button>
+                    <button class="palette-btn check-palette-btn" data-sym="有" title="有給休暇">有</button>
+                    <button class="palette-btn check-palette-btn" data-sym="○" title="日勤（基本勤務）">○</button>
+                    <button class="palette-btn check-palette-btn" data-sym="ー" title="勤務対象外（異動・退職等。出勤・公休カウントから完全除外）" style="background:#f1f5f9; border-color:#cbd5e1; color:#64748b; font-weight:800;">ー</button>
+                    <button class="palette-btn check-palette-btn palette-btn-protect" data-sym="P" title="P（プロテクト保護）: クリックしたセルの勤務を赤文字で固定保護／解除します（他の勤務の誤上書き防止）" style="background:#fdf2f8; border-color:#f472b6; color:#be185d; font-weight:800;">🛡️ P</button>
+                    <button class="palette-btn check-palette-btn" data-sym="出張" title="出張">出張</button>
+                    <button class="palette-btn check-palette-btn" data-sym="早" title="早番 (7:00〜15:30)">早</button>
+                    <button class="palette-btn check-palette-btn" data-sym="遅" title="遅番 (11:00〜19:30)">遅</button>
+                    <button class="palette-btn check-palette-btn" data-sym="E" title="イブニング (13:00〜21:30)">E</button>
+                    <button class="palette-btn check-palette-btn" data-sym="8時" title="8:00開始勤務">8時</button>
+                    <button class="palette-btn check-palette-btn" data-sym="ハヤ" title="手当なし早番" style="background:#fff7ed; border-color:#fdba74; color:#c2410c;">ハヤ</button>
+                    <button class="palette-btn check-palette-btn" data-sym="オソ" title="手当なし遅番" style="background:#f0f9ff; border-color:#7dd3fc; color:#0369a1;">オソ</button>
+                    <button class="palette-btn check-palette-btn" data-sym="イブ" title="手当なしイブニング" style="background:#faf5ff; border-color:#d8b4fe; color:#7e22ce;">イブ</button>
+                    <span style="color: #cbd5e1; margin: 0 4px;">|</span>
+                    <!-- ★ 半日勤務記号 -->
+                    <button class="palette-btn check-palette-btn" data-sym="○/休" title="半日出勤 + 半日公休">○/休</button>
+                    <button class="palette-btn check-palette-btn" data-sym="休/○" title="半日公休 + 半日出勤">休/○</button>
+                    <button class="palette-btn check-palette-btn" data-sym="○/有" title="半日出勤 + 半日有休">○/有</button>
+                    <button class="palette-btn check-palette-btn" data-sym="有/○" title="半日有休 + 半日出勤">有/○</button>
+                    <span style="color: #cbd5e1; margin: 0 4px;">|</span>
+                    <button class="palette-btn check-palette-btn" data-sym="上1">上1</button>
+                    <button class="palette-btn check-palette-btn" data-sym="上2">上2</button>
+                    <button class="palette-btn check-palette-btn" data-sym="上3">上3</button>
+                    <button class="palette-btn check-palette-btn" data-sym="上4">上4</button>
+                    <button class="palette-btn check-palette-btn" data-sym="上5">上5</button>
+                    <span style="color: #cbd5e1; margin: 0 4px;">|</span>
+                    <button class="palette-btn check-palette-btn" data-sym="下1">下1</button>
+                    <button class="palette-btn check-palette-btn" data-sym="下2">下2</button>
+                    <button class="palette-btn check-palette-btn" data-sym="下3">下3</button>
+                    <span style="color: #cbd5e1; margin: 0 4px;">|</span>
+                    <button class="palette-btn check-palette-btn" data-sym="CLEAR" title="セルの記号を消去" style="color: #dc2626;">✕ 消去</button>
+                    <span style="color: #cbd5e1; margin: 0 4px;">|</span>
+                    <button class="btn btn-outline" id="checkUndoBtn" disabled title="直前の操作を1つ元に戻します (Ctrl+Z)" style="font-size: 0.82rem; padding: 4px 10px; opacity: 0.5; font-weight: 600;">
+                        ↩ 戻る
+                    </button>
+                    <button class="btn btn-outline" id="checkRedoBtn" disabled title="元に戻した操作をやり直します (Ctrl+Y)" style="font-size: 0.82rem; padding: 4px 10px; opacity: 0.5; font-weight: 600;">
+                        ↪ やり直す
+                    </button>
+                    <span style="color: #cbd5e1; margin: 0 4px;">|</span>
+                    <div style="display: inline-flex; gap: 4px; align-items: center; background: #f8fafc; padding: 2px 6px; border-radius: 6px; border: 1px solid #cbd5e1;">
+                        <span style="font-size: 0.75rem; color: #334155; font-weight: 700;">左右スクロール:</span>
+                        <button type="button" class="scroll-btn" data-target="checkSheetWrapper" data-dir="left" title="表を左（1日〜）へスクロール">
+                            ◀ 左へ
+                        </button>
+                        <button type="button" class="scroll-btn" data-target="checkSheetWrapper" data-dir="right" title="表を右（〜28日・集計）へスクロール">
+                            右へ ▶
+                        </button>
+                    <button type="button" class="btn btn-sm btn-outline-primary copy-mode-btn" id="copyModeToggleBtn" style="font-weight:700; margin-left:8px; padding:2px 8px;" title="セルを選択してCtrl+Cでコピー、別セルでCtrl+Vまたはクリックで貼り付け">📋 コピペモード</button></div>
+                </div>
+
+                <!-- 3行目: ガイドライン・注記 -->
+                <div style="font-size: 0.8rem; color: #64748b; padding-top: 4px;">
+                    💡 特殊勤務（早・遅・E・8時）が割り当てられた完成勤務表です。Excelにコピペや修正ファイル取込、UI直接編集、制約チェック（特殊勤務の配置過不足も含む）、Excel保存・印刷が可能です。
+                </div>
+            </div>
+
+            <!-- ★ チェックシート用 エラー・障壁箇所バナー（薄いブルー網掛け案内） -->
+            <div id="checkConflictAlertBanner" class="conflict-alert-banner"></div>
+
+            <!-- チェックシート用 スプレッドシートテーブル -->
+            <div class="sheet-wrapper" id="checkSheetWrapper">
+                <table class="sheet-table">
+                    <thead id="checkTableHead"></thead>
+                    <tbody id="checkTableBody"></tbody>
+                    <tfoot id="checkTableFoot"></tfoot>
+                </table>
+            </div>
+        </section>
+
+        <!-- 4. 勤務分析・統計ダッシュボードタブ -->
+        <section id="statsTab" class="tab-panel">
+            <div class="stats-grid">
+                <!-- 1. 平日の出勤人数（平準化状況 & 平均） -->
+                <div class="stat-card" style="border-top: 4px solid #2563eb;">
+                    <div class="stat-card-title" style="display: flex; align-items: center; justify-content: space-between;">
+                        <span>🏢 平日の出勤人数・実数（平準化状況）</span>
+                        <span id="statWeekdayBadge" style="font-size: 0.75rem; background: #eff6ff; color: #1d4ed8; padding: 2px 8px; border-radius: 9999px; font-weight: 700;">- 日間</span>
+                    </div>
+                    <div class="stat-card-value" id="statWeekdayWorkRange" style="font-size: 1.3rem; color: #1e3a8a;">- 〜 - 名</div>
+                    <div style="display: flex; justify-content: space-between; align-items: center; margin-top: 6px; padding-top: 6px; border-top: 1px dashed #e2e8f0; font-size: 0.85rem;">
+                        <span style="color: #64748b; font-weight: 600;">平日の平均出勤人数:</span>
+                        <strong id="statWeekdayAvgWork" style="color: #1e293b; font-size: 1.05rem;">- 名</strong>
+                    </div>
+                    <div style="font-size: 0.75rem; color: #64748b; margin-top: 4px;">月〜金（国民の祝日を除く）</div>
+                </div>
+
+                <!-- 2. 土日祝の出勤人数（平準化状況 & 平均） -->
+                <div class="stat-card" style="border-top: 4px solid #dc2626;">
+                    <div class="stat-card-title" style="display: flex; align-items: center; justify-content: space-between;">
+                        <span>🎌 土日祝の出勤人数・実数（平準化状況）</span>
+                        <span id="statHolidayBadge" style="font-size: 0.75rem; background: #fef2f2; color: #b91c1c; padding: 2px 8px; border-radius: 9999px; font-weight: 700;">- 日間</span>
+                    </div>
+                    <div class="stat-card-value" id="statHolidayWorkRange" style="font-size: 1.3rem; color: #991b1b;">- 〜 - 名</div>
+                    <div style="display: flex; justify-content: space-between; align-items: center; margin-top: 6px; padding-top: 6px; border-top: 1px dashed #e2e8f0; font-size: 0.85rem;">
+                        <span style="color: #64748b; font-weight: 600;">土日祝の平均出勤人数:</span>
+                        <strong id="statHolidayAvgWork" style="color: #1e293b; font-size: 1.05rem;">- 名</strong>
+                    </div>
+                    <div id="statSunHolSubInfo" style="font-size: 0.75rem; color: #64748b; margin-top: 4px;">土曜日・日曜日・国民の祝日</div>
+                </div>
+
+                <!-- 3. 有休取得合計数 -->
+                <div class="stat-card" style="border-top: 4px solid #f59e0b; background: #fffdfa;">
+                    <div class="stat-card-title" style="display: flex; align-items: center; justify-content: space-between;">
+                        <span>🏖️ 有休・リフレッシュ休暇取得実績（当ターム）</span>
+                        <span style="font-size: 0.75rem; background: #fef3c7; color: #92400e; padding: 2px 8px; border-radius: 9999px; font-weight: 700;">休暇実績</span>
+                    </div>
+                    <div class="stat-card-value" id="statTotalPaidDays" style="font-size: 1.6rem; color: #b45309; font-weight: 800;">- 日</div>
+                    <div style="display: flex; justify-content: space-between; align-items: center; margin-top: 6px; padding-top: 6px; border-top: 1px dashed #fed7aa; font-size: 0.85rem;">
+                        <span style="color: #78350f; font-weight: 600;">有休取得スタッフ数:</span>
+                        <strong id="statPaidStaffCount" style="color: #92400e; font-size: 1.05rem;">- 名</strong>
+                    </div>
+                    <div style="font-size: 0.75rem; color: #9a3412; margin-top: 4px;">当タームの有給休暇（半日有休含む）およびリフレッシュ休暇（上1〜下3）取得実績</div>
+                </div>
+
+                <!-- 4. 全日（28日間）の出勤人数 -->
+                <div class="stat-card" style="border-top: 4px solid #64748b;">
+                    <div class="stat-card-title" style="display: flex; align-items: center; justify-content: space-between;">
+                        <span>📊 全日（28日間）の出勤人数・実数</span>
+                        <span style="font-size: 0.75rem; background: #f1f5f9; color: #475569; padding: 2px 8px; border-radius: 9999px; font-weight: 700;">28日間</span>
+                    </div>
+                    <div class="stat-card-value" id="statWorkRange" style="font-size: 1.3rem; color: #1e293b;">- 〜 - 名</div>
+                    <div style="display: flex; justify-content: space-between; align-items: center; margin-top: 6px; padding-top: 6px; border-top: 1px dashed #e2e8f0; font-size: 0.85rem;">
+                        <span style="color: #64748b; font-weight: 600;">全日平均出勤人数:</span>
+                        <strong id="statAvgWork" style="color: #1e293b; font-size: 1.05rem;">- 名</strong>
+                    </div>
+                    <div style="font-size: 0.75rem; color: #64748b; margin-top: 4px;">目標値を中心に各日のブレを極小化</div>
+                </div>
+
+                <!-- 5. 特殊勤務（早・遅・E・8時）の配置累計 -->
+                <div class="stat-card" style="border-top: 4px solid #10b981;">
+                    <div class="stat-card-title" style="display: flex; align-items: center; justify-content: space-between;">
+                        <span>⏰ 特殊勤務の配置累計</span>
+                        <span style="font-size: 0.75rem; background: #ecfdf5; color: #047857; padding: 2px 8px; border-radius: 9999px; font-weight: 700;">割当完了</span>
+                    </div>
+                    <div class="stat-card-value" style="font-size: 1.05rem; font-weight: 700; color: #065f46;" id="statSpecialCounts">-</div>
+                    <div style="font-size: 0.75rem; color: #64748b; margin-top: 8px;">毎日「早3名 / 遅1名 / E2名 / 8時1名」を完全配置</div>
+                </div>
+            </div>
+
+            <!-- 日別出勤人数グラフ -->
+            <div class="toolbar-card" style="flex-direction: column; align-items: stretch;">
+                <div style="display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 0.75rem; flex-wrap: wrap; gap: 8px;">
+                    <div style="font-weight: 700; color: #1e293b;">日別出勤人数（実数合計）グラフ（28日間）</div>
+                    <div style="font-size: 0.75rem; color: #475569; font-weight: 600; background: #f1f5f9; padding: 2px 10px; border-radius: 4px; border: 1px solid #e2e8f0;">縦目盛り: MAX 40名 〜 MIN 25名</div>
+                </div>
+                <div id="dailyWorkChart" style="display: flex; gap: 6px; align-items: flex-end; padding: 1rem 0; height: 160px;">
+                    <div style="color: #94a3b8; font-size: 0.85rem; margin: auto;">勤務表を自動生成するとグラフが表示されます</div>
+                </div>
+            </div>
+        </section>
+
+    </main>
+
+    <!-- エラー・矛盾検知モーダル -->
+    <div class="modal-overlay" id="errorModal">
+        <div class="modal-card">
+            <div class="modal-header error">
+                <div style="display: flex; align-items: center; gap: 0.5rem;">
+                    <span style="font-size: 1.3rem;">⚠️</span>
+                    <h3 id="errorModalTitle" style="font-weight: 700; font-size: 1.1rem;">制約の指摘・エラー検知</h3>
+                </div>
+            </div>
+            <div class="modal-body">
+                <p id="errorModalSubtitle" style="font-weight: 600; color: #991b1b; margin-bottom: 0.5rem;">
+                    制約条件または入力枠に違反・指摘箇所があります。該当セルは青い網掛けで表示されています。
+                </p>
+                <p id="errorModalDesc" style="font-size: 0.85rem; color: #475569; margin-bottom: 0.75rem;">
+                    内容をご確認の上、勤務表を修正してください。あえてこのまま進める場合は「無視して進む」ボタンを選択できます。
+                </p>
+                <ul class="error-list" id="errorList"></ul>
+            </div>
+            <div class="modal-footer" style="display: flex; justify-content: flex-end; gap: 8px; flex-wrap: wrap;">
+                <button class="btn btn-outline" id="closeModalBtn">閉じる（修正する）</button>
+                <button class="btn btn-warning" id="forceSolveBtn" style="display: none; background: #ea580c; border-color: #ea580c; color: white; font-weight: 700;">
+                    ⚡ 無視して自動生成する
+                </button>
+                <button class="btn btn-success" id="forceAssignSpecialBtn" style="display: none; background: #059669; border-color: #059669; color: white; font-weight: 700;">
+                    ✨ 無視して特殊勤務を入れる
+                </button>
+            </div>
         </div>
     </div>
 
