@@ -1682,10 +1682,11 @@ class ShiftScheduler {
             const sec = staff.lifeSection || '';
             const ha = staff.haSection || '';
 
-            // ★ Group A（土日休み固定）: 訪問, 管理, Cl1 のみ（※ハ1, ハ2は業務トグルに従うため除外）
-            const isPatternA = (sec === '訪問' || sec === '管理' || sec === 'Cl1');
-            // ★ Group B（日曜休み固定＋平日分散公休）: 通所, Cl2 のみ（※ハ3, ハ南は業務トグルに従うため除外）
-            const isPatternB = (sec === '通所' || sec === 'Cl2');
+            // ★ ユーザー指示: 生活期「土日休」「日休」トグル連動（トグルONで優先適用）
+            // Group A（土日休み固定）: 土日休トグルON、または訪問, 管理, Cl1
+            const isPatternA = !!staff.isSatSunOff || (sec === '訪問' || sec === '管理' || sec === 'Cl1');
+            // Group B（日曜休み固定＋平日分散公休）: 日休トグルON、または通所, Cl2
+            const isPatternB = !isPatternA && (!!staff.isSunOff || (sec === '通所' || sec === 'Cl2'));
 
             if (isPatternA) {
                 // 土日休み固定
@@ -1727,7 +1728,9 @@ class ShiftScheduler {
             if (staff.isUnused) continue;
             const sec = staff.lifeSection || '';
             const ha = staff.haSection || '';
-            if (sec === '通所' || sec === 'Cl2') {
+            const isPatA = !!staff.isSatSunOff || (sec === '訪問' || sec === '管理' || sec === 'Cl1');
+            const isPatB = !isPatA && (!!staff.isSunOff || (sec === '通所' || sec === 'Cl2'));
+            if (isPatB) {
                 patternBStaff.push(s);
             }
         }
@@ -2015,8 +2018,8 @@ class ShiftScheduler {
             }
         }
 
-        // ステップ1: 8時勤務（1名/日）を優先配置！（8時可フラグのある貴重なスタッフから均等に選出。南病棟は8時不要）
-        if (!this.isSouth) {
+        // ステップ1: 8時勤務（1名/日）を優先配置！（南病棟でも南2・南3から毎日1名均等に自動選出）
+        if (!this.isST) {
             const h8Result = this.assign8ClockDuties(options);
             if (!h8Result.success && !force) {
                 return h8Result;
@@ -3279,7 +3282,8 @@ class ShiftScheduler {
 
         // 必要公休数 neededOffCount（それで連勤が解消しない場合は +1〜+2 日まで柔軟に許容）の平日休組み合わせを探索
         for (const checkChief of [true, false]) {
-            for (let k = neededOffCount; k <= Math.min(unfixedWeekdays.length, Math.max(neededOffCount + 2, weekendFixedWorkDays.length + 1)); k++) {
+            // ★ ユーザー指示: 公休が9日になるバグを根絶。追加平日公休数は neededOffCount（ちょうど8日になる数）に厳格固定！
+        for (let k = neededOffCount; k <= neededOffCount; k++) {
                 if (k === 0) {
                     if (isCandidateValid(baseSymbols, checkChief)) return baseSymbols;
                     continue;
@@ -5101,7 +5105,7 @@ class ShiftScheduler {
 
             // 通常: offDays === standardHolidays (8.0日) でOK
             // リフ取得時: リフ1日で公休8日(計9日)、リフ複数・前借りで公休7〜8日(計9〜11日)など柔軟に合格判定
-            const isStandardPass = (Math.abs(offDays - this.options.standardHolidays) < 0.01) || (staff.isSectionChief && offDays >= this.options.standardHolidays - 1.0 && offDays <= this.options.standardHolidays + 4.0);
+            const isStandardPass = (Math.abs(offDays - this.options.standardHolidays) < 0.01);
             const isRefPass = (refDays > 0 && (offDays + refDays >= 9.0 || (Math.abs(offDays + refDays - (this.options.standardHolidays + 1.0)) < 0.01)));
 
             if (Math.abs(this.options.standardHolidays - 8.5) < 0.01) {
@@ -5572,7 +5576,7 @@ function validateScheduleGrid(grid, staffList, options = {}) {
             else if (SYMBOLS.REF_SUMMER.includes(sym) || SYMBOLS.REF_WINTER.includes(sym)) refDays += 1.0;
         }
 
-        const isStandardPass = (Math.abs(offDays - standardHolidays) < 0.01) || (staff.isSectionChief && offDays >= standardHolidays - 1.0 && offDays <= standardHolidays + 4.0);
+            const isStandardPass = (Math.abs(offDays - standardHolidays) < 0.01);
         const isRefPass = (refDays > 0 && (offDays + refDays >= 9.0 || (Math.abs(offDays + refDays - (standardHolidays + 1.0)) < 0.01)));
 
         if (Math.abs(standardHolidays - 8.5) < 0.01) {

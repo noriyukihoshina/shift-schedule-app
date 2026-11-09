@@ -1421,3 +1421,23 @@ tr.drag-over-row {
 .st-summary-divider {
     border-top: 3.5px solid #1e293b !important;
 }
+
+/* ★ 添付1: 4/28と出勤集計の間にはさらに太い線が必要 */
+.border-thickest-right {
+    border-right: 3.5px solid #1e293b !important;
+}
+
+/* ★ 添付3: 公休9等の網掛け警告 */
+.holiday-alert-cell {
+    background: #e0f2fe !important;
+    color: #0369a1 !important;
+    font-weight: 800 !important;
+    box-shadow: inset 0 0 0 2px #0284c7 !important;
+    border: 2px solid #0284c7 !important;
+}
+
+/* ★ 添付4: STテーブル階層区切りの太線を最右端まで貫通 */
+tr.st-floor-last-row td,
+td.st-floor-divider-cell {
+    border-bottom: 3.5px solid #1e293b !important;
+}

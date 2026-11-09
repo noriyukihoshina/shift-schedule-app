@@ -12,6 +12,14 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // ★ ユーザー指示: 罫線の縦太線が火曜日と水曜日の間に引かれているが、土曜日と日曜日の間に引いて。
     // カレンダー日付が土曜日（wIdx === 5）の列の右側に border-thick-right を付与するヘルパー
+    
+    // ★ 添付1: 4/28と出勤集計の間にはさらに太い線（border-thickest-right）、土曜日は太線（border-thick-right）
+    function getDayBorderClass(d) {
+        if (d === NUM_DAYS - 1) return 'border-thickest-right';
+        if (isSaturdayCol(d)) return 'border-thick-right';
+        return '';
+    }
+
     function isSaturdayCol(d) {
         try {
             const t = (typeof currentTerm !== 'undefined' && currentTerm && currentTerm.dates) ? currentTerm : getTermInfo();
@@ -1981,7 +1989,7 @@ document.addEventListener('DOMContentLoaded', () => {
         for (let d = 0; d < NUM_DAYS; d++) {
             const di = term.dates[d];
             const cls = di.wIdx === 5 ? 'header-sat' : ((di.wIdx === 6 || di.isHoliday) ? 'header-sun' : '');
-            const thickCls = isSaturdayCol(d) ? 'border-thick-right' : '';
+            const thickCls = getDayBorderClass(d);
             headHtml += `<th class="${cls} ${thickCls} header-day-col col-day-fixed" style="width:52px; min-width:52px; max-width:52px;" title="${di.label} (${di.weekday})${di.isHoliday ? ' 祝日' : ''}">
                 <div class="day-label">${di.label}</div>
                 <div class="day-weekday"><small>${di.weekday}</small></div>
@@ -2015,7 +2023,7 @@ document.addEventListener('DOMContentLoaded', () => {
             for (let d = 0; d < NUM_DAYS; d++) {
                 const val = staff.days[d] || '';
                 const cls = val ? 'day-cell fixed-cell' : 'day-cell';
-                const thickCls = isSaturdayCol(d) ? 'border-thick-right' : '';
+                const thickCls = getDayBorderClass(d);
                 const lockTitle = val ? `事前固定枠: ${val}（自動上書きロック中）` : 'クリックで記号入力';
                 bodyHtml += `<td class="${cls} ${thickCls}" data-type="day" data-s="${sIdx}" data-d="${d}" title="${lockTitle}">${val}</td>`;
             }
@@ -2361,7 +2369,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 for (let d = 0; d < NUM_DAYS; d++) {
                     const c = rowData[d] || { symbol: '' };
                     const sym = c.symbol ? c.symbol.replace(/[◦•･◯〇●]/g, '○') : '';
-                    const thickCls = isSaturdayCol(d) ? 'border-thick-right' : '';
+                    const thickCls = getDayBorderClass(d);
 
                     // ★ 事前固定希望（本人が希望入力した枠）のみ赤字・太字（fixed-cell）！自動生成された公休等は通常文字
                     const originalWish = (st.days && st.days[d]) ? st.days[d] : '';
@@ -4110,7 +4118,7 @@ document.addEventListener('DOMContentLoaded', () => {
                     checkFinalConstraints(false);
                     saveCurrentTermToStorage(); // ★ 特殊勤務割当データを自動保存
                     const toastMsg = isSouth 
-                        ? '✨ 南病棟の特殊勤務（早・遅・E各2名 / 南2・南3に各1名）を割り当て、「最終チェック&完成」を表示しました！' 
+                        ? '✨ 南病棟の特殊勤務（早・遅・E各2名 / 8時1名）を割り当て、「最終チェック&完成」を表示しました！' 
                         : '✨ 特殊勤務（早3名・遅1名・E2名・8時1名）を割り当て、「最終チェック&完成」を表示しました！';
                     showToast(toastMsg);
                 } else {
@@ -4561,7 +4569,7 @@ document.addEventListener('DOMContentLoaded', () => {
             const dateInfo = term.dates[d];
             const cls = dateInfo.wIdx === 5 ? 'header-sat' : ((dateInfo.wIdx === 6 || dateInfo.isHoliday) ? 'header-sun' : '');
             // 7日ごと（週区切り）および28日目に太線
-            const thickCls = isSaturdayCol(d) ? 'border-thick-right' : '';
+            const thickCls = getDayBorderClass(d);
             headHtml += `<th class="${cls} ${thickCls} border-thick-bottom header-day-col col-day-fixed" style="width:52px; min-width:52px; max-width:52px;" title="${dateInfo.label} (${dateInfo.weekday})${dateInfo.isHoliday ? ' 祝日' : ''}">
                 <div class="day-label">${dateInfo.label}</div>
                 <div class="day-weekday"><small>${dateInfo.weekday}</small></div>
@@ -4628,9 +4636,9 @@ document.addEventListener('DOMContentLoaded', () => {
                     const staffStat = (stats && stats.staffStats && stats.staffStats[s]) || { workDays:0, offDays:0, paidDays:0, refDays:0, early:0, late:0, eve:0, h8:0 };
                     const isLastInFloor = (idxInFl === flStaffIndices.length - 1);
                     // 添付3の太い黒境界線！
-                    const rowBorderB = isLastInFloor ? 'border-bottom: 2px solid #94a3b8 !important;' : '';
+                    const rowBorderB = isLastInFloor ? 'border-bottom: 3.5px solid #1e293b !important;' : '';
 
-                    bodyHtml += `<tr style="${rowBorderB}">`;
+                    bodyHtml += `<tr class="${isLastInFloor ? 'st-floor-last-row' : ''}" style="${rowBorderB}">`;
                     if (idxInFl === 0) {
                         bodyHtml += `<td class="sticky-col-1 border-thick-right" rowspan="${flStaffIndices.length}" style="background:${fl.bg}; color:${fl.color}; font-weight:800; font-size:0.95rem; text-align:center; vertical-align:middle; ${rowBorderB}">${fl.label}</td>`;
                     }
@@ -4640,7 +4648,7 @@ document.addEventListener('DOMContentLoaded', () => {
                         const cell = (grid && grid[s] && grid[s][d]) ? grid[s][d] : { symbol: '' };
                         const displaySym = cell.symbol ? cell.symbol.replace(/[◦•･◯〇●]/g, '○') : '';
                         const cls = cell.isFixed ? 'day-cell fixed-cell' : 'day-cell auto-cell';
-                        const thickCls = isSaturdayCol(d) ? 'border-thick-right' : '';
+                        const thickCls = getDayBorderClass(d);
                         const titleText = cell.isFixed ? '🔒 事前固定希望枠（赤字・太字保持）' : 'システム自動配置';
                         bodyHtml += `<td class="${cls} ${thickCls}" data-s="${s}" data-d="${d}" title="${titleText}" style="${rowBorderB}">${displaySym}</td>`;
                     }
@@ -4674,7 +4682,7 @@ document.addEventListener('DOMContentLoaded', () => {
                         const cell = (grid && grid[s] && grid[s][d]) ? grid[s][d] : { symbol: '' };
                         const displaySym = cell.symbol ? cell.symbol.replace(/[◦•･◯〇●]/g, '○') : '';
                         const cls = cell.isFixed ? 'day-cell fixed-cell' : 'day-cell auto-cell';
-                        const thickCls = isSaturdayCol(d) ? 'border-thick-right' : '';
+                        const thickCls = getDayBorderClass(d);
                         bodyHtml += `<td class="${cls} ${thickCls}" data-s="${s}" data-d="${d}">${displaySym}</td>`;
                     }
                     bodyHtml += `
@@ -4705,7 +4713,7 @@ document.addEventListener('DOMContentLoaded', () => {
                     const cell = grid[s][d];
                     const displaySym = cell.symbol ? cell.symbol.replace(/[◦•･◯〇●]/g, '○') : '';
                     const cls = cell.isFixed ? 'day-cell fixed-cell' : 'day-cell auto-cell';
-                    const thickCls = isSaturdayCol(d) ? 'border-thick-right' : '';
+                    const thickCls = getDayBorderClass(d);
                     const titleText = cell.isFixed ? '🔒 事前固定希望枠（赤字・太字保持）' : 'システム自動配置';
                     bodyHtml += `<td class="${cls} ${thickCls} ${rowBottomCls}" data-s="${s}" data-d="${d}" title="${titleText}">${displaySym}</td>`;
                 }
@@ -4760,7 +4768,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 for (let d = 0; d < NUM_DAYS; d++) {
                     const c = rowData[d] || { symbol: '' };
                     const sym = c.symbol ? c.symbol.replace(/[◦•･◯〇●]/g, '○') : '';
-                    const thickCls = isSaturdayCol(d) ? 'border-thick-right' : '';
+                    const thickCls = getDayBorderClass(d);
 
                     if (sym === '休') stOffCount++;
                     else if (sym === '有') stPaidCount++;
@@ -4824,7 +4832,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 let haRefCount = 0;
 
                 for (let d = 0; d < NUM_DAYS; d++) {
-                    const thickCls = isSaturdayCol(d) ? 'border-thick-right' : '';
+                    const thickCls = getDayBorderClass(d);
                     const c = rowData[d] || { symbol: '' };
                     const sym = (c && typeof c === 'object') ? (c.symbol || '') : (c || '');
 
@@ -4928,10 +4936,10 @@ document.addEventListener('DOMContentLoaded', () => {
 
                 // 添付3: 階（結合）, 出勤人数
                 footHtml += `<tr style="background:${fl.bg}; font-weight:bold;">
-                    <th class="sticky-col-1" rowspan="3" style="background:${fl.headerBg}; color:${fl.color}; font-size:1.05rem; font-weight:800; vertical-align:middle; text-align:center; border-right:1px solid ${fl.border}; border-bottom:2px solid #1e293b;">${fl.label}</th>
+                    <th class="sticky-col-1" rowspan="3" style="background:${fl.headerBg}; color:${fl.color}; font-size:1.05rem; font-weight:800; vertical-align:middle; text-align:center; border-right:1px solid ${fl.border}; border-bottom:3px solid #1e293b !important;">${fl.label}</th>
                     <th class="sticky-col-2" style="background:${fl.bg}; border-right:2px solid #475569; text-align:center; color:#1e293b; padding:4px 8px;">出勤人数</th>`;
                 for (let d = 0; d < NUM_DAYS; d++) {
-                    const thickCls = isSaturdayCol(d) ? 'border-thick-right' : '';
+                    const thickCls = getDayBorderClass(d);
                     footHtml += `<td class="${thickCls} col-day-fixed" style="width:52px; min-width:52px; max-width:52px; font-weight:800; color:#1e293b; text-align:center;">${dWork[d]}</td>`;
                 }
                 footHtml += `<td style="font-weight:700; color:#1e293b; text-align:center;">${sumWork}</td><td colspan="8"></td></tr>`;
@@ -4940,19 +4948,19 @@ document.addEventListener('DOMContentLoaded', () => {
                 footHtml += `<tr style="background:${fl.bg}; font-weight:bold;">
                     <th class="sticky-col-2" style="background:${fl.bg}; border-right:2px solid #475569; text-align:center; color:#0369a1; padding:4px 8px;">実数</th>`;
                 for (let d = 0; d < NUM_DAYS; d++) {
-                    const thickCls = isSaturdayCol(d) ? 'border-thick-right' : '';
+                    const thickCls = getDayBorderClass(d);
                     footHtml += `<td class="${thickCls} col-day-fixed" style="width:52px; min-width:52px; max-width:52px; font-weight:800; color:#0369a1; text-align:center;">${dReal[d]}</td>`;
                 }
                 footHtml += `<td style="font-weight:700; color:#0369a1; text-align:center;">${sumReal}</td><td colspan="8"></td></tr>`;
 
-                // 添付3: 早
-                footHtml += `<tr style="background:${fl.bg}; font-weight:bold; border-bottom: 2px solid #1e293b;">
-                    <th class="sticky-col-2" style="background:${fl.bg}; border-right:2px solid #475569; text-align:center; color:#c2410c; padding:4px 8px;">早</th>`;
+                // ★ 添付4: 各階の最終行（早の行）は最右端まで太い横罫線（3px solid #1e293b）を貫通！
+                footHtml += `<tr style="background:${fl.bg}; font-weight:bold;">
+                    <th class="sticky-col-2" style="background:${fl.bg}; border-right:2px solid #475569; border-bottom: 3px solid #1e293b !important; text-align:center; color:#c2410c; padding:4px 8px;">早</th>`;
                 for (let d = 0; d < NUM_DAYS; d++) {
-                    const thickCls = isSaturdayCol(d) ? 'border-thick-right' : '';
-                    footHtml += `<td class="${thickCls} col-day-fixed" style="width:52px; min-width:52px; max-width:52px; font-weight:800; color:#c2410c; text-align:center;">${dEarly[d]}</td>`;
+                    const thickCls = getDayBorderClass(d);
+                    footHtml += `<td class="${thickCls} col-day-fixed" style="width:52px; min-width:52px; max-width:52px; font-weight:800; color:#c2410c; text-align:center; border-bottom: 3px solid #1e293b !important;">${dEarly[d]}</td>`;
                 }
-                footHtml += `<td style="font-weight:700; color:#c2410c; text-align:center;">${sumEarly}</td><td colspan="8"></td></tr>`;
+                footHtml += `<td style="font-weight:700; color:#c2410c; text-align:center; border-bottom: 3px solid #1e293b !important;">${sumEarly}</td><td colspan="8" style="border-bottom: 3px solid #1e293b !important;"></td></tr>`;
             });
 
             // 全体合計行
@@ -4964,7 +4972,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 <th class="sticky-col-1" rowspan="3" style="background:#e2e8f0; color:#0f172a; font-size:1.05rem; font-weight:800; vertical-align:middle; text-align:center; border-right:1px solid #cbd5e1;">全階合計</th>
                 <th class="sticky-col-2" style="background:#f1f5f9; border-right:2px solid #475569; text-align:center; color:#0f172a; padding:4px 8px;">出勤合計</th>`;
             for (let d = 0; d < NUM_DAYS; d++) {
-                const thickCls = isSaturdayCol(d) ? 'border-thick-right' : '';
+                const thickCls = getDayBorderClass(d);
                 footHtml += `<td class="${thickCls} col-day-fixed" style="width:52px; min-width:52px; max-width:52px; font-weight:900; color:#0f172a; text-align:center; font-size:0.95rem;">${allFloorsWork[d]}</td>`;
             }
             footHtml += `<td style="font-weight:900; color:#0f172a; text-align:center;">${totalWorkAll}</td><td colspan="8"></td></tr>`;
@@ -4972,18 +4980,18 @@ document.addEventListener('DOMContentLoaded', () => {
             footHtml += `<tr style="background:#f1f5f9; font-weight:800;">
                 <th class="sticky-col-2" style="background:#f1f5f9; border-right:2px solid #475569; text-align:center; color:#0369a1; padding:4px 8px;">実数合計</th>`;
             for (let d = 0; d < NUM_DAYS; d++) {
-                const thickCls = isSaturdayCol(d) ? 'border-thick-right' : '';
+                const thickCls = getDayBorderClass(d);
                 footHtml += `<td class="${thickCls} col-day-fixed" style="width:52px; min-width:52px; max-width:52px; font-weight:900; color:#0369a1; text-align:center; font-size:0.95rem;">${allFloorsReal[d]}</td>`;
             }
             footHtml += `<td style="font-weight:900; color:#0369a1; text-align:center;">${totalRealAll}</td><td colspan="8"></td></tr>`;
 
-            footHtml += `<tr style="background:#f1f5f9; font-weight:800; border-bottom: 3px solid #475569;">
-                <th class="sticky-col-2" style="background:#f1f5f9; border-right:2px solid #475569; text-align:center; color:#c2410c; padding:4px 8px;">早合計</th>`;
+            footHtml += `<tr style="background:#f1f5f9; font-weight:800;">
+                <th class="sticky-col-2" style="background:#f1f5f9; border-right:2px solid #475569; border-bottom: 3.5px solid #1e293b !important; text-align:center; color:#c2410c; padding:4px 8px;">早合計</th>`;
             for (let d = 0; d < NUM_DAYS; d++) {
-                const thickCls = isSaturdayCol(d) ? 'border-thick-right' : '';
-                footHtml += `<td class="${thickCls} col-day-fixed" style="width:52px; min-width:52px; max-width:52px; font-weight:900; color:#c2410c; text-align:center; font-size:0.95rem;">${allFloorsEarly[d]}</td>`;
+                const thickCls = getDayBorderClass(d);
+                footHtml += `<td class="${thickCls} col-day-fixed" style="width:52px; min-width:52px; max-width:52px; font-weight:900; color:#c2410c; text-align:center; font-size:0.95rem; border-bottom: 3.5px solid #1e293b !important;">${allFloorsEarly[d]}</td>`;
             }
-            footHtml += `<td style="font-weight:900; color:#c2410c; text-align:center;">${totalEarlyAll}</td><td colspan="8"></td></tr>`;
+            footHtml += `<td style="font-weight:900; color:#c2410c; text-align:center; border-bottom: 3.5px solid #1e293b !important;">${totalEarlyAll}</td><td colspan="8" style="border-bottom: 3.5px solid #1e293b !important;"></td></tr>`;
 
             tfoot.innerHTML = footHtml;
 
@@ -5007,7 +5015,7 @@ document.addEventListener('DOMContentLoaded', () => {
         `;
         for (let d = 0; d < NUM_DAYS; d++) {
             const dStat = stats.daily[d];
-            const thickCls = isSaturdayCol(d) ? 'border-thick-right' : '';
+            const thickCls = getDayBorderClass(d);
             footHtml += `<td class="${thickCls} col-day-fixed" style="width:52px; min-width:52px; max-width:52px; font-weight:800; color:#1e293b; font-size:0.95rem;">${dStat.totalWork}</td>`;
         }
         footHtml += `
@@ -5090,7 +5098,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 <th class="sticky-col-1" colspan="2" style="color:#1e293b;" title="各セクション（PT・OT・ST・ハーフマン）の出勤実数合計（増員枠オフセット反映）">実数合計</th>
         `;
         for (let d = 0; d < NUM_DAYS; d++) {
-            const thickCls = isSaturdayCol(d) ? 'border-thick-right' : '';
+            const thickCls = getDayBorderClass(d);
             const real = calculatedDailyReal[d];
             footHtml += `<td class="${thickCls} col-day-fixed" style="width:52px; min-width:52px; max-width:52px; vertical-align:middle; font-weight:800; color:#1e293b; font-size:0.95rem;">${real}</td>`;
         }
@@ -5106,7 +5114,7 @@ document.addEventListener('DOMContentLoaded', () => {
             for (let d = 0; d < NUM_DAYS; d++) {
                 const secVal = secDailyMap[sec.name][d];
                 secTotalSum += secVal;
-                const thickCls = isSaturdayCol(d) ? 'border-thick-right' : '';
+                const thickCls = getDayBorderClass(d);
                 const displayVal = secVal > 0 ? (secVal % 1 === 0 ? secVal : secVal.toFixed(1)) : (sec.name === 'ST' || sec.name === 'HA' ? '0' : '-');
                 footHtml += `<td class="${thickCls} col-day-fixed" style="width:52px; min-width:52px; max-width:52px; color:${sec.color}; font-weight:800;">${displayVal}</td>`;
             }
@@ -5126,7 +5134,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
         for (let d = 0; d < NUM_DAYS; d++) {
             const dStat = stats.daily[d];
-            const thickCls = isSaturdayCol(d) ? 'border-thick-right' : '';
+            const thickCls = getDayBorderClass(d);
             let earlyVal = dStat.early;
             if (!isST && !isLife) {
                 let poEarly = 0;
@@ -5172,7 +5180,7 @@ document.addEventListener('DOMContentLoaded', () => {
         `;
         for (let d = 0; d < NUM_DAYS; d++) {
             const dStat = stats.daily[d];
-            const thickCls = isSaturdayCol(d) ? 'border-thick-right' : '';
+            const thickCls = getDayBorderClass(d);
             let lateVal = dStat.late;
             if (!isST && !isLife) {
                 let poLate = 0;
@@ -5218,7 +5226,7 @@ document.addEventListener('DOMContentLoaded', () => {
         `;
         for (let d = 0; d < NUM_DAYS; d++) {
             const dStat = stats.daily[d];
-            const thickCls = isSaturdayCol(d) ? 'border-thick-right' : '';
+            const thickCls = getDayBorderClass(d);
             let eveVal = dStat.eve;
             if (!isST && !isLife) {
                 let poEve = 0;
@@ -5264,7 +5272,7 @@ document.addEventListener('DOMContentLoaded', () => {
         `;
         for (let d = 0; d < NUM_DAYS; d++) {
             const dStat = stats.daily[d];
-            const thickCls = isSaturdayCol(d) ? 'border-thick-right' : '';
+            const thickCls = getDayBorderClass(d);
             
             const h8Val = dStat.h8;
             const needH8 = (!isST) ? 1 : null;
@@ -5308,7 +5316,7 @@ document.addEventListener('DOMContentLoaded', () => {
         const term = getTermInfo();
 
         const numDays = term.dates.length;
-        const curStartDate = document.getElementById('termStartDate')?.value || currentWorkingStartDate || '2026-04-01';
+        const curStartDate = document.getElementById('masterTermSelect')?.value || document.getElementById('termStartDate')?.value || currentWorkingStartDate || '2026-04-01';
 
         const checkTitle = document.getElementById('checkTitleDisplay');
         if (checkTitle) {
@@ -5574,7 +5582,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 <th class="sticky-col-2" style="background:${fc.headerBg}; color:#1e293b; width:95px; min-width:95px; max-width:105px; text-align:left; padding:2px 4px; border-right:2px solid #475569;">項目</th>`;
             for (let d = 0; d < numDays; d++) {
                 const di = term.dates[d];
-                const thickCls = isSaturdayCol(d) ? 'border-thick-right' : '';
+                const thickCls = getDayBorderClass(d);
                 html += `<th class="${thickCls} col-day-fixed" style="width:52px; min-width:52px; max-width:52px; background:${fc.headerBg}; font-size:0.78rem; padding:4px 2px; color:#1e293b; border-bottom:1px solid ${fc.border}; text-align:center; white-space:nowrap;">${di.m}/${di.day}</th>`;
             }
             html += `
@@ -5595,7 +5603,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 <th class="sticky-col-2" style="background:${fc.headerBg}; border-right:2px solid #475569; width:95px; min-width:95px; max-width:105px;"></th>`;
             for (let d = 0; d < numDays; d++) {
                 const di = term.dates[d];
-                const thickCls = isSaturdayCol(d) ? 'border-thick-right' : '';
+                const thickCls = getDayBorderClass(d);
                 const wColor = di.wIdx === 5 ? '#2563eb' : ((di.wIdx === 6 || di.isHoliday) ? '#dc2626' : '#334155');
                 const wBg = di.wIdx === 5 ? '#eff6ff' : ((di.wIdx === 6 || di.isHoliday) ? '#fef2f2' : fc.headerBg);
                 html += `<th class="${thickCls} col-day-fixed" style="width:52px; min-width:52px; max-width:52px; background:${wBg}; color:${wColor}; font-size:0.8rem; padding:2px; border-bottom:1px solid ${fc.border}; text-align:center;">${di.weekday}</th>`;
@@ -5607,7 +5615,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 <td class="sticky-col-1" rowspan="8" style="background:${fc.headerBg}; color:${fc.badgeColor}; font-size:1.05rem; font-weight:800; vertical-align:middle; text-align:center; border-right:1px solid ${fc.border}; width:44px; min-width:44px; max-width:44px;">${fc.label}</td>
                 <td class="sticky-col-2" style="background:${fc.bg}; color:#1e293b; border-right:2px solid #475569; font-weight:700; width:95px; min-width:95px; max-width:105px;">±補正</td>`;
             for (let d = 0; d < numDays; d++) {
-                const thickCls = isSaturdayCol(d) ? 'border-thick-right' : '';
+                const thickCls = getDayBorderClass(d);
                 const off = dailyOffsets[d];
                 const offText = off > 0 ? `+${off}` : `${off}`;
                 const offColor = off > 0 ? '#15803d' : (off < 0 ? '#dc2626' : '#64748b');
@@ -5619,7 +5627,7 @@ document.addEventListener('DOMContentLoaded', () => {
             html += `<tr style="background:#f1f5f9; font-weight:700;">
                 <td class="sticky-col-2" style="background:#f1f5f9; color:#0f172a; border-right:2px solid #475569; font-weight:800; width:95px; min-width:95px; max-width:105px;">出勤人数合計</td>`;
             for (let d = 0; d < numDays; d++) {
-                const thickCls = isSaturdayCol(d) ? 'border-thick-right' : '';
+                const thickCls = getDayBorderClass(d);
                 html += `<td class="${thickCls} col-day-fixed" style="width:52px; min-width:52px; max-width:52px; background:#f1f5f9; color:#0f172a; font-weight:800; border-bottom:1px solid #cbd5e1; text-align:center;">${dailyTotal[d]}</td>`;
             }
             html += `<td colspan="9" style="background:#f1f5f9;"></td></tr>`;
@@ -5628,7 +5636,7 @@ document.addEventListener('DOMContentLoaded', () => {
             html += `<tr style="background:#e2e8f0; font-weight:700;">
                 <td class="sticky-col-2" style="background:#e2e8f0; color:#0369a1; border-right:2px solid #475569; font-weight:800; width:95px; min-width:95px; max-width:105px;">実数合計</td>`;
             for (let d = 0; d < numDays; d++) {
-                const thickCls = isSaturdayCol(d) ? 'border-thick-right' : '';
+                const thickCls = getDayBorderClass(d);
                 html += `<td class="${thickCls} col-day-fixed" style="width:52px; min-width:52px; max-width:52px; background:#e2e8f0; color:#0369a1; font-weight:800; border-bottom:1px solid #cbd5e1; text-align:center;">${dailyReal[d]}</td>`;
             }
             html += `<td colspan="9" style="background:#e2e8f0;"></td></tr>`;
@@ -5644,7 +5652,7 @@ document.addEventListener('DOMContentLoaded', () => {
             html += `<tr style="background:${fc.bg}; font-weight:600;">
                 <td class="sticky-col-2" style="background:${fc.bg}; color:#1e293b; border-right:2px solid #475569; width:95px; min-width:95px; max-width:105px;">早</td>`;
             for (let d = 0; d < numDays; d++) {
-                const thickCls = isSaturdayCol(d) ? 'border-thick-right' : '';
+                const thickCls = getDayBorderClass(d);
                 const cnt = dailyEarly[d];
                 const isConflict = (cnt !== targetEarly);
                 const bgStyle = isConflict ? 'background:#dbeafe !important; color:#1d4ed8 !important;' : `background:${fc.bg}; color:#ea580c;`;
@@ -5657,7 +5665,7 @@ document.addEventListener('DOMContentLoaded', () => {
             html += `<tr style="background:${fc.bg}; font-weight:600;">
                 <td class="sticky-col-2" style="background:${fc.bg}; color:#1e293b; border-right:2px solid #475569; width:95px; min-width:95px; max-width:105px;">遅</td>`;
             for (let d = 0; d < numDays; d++) {
-                const thickCls = isSaturdayCol(d) ? 'border-thick-right' : '';
+                const thickCls = getDayBorderClass(d);
                 const cnt = dailyLate[d];
                 const isConflict = (cnt !== targetLate);
                 const bgStyle = isConflict ? 'background:#dbeafe !important; color:#1d4ed8 !important;' : `background:${fc.bg}; color:#0284c7;`;
@@ -5670,7 +5678,7 @@ document.addEventListener('DOMContentLoaded', () => {
             html += `<tr style="background:${fc.bg}; font-weight:600;">
                 <td class="sticky-col-2" style="background:${fc.bg}; color:#1e293b; border-right:2px solid #475569; width:95px; min-width:95px; max-width:105px;">E</td>`;
             for (let d = 0; d < numDays; d++) {
-                const thickCls = isSaturdayCol(d) ? 'border-thick-right' : '';
+                const thickCls = getDayBorderClass(d);
                 const cnt = dailyEve[d];
                 const isConflict = (cnt !== targetEve);
                 const bgStyle = isConflict ? 'background:#dbeafe !important; color:#1d4ed8 !important;' : `background:${fc.bg}; color:#7c3aed;`;
@@ -5683,7 +5691,7 @@ document.addEventListener('DOMContentLoaded', () => {
             html += `<tr style="background:${fc.bg}; font-weight:600;">
                 <td class="sticky-col-2" style="background:${fc.bg}; color:#1e293b; border-right:2px solid #475569; width:95px; min-width:95px; max-width:105px;">8時</td>`;
             for (let d = 0; d < numDays; d++) {
-                const thickCls = isSaturdayCol(d) ? 'border-thick-right' : '';
+                const thickCls = getDayBorderClass(d);
                 const cnt = dailyH8[d];
                 const isConflict = (cnt !== targetH8);
                 const bgStyle = isConflict ? 'background:#dbeafe !important; color:#1d4ed8 !important;' : `background:${fc.bg}; color:#059669;`;
@@ -5700,7 +5708,7 @@ document.addEventListener('DOMContentLoaded', () => {
                     </button>
                 </td>`;
             for (let d = 0; d < numDays; d++) {
-                const thickCls = isSaturdayCol(d) ? 'border-thick-right' : '';
+                const thickCls = getDayBorderClass(d);
                 html += `<td class="${thickCls} col-day-fixed" style="width:52px; min-width:52px; max-width:52px; background:${fc.bg}; border-bottom:2px solid ${fc.border};"></td>`;
             }
             html += `<td colspan="9" style="background:${fc.bg};"></td></tr>`;
@@ -5811,7 +5819,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 const isHalf = !!s.isHalf;
 
                 for (let d = 0; d < numDays; d++) {
-                    const thickCls = isSaturdayCol(d) ? 'border-thick-right' : '';
+                    const thickCls = getDayBorderClass(d);
                     const cell = item.gridRow ? item.gridRow[d] : null;
                     const sym = (cell && typeof cell === 'object') ? (cell.symbol || '') : (cell || '');
                     
@@ -5961,7 +5969,7 @@ document.addEventListener('DOMContentLoaded', () => {
                     <td class="sticky-col-1" style="background:${fr.bg}; color:${fr.color}; font-size:0.75rem; text-align:center; border-right:1px solid #cbd5e1;">集計</td>
                     <td class="sticky-col-2" style="background:${fr.bg}; color:${fr.color}; font-weight:${fr.bold ? '800' : '700'}; font-size:0.82rem; text-align:left; border-right:2px solid #475569; padding-left:8px;">${fr.label}</td>`;
                 for (let d = 0; d < numDays; d++) {
-                    const thickCls = isSaturdayCol(d) ? 'border-thick-right' : '';
+                    const thickCls = getDayBorderClass(d);
                     const v = fr.vals[d];
                     const dispV = (v > 0) ? (v % 1 === 0 ? v : v.toFixed(1)) : (['早番', '遅番', 'E', '8時', '出勤人数合計', '実数合計'].includes(fr.label) ? v : '-');
                     html += `<td class="${thickCls} col-day-fixed" style="width:52px; min-width:52px; max-width:52px; background:${fr.bg}; color:${fr.color}; text-align:center; border-bottom:1px solid #cbd5e1; font-weight:${fr.bold ? '800' : '700'};">${dispV}</td>`;
@@ -5978,7 +5986,7 @@ document.addEventListener('DOMContentLoaded', () => {
             <th class="sticky-col-1" rowspan="6" style="background:#e2e8f0; color:#1e293b; font-size:1.1rem; font-weight:900; vertical-align:middle; text-align:center; border-right:1px solid #cbd5e1; width:44px; min-width:44px; max-width:44px;">集計</th>
             <td class="sticky-col-2" style="background:#f8fafc; color:#0f172a; border-right:2px solid #475569; font-weight:800; font-size:0.9rem; width:95px; min-width:95px; max-width:105px;">出勤人数合計</td>`;
         for (let d = 0; d < numDays; d++) {
-            const thickCls = isSaturdayCol(d) ? 'border-thick-right' : '';
+            const thickCls = getDayBorderClass(d);
             html += `<td class="${thickCls} col-day-fixed" style="width:52px; min-width:52px; max-width:52px; background:#f8fafc; color:#0f172a; font-weight:800; font-size:0.95rem; border-bottom:1px solid #cbd5e1; text-align:center;">${grandTotal[d]}</td>`;
         }
         html += `<td colspan="9" style="background:#f8fafc;"></td></tr>`;
@@ -5987,7 +5995,7 @@ document.addEventListener('DOMContentLoaded', () => {
         html += `<tr style="background:#f8fafc; font-weight:700;">
             <td class="sticky-col-2" style="background:#f8fafc; color:#0369a1; border-right:2px solid #475569; font-weight:800; font-size:0.9rem; width:95px; min-width:95px; max-width:105px;">実数合計</td>`;
         for (let d = 0; d < numDays; d++) {
-            const thickCls = isSaturdayCol(d) ? 'border-thick-right' : '';
+            const thickCls = getDayBorderClass(d);
             html += `<td class="${thickCls} col-day-fixed" style="width:52px; min-width:52px; max-width:52px; background:#f8fafc; color:#0369a1; font-weight:800; font-size:0.95rem; border-bottom:1px solid #cbd5e1; text-align:center;">${Number(grandReal[d].toFixed(1))}</td>`;
         }
         html += `<td colspan="9" style="background:#f8fafc;"></td></tr>`;
@@ -5996,7 +6004,7 @@ document.addEventListener('DOMContentLoaded', () => {
         html += `<tr style="background:#f8fafc; font-weight:700;">
             <td class="sticky-col-2" style="background:#f8fafc; color:#ea580c; border-right:2px solid #475569; font-weight:700; width:95px; min-width:95px; max-width:105px;">早</td>`;
         for (let d = 0; d < numDays; d++) {
-            const thickCls = isSaturdayCol(d) ? 'border-thick-right' : '';
+            const thickCls = getDayBorderClass(d);
             const cnt = grandEarly[d];
             const isConflict = (cnt !== 11);
             const bgStyle = isConflict ? 'background:#dbeafe !important; color:#1d4ed8 !important;' : 'background:#f8fafc; color:#ea580c;';
@@ -6009,7 +6017,7 @@ document.addEventListener('DOMContentLoaded', () => {
         html += `<tr style="background:#f8fafc; font-weight:700;">
             <td class="sticky-col-2" style="background:#f8fafc; color:#0284c7; border-right:2px solid #475569; font-weight:700; width:95px; min-width:95px; max-width:105px;">遅</td>`;
         for (let d = 0; d < numDays; d++) {
-            const thickCls = isSaturdayCol(d) ? 'border-thick-right' : '';
+            const thickCls = getDayBorderClass(d);
             const cnt = grandLate[d];
             const isConflict = (cnt !== 5);
             const bgStyle = isConflict ? 'background:#dbeafe !important; color:#1d4ed8 !important;' : 'background:#f8fafc; color:#0284c7;';
@@ -6022,7 +6030,7 @@ document.addEventListener('DOMContentLoaded', () => {
         html += `<tr style="background:#f8fafc; font-weight:700;">
             <td class="sticky-col-2" style="background:#f8fafc; color:#7c3aed; border-right:2px solid #475569; font-weight:700; width:95px; min-width:95px; max-width:105px;">E</td>`;
         for (let d = 0; d < numDays; d++) {
-            const thickCls = isSaturdayCol(d) ? 'border-thick-right' : '';
+            const thickCls = getDayBorderClass(d);
             const cnt = grandEve[d];
             const isConflict = (cnt !== 8);
             const bgStyle = isConflict ? 'background:#dbeafe !important; color:#1d4ed8 !important;' : 'background:#f8fafc; color:#7c3aed;';
@@ -6035,7 +6043,7 @@ document.addEventListener('DOMContentLoaded', () => {
         html += `<tr style="background:#f8fafc; font-weight:700; border-bottom:3px solid #334155;">
             <td class="sticky-col-2" style="background:#f8fafc; color:#059669; border-right:2px solid #475569; font-weight:700; width:95px; min-width:95px; max-width:105px;">8時</td>`;
         for (let d = 0; d < numDays; d++) {
-            const thickCls = isSaturdayCol(d) ? 'border-thick-right' : '';
+            const thickCls = getDayBorderClass(d);
             const cnt = grandH8[d];
             const isConflict = (cnt !== 3);
             const bgStyle = isConflict ? 'background:#dbeafe !important; color:#1d4ed8 !important;' : 'background:#f8fafc; color:#059669;';
@@ -6084,7 +6092,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 const haIdx = parseInt(cell.dataset.haIdx, 10);
                 const dayIdx = parseInt(cell.dataset.day, 10);
 
-                const curStartDate = document.getElementById('termStartDate')?.value || currentWorkingStartDate || '2026-04-01';
+                const curStartDate = document.getElementById('masterTermSelect')?.value || document.getElementById('termStartDate')?.value || currentWorkingStartDate || '2026-04-01';
                 const targetKey = isHaCell
                     ? `shift_schedule_life_term_${curStartDate}`
                     : (isStCell ? `shift_schedule_st_term_${curStartDate}` : `shift_schedule_${floorId}_term_${curStartDate}`);
@@ -6240,7 +6248,7 @@ document.addEventListener('DOMContentLoaded', () => {
         }
         if (newSym === 'CLEAR') newSym = '';
 
-        const curStartDate = document.getElementById('termStartDate')?.value || currentWorkingStartDate || '2026-04-01';
+        const curStartDate = document.getElementById('masterTermSelect')?.value || document.getElementById('termStartDate')?.value || currentWorkingStartDate || '2026-04-01';
         const stKey = `shift_schedule_st_term_${curStartDate}`;
         let stData = null;
         try {
@@ -6316,7 +6324,7 @@ document.addEventListener('DOMContentLoaded', () => {
         }
         if (newSym === 'CLEAR') newSym = '';
 
-        const curStartDate = document.getElementById('termStartDate')?.value || currentWorkingStartDate || '2026-04-01';
+        const curStartDate = document.getElementById('masterTermSelect')?.value || document.getElementById('termStartDate')?.value || currentWorkingStartDate || '2026-04-01';
         const lifeKey = `shift_schedule_life_term_${curStartDate}`;
         let lifeData = null;
         try {
@@ -9240,23 +9248,27 @@ document.addEventListener('DOMContentLoaded', () => {
     };
     window.addEventListener('pagehide', flushCloudSync);
     window.addEventListener('beforeunload', flushCloudSync);
-});
 
 
-    // ★ ユーザー指示: コピペモード（セル選択 Ctrl+C / Ctrl+V またはクリック貼付）
+// ★ ユーザー指示: コピペモード（セル選択 Ctrl+C / Ctrl+V またはクリック貼付）
     document.addEventListener('click', (e) => {
         const toggleBtn = e.target.closest('#copyModeToggleBtn, .copy-mode-btn');
         if (toggleBtn) {
             isCopyMode = !isCopyMode;
+            const allCopyBtns = document.querySelectorAll('#copyModeToggleBtn, .copy-mode-btn');
             if (isCopyMode) {
-                toggleBtn.classList.remove('btn-outline-primary');
-                toggleBtn.classList.add('btn-primary');
-                toggleBtn.textContent = '📋 コピペモードON';
+                allCopyBtns.forEach(b => {
+                    b.classList.remove('btn-outline-primary');
+                    b.classList.add('btn-primary');
+                    b.textContent = '📋 コピペモードON';
+                });
                 showToast('📋 コピペモードON: セルをクリックして選択・コピー、貼り付け先のセルをクリック（Ctrl+C / Ctrl+Vも利用可能）');
             } else {
-                toggleBtn.classList.remove('btn-primary');
-                toggleBtn.classList.add('btn-outline-primary');
-                toggleBtn.textContent = '📋 コピペモード';
+                allCopyBtns.forEach(b => {
+                    b.classList.remove('btn-primary');
+                    b.classList.add('btn-outline-primary');
+                    b.textContent = '📋 コピペモード';
+                });
                 if (selectedCopyCell) selectedCopyCell.classList.remove('copy-selected-cell');
                 selectedCopyCell = null;
                 clipboardSymbol = null;
@@ -9310,3 +9322,6 @@ document.addEventListener('DOMContentLoaded', () => {
     }
     // DOM初期化時に呼び出し
     setTimeout(initMasterTermSelect, 100);
+
+
+});
