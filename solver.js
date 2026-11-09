@@ -2342,37 +2342,40 @@ class ShiftScheduler {
                     const prevRemainsHoliday = isHolidaySymbol(prevSym) && (swapDay !== d - 1);
                     if (prevRemainsHoliday) continue;
 
-                    // ★ 要件: 8時担当スタッフの特殊勤務（早・遅・E）は2回程度に抑え、8時をやらない一般スタッフの特殊勤務を4〜5回に増やして平準化！
+                    // ★ ユーザー指示: 8時がある人は特殊勤務（早・遅・E・8時）を「2つに固定」！
+                    // counts.h8[s]: 8時回数, counts.total[s]: 早+遅+E回数
                     const is8ClockStaff = !!this.staffList[s].can8;
-
-                    // 8時担当スタッフは特殊勤務（早・遅・E）の合計が既に2回に達していれば完全除外（最大2回を物理保証）！
-                    if (is8ClockStaff && counts.total[s] >= 2) continue;
+                    const grandTotalSpecial = counts.total[s] + counts.h8[s];
+                    if (is8ClockStaff || counts.h8[s] > 0) {
+                        // 8時があるスタッフは、特殊勤務（早・遅・E・8時）の合計が「2回」に達していれば完全除外！
+                        if (grandTotalSpecial >= 2) continue;
+                    }
 
                     // 1. 合計回数ペナルティ（早+遅+E）
                     let totalCountPenalty = 0;
-                    if (is8ClockStaff) {
-                        // 8時担当スタッフ: 早・遅・Eの合計は「2回程度」（原則1〜2回）
-                        if (counts.total[s] === 1) {
-                            totalCountPenalty = 8000; // 1回あるスタッフは強く抑制
+                    if (is8ClockStaff || counts.h8[s] > 0) {
+                        // 8時担当スタッフ: 全特殊勤務の合計がちょうど2回になるように誘導
+                        if (grandTotalSpecial === 1) {
+                            totalCountPenalty = -1000; // 1回あれば2回目として配置可能
+                        } else if (grandTotalSpecial === 0) {
+                            totalCountPenalty = -3000; // 0回なら優先配置
                         } else {
-                            totalCountPenalty = -1000; // 0回のスタッフのみ許可
+                            totalCountPenalty = 200000; // 2回以上は配置不可
                         }
                     } else {
-                        // 8時以外の一般スタッフ: 8時の特殊削減分を引き受け、合計目標は 4〜5回！
-                        if (counts.total[s] >= 6) {
-                            totalCountPenalty = 150000 + (counts.total[s] - 6) * 60000; // 6回以上は強く抑える
-                        } else if (counts.total[s] === 5) {
-                            totalCountPenalty = 15000;
+                        // ★ ユーザー指示: 特殊勤務の合計数が3の人と5の人がいる。ばらつきを極限まで減らして極力全員4回均等配分！
+                        if (counts.total[s] >= 5) {
+                            totalCountPenalty = 250000 + (counts.total[s] - 5) * 80000; // 5回以上は超強力禁止
                         } else if (counts.total[s] === 4) {
-                            totalCountPenalty = 2000; // 4回までは積極的に配分
+                            totalCountPenalty = 45000; // 4回に達したスタッフは強いペナルティで新規割り当てを抑止
                         } else if (counts.total[s] === 3) {
-                            totalCountPenalty = -2000;
+                            totalCountPenalty = 0; // 3回のスタッフは4回目を目指して配置
                         } else if (counts.total[s] === 2) {
-                            totalCountPenalty = -5000;
-                        } else if (counts.total[s] === 1) {
                             totalCountPenalty = -8000;
+                        } else if (counts.total[s] === 1) {
+                            totalCountPenalty = -16000;
                         } else {
-                            totalCountPenalty = -12000; // まだ0回のスタッフを最優先！
+                            totalCountPenalty = -28000; // まだ0〜2回のスタッフを最優先して4回に引き上げる！
                         }
                     }
 
@@ -3753,7 +3756,7 @@ class ShiftScheduler {
      * ステップ2: 8時勤務（毎日1名）の配置（限定リソースを最優先で割り当て）
      */
     assign8ClockDuties(options = {}) {
-        if (this.isSouth) return { success: true };
+        // ★ 南病棟でも南2・南3スタッフから毎日1名8時を選出！
         const force = options && options.force === true;
         const counts = new Array(this.numStaff).fill(0);
         const lastAssignedDay = new Array(this.numStaff).fill(-10);
@@ -3780,7 +3783,13 @@ class ShiftScheduler {
                 if (this.staffList[s].isUnused) continue;
                 // ★ 係長は特殊勤務(8時含む)なし（事前希望で入力されたもののみ残し、自動割当は行わない）
                 if (this.staffList[s].isSectionChief) continue;
-                if (!this.staffList[s].can8) continue;
+                // 南病棟では can8 がONのスタッフを最優先。もし該当者がいなければ南2/南3の一般スタッフも候補に含める
+                if (this.isSouth) {
+                    const hasAnyCan8 = this.staffList.some(st => !st.isUnused && !st.isSectionChief && st.can8);
+                    if (hasAnyCan8 && !this.staffList[s].can8) continue;
+                } else {
+                    if (!this.staffList[s].can8) continue;
+                }
                 // 基本勤務表で「○」として組まれているスタッフ（未固定）
                 if (this.grid[s][d].isFixed || this.grid[s][d].symbol !== SYMBOLS.WORK) continue;
 
@@ -3881,7 +3890,7 @@ class ShiftScheduler {
             if (this.staffList[s].isUnused) continue;
             const sym = this.grid[s][d].symbol;
             let amt = 0;
-            if ([SYMBOLS.EARLY, SYMBOLS.LATE, SYMBOLS.EVE, SYMBOLS.H8, SYMBOLS.WORK, '〇', '◯', SYMBOLS.TRIP, SYMBOLS.NO_ALLOW_EARLY, SYMBOLS.NO_ALLOW_LATE, SYMBOLS.NO_ALLOW_EVE].includes(sym)) {
+            if ([SYMBOLS.EARLY, SYMBOLS.LATE, SYMBOLS.EVE, SYMBOLS.H8, SYMBOLS.WORK, '〇', '◯', SYMBOLS.NO_ALLOW_EARLY, SYMBOLS.NO_ALLOW_LATE, SYMBOLS.NO_ALLOW_EVE].includes(sym) && sym !== '出' && sym !== '出張' && sym !== SYMBOLS.TRIP) {
                 amt = 1.0;
             } else if (isHalfDuty(sym)) {
                 amt = 0.5;
@@ -5212,7 +5221,12 @@ class ShiftScheduler {
                 else if (sym === SYMBOLS.LATE) { late++; if (!isExcludedFromWork) totalWork += 1.0; staffWorkAmt = 1.0; }
                 else if (sym === SYMBOLS.EVE) { eve++; if (!isExcludedFromWork) totalWork += 1.0; staffWorkAmt = 1.0; }
                 else if (sym === SYMBOLS.H8) { h8++; if (!isExcludedFromWork) totalWork += 1.0; staffWorkAmt = 1.0; }
-                else if (sym === SYMBOLS.WORK || sym === '〇' || sym === '◯' || sym === SYMBOLS.TRIP || sym === SYMBOLS.NO_ALLOW_EARLY || sym === SYMBOLS.NO_ALLOW_LATE || sym === SYMBOLS.NO_ALLOW_EVE) {
+                else if (sym === SYMBOLS.TRIP || sym === '出' || sym === '出張') {
+                    // ★ ユーザー指示: 「出張」の人は実数に換算しない（0カウント）
+                    normal++; // 勤務記号としては保持するが、出勤実数には加算しない
+                    staffWorkAmt = 0;
+                }
+                else if (sym === SYMBOLS.WORK || sym === '〇' || sym === '◯' || sym === SYMBOLS.NO_ALLOW_EARLY || sym === SYMBOLS.NO_ALLOW_LATE || sym === SYMBOLS.NO_ALLOW_EVE) {
                     normal++; if (!isExcludedFromWork) totalWork += 1.0; staffWorkAmt = 1.0;
                 }
                 else if (sym === SYMBOLS.OFF) { off += 1.0; }
@@ -5278,7 +5292,7 @@ class ShiftScheduler {
                 if (staff.isZeroCount || staff.lifeSection === '管理' || staff.lifeSection === 'Cl1') continue;
                 const sym = this.grid[s][d].symbol;
                 let amt = 0;
-                if ([SYMBOLS.EARLY, SYMBOLS.LATE, SYMBOLS.EVE, SYMBOLS.H8, SYMBOLS.WORK, '〇', '◯', SYMBOLS.TRIP, SYMBOLS.NO_ALLOW_EARLY, SYMBOLS.NO_ALLOW_LATE, SYMBOLS.NO_ALLOW_EVE].includes(sym)) {
+                if ([SYMBOLS.EARLY, SYMBOLS.LATE, SYMBOLS.EVE, SYMBOLS.H8, SYMBOLS.WORK, '〇', '◯', SYMBOLS.NO_ALLOW_EARLY, SYMBOLS.NO_ALLOW_LATE, SYMBOLS.NO_ALLOW_EVE].includes(sym) && sym !== '出' && sym !== '出張' && sym !== SYMBOLS.TRIP) {
                     amt = 1.0;
                 } else if (isHalfDuty(sym)) {
                     amt = 0.5;

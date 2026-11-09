@@ -10,11 +10,25 @@
 
 document.addEventListener('DOMContentLoaded', () => {
 
+    // ★ ユーザー指示: 罫線の縦太線が火曜日と水曜日の間に引かれているが、土曜日と日曜日の間に引いて。
+    // カレンダー日付が土曜日（wIdx === 5）の列の右側に border-thick-right を付与するヘルパー
+    function isSaturdayCol(d) {
+        try {
+            const t = (typeof currentTerm !== 'undefined' && currentTerm && currentTerm.dates) ? currentTerm : getTermInfo();
+            if (t && t.dates && t.dates[d]) {
+                return t.dates[d].wIdx === 5;
+            }
+        } catch (e) {}
+        // フォールバック: 2026年4月開始（4/1水曜=wIdx2）の場合、d=3, 10, 17, 24が土曜日
+        return ((d + 1) % 7 === 4);
+    }
+
+
     // ==========================================
     // ★ 正規13ターム定義 ＆ セレクター制御
     // ==========================================
     function generateAllTerms() {
-        const years = [2025, 2026, 2027];
+        const years = [2026, 2027];
         const allTerms = [];
 
         years.forEach(year => {
@@ -1899,6 +1913,8 @@ document.addEventListener('DOMContentLoaded', () => {
                 <th class="flag-col" rowspan="2" title="0.5（実数合計計算時に0.5人で計算）" style="background:#f3e8ff; color:#6b21a8; font-weight:800;">0.5</th>
                 <th class="flag-col" rowspan="2" title="1年目スタッフ" style="background:#fef08a; color:#854d0e; font-weight:800;">1年目</th>
                 <th class="flag-col" rowspan="2" title="専従" style="background:#dcfce7; color:#166534;">専従</th>
+                <th class="flag-col" rowspan="2" title="土日休（事前希望がない限り土日休み固定）" style="background:#dbeafe; color:#1e40af; font-weight:800;">土日休</th>
+                <th class="flag-col" rowspan="2" title="日休（日曜日固定公休＋平日分散配置）" style="background:#fef3c7; color:#92400e; font-weight:800;">日休</th>
                 <th class="flag-col" rowspan="2" title="6連勤例外許可" style="background:#fee2e2; color:#991b1b;">6連勤<br>可</th>
                 <th class="flag-col" rowspan="2" title="改姓・旧姓（前タームの氏名）" style="background:#f1f5f9; color:#475569; min-width:80px;">旧姓</th>
                 <th class="remarks-col" rowspan="2" title="委員会等のメモ（ExcelのAG列と自動連携）" style="background:#f8fafc; color:#1e293b; min-width:220px; max-width:320px;">備考（メモ）</th>
@@ -1965,7 +1981,7 @@ document.addEventListener('DOMContentLoaded', () => {
         for (let d = 0; d < NUM_DAYS; d++) {
             const di = term.dates[d];
             const cls = di.wIdx === 5 ? 'header-sat' : ((di.wIdx === 6 || di.isHoliday) ? 'header-sun' : '');
-            const thickCls = ((d + 1) % 7 === 0) ? 'border-thick-right' : '';
+            const thickCls = isSaturdayCol(d) ? 'border-thick-right' : '';
             headHtml += `<th class="${cls} ${thickCls} header-day-col col-day-fixed" style="width:52px; min-width:52px; max-width:52px;" title="${di.label} (${di.weekday})${di.isHoliday ? ' 祝日' : ''}">
                 <div class="day-label">${di.label}</div>
                 <div class="day-weekday"><small>${di.weekday}</small></div>
@@ -1978,7 +1994,7 @@ document.addEventListener('DOMContentLoaded', () => {
         let bodyHtml = '';
         staffList.forEach((staff, sIdx) => {
             const rowClass = staff.isUnused ? 'row-unused' : '';
-            bodyHtml += `<tr class="${rowClass}">`;
+            bodyHtml += `<tr class="${rowClass}" draggable="true" data-s="${sIdx}" style="cursor:move;">`;
             bodyHtml += `<td class="sticky-col-1 text-center" style="padding:2px;">
                 <label class="toggle-switch" title="不使用（ONで勤務表・出力から除外）">
                     <input type="checkbox" ${staff.isUnused ? 'checked' : ''} data-unused="true" data-s="${sIdx}">
@@ -1999,7 +2015,7 @@ document.addEventListener('DOMContentLoaded', () => {
             for (let d = 0; d < NUM_DAYS; d++) {
                 const val = staff.days[d] || '';
                 const cls = val ? 'day-cell fixed-cell' : 'day-cell';
-                const thickCls = ((d + 1) % 7 === 0) ? 'border-thick-right' : '';
+                const thickCls = isSaturdayCol(d) ? 'border-thick-right' : '';
                 const lockTitle = val ? `事前固定枠: ${val}（自動上書きロック中）` : 'クリックで記号入力';
                 bodyHtml += `<td class="${cls} ${thickCls}" data-type="day" data-s="${sIdx}" data-d="${d}" title="${lockTitle}">${val}</td>`;
             }
@@ -2320,7 +2336,7 @@ document.addEventListener('DOMContentLoaded', () => {
             bodyHtml += `
                 <tr style="background:#fce7f3; border-top: 3px solid #db2777;">
                     <th colspan="${NUM_DAYS + 24}" style="text-align:left; padding:8px 12px; font-size:0.85rem; font-weight:800; color:#9d174d; letter-spacing:0.03em;">
-                        【${currentFloor} 所属 STスタッフ（参照表示・ST専用テーブルで作成済み）】
+                        【${currentFloor} 所属 STスタッフ】
                     </th>
                 </tr>
             `;
@@ -2345,7 +2361,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 for (let d = 0; d < NUM_DAYS; d++) {
                     const c = rowData[d] || { symbol: '' };
                     const sym = c.symbol ? c.symbol.replace(/[◦•･◯〇●]/g, '○') : '';
-                    const thickCls = ((d + 1) % 7 === 0) ? 'border-thick-right' : '';
+                    const thickCls = isSaturdayCol(d) ? 'border-thick-right' : '';
 
                     // ★ 事前固定希望（本人が希望入力した枠）のみ赤字・太字（fixed-cell）！自動生成された公休等は通常文字
                     const originalWish = (st.days && st.days[d]) ? st.days[d] : '';
@@ -2368,6 +2384,52 @@ document.addEventListener('DOMContentLoaded', () => {
         }
 
         tbody.innerHTML = bodyHtml;
+
+        // ★ ユーザー指示: 希望入力画面でスタッフの並び替え（ドラッグ＆ドロップ）
+        let draggedIndex = null;
+        tbody.querySelectorAll('tr[draggable="true"]').forEach(row => {
+            row.addEventListener('dragstart', (e) => {
+                draggedIndex = parseInt(row.dataset.s, 10);
+                e.dataTransfer.effectAllowed = 'move';
+                e.dataTransfer.setData('text/plain', draggedIndex);
+                row.classList.add('dragging-row');
+            });
+
+            row.addEventListener('dragover', (e) => {
+                e.preventDefault();
+                e.dataTransfer.dropEffect = 'move';
+                row.classList.add('drag-over-row');
+            });
+
+            row.addEventListener('dragleave', () => {
+                row.classList.remove('drag-over-row');
+            });
+
+            row.addEventListener('drop', (e) => {
+                e.preventDefault();
+                row.classList.remove('drag-over-row');
+                const targetIndex = parseInt(row.dataset.s, 10);
+                if (draggedIndex !== null && targetIndex !== null && draggedIndex !== targetIndex) {
+                    pushHistory();
+                    const movedItem = staffList.splice(draggedIndex, 1)[0];
+                    staffList.splice(targetIndex, 0, movedItem);
+                    // No再付番（idを1〜Nに整列）
+                    staffList.forEach((st, idx) => {
+                        st.id = idx + 1;
+                    });
+                    saveCurrentTermToStorage();
+                    renderInputTable();
+                    showToast(`📋 スタッフの並び順を更新しました（No.${draggedIndex + 1} ➔ No.${targetIndex + 1}）`);
+                }
+            });
+
+            row.addEventListener('dragend', () => {
+                row.classList.remove('dragging-row');
+                tbody.querySelectorAll('.drag-over-row').forEach(r => r.classList.remove('drag-over-row'));
+                draggedIndex = null;
+            });
+        });
+
 
         attachInputTableEvents();
     }
@@ -2598,7 +2660,35 @@ document.addEventListener('DOMContentLoaded', () => {
                 const s = parseInt(cell.dataset.s, 10);
                 const type = cell.dataset.type;
 
-                let newSym = currentSelectedSymbol;
+                // ★ コピペモード時の処理
+                if (isCopyMode) {
+                    if (clipboardSymbol === null || selectedCopyCell === null) {
+                        // コピー
+                        clipboardSymbol = cell.textContent.trim();
+                        if (selectedCopyCell) selectedCopyCell.classList.remove('copy-selected-cell');
+                        selectedCopyCell = cell;
+                        cell.classList.add('copy-selected-cell');
+                        showToast(`📋 【${clipboardSymbol || '空欄'}】をコピーしました。貼り付け先をクリックしてください`);
+                        return;
+                    } else {
+                        // 貼り付け
+                        let newSym = clipboardSymbol;
+                        pushHistory();
+                        if (type === 'day') {
+                            const d = parseInt(cell.dataset.d, 10);
+                            staffList[s].days[d] = newSym;
+                        } else if (type === 'prev') {
+                            const p = parseInt(cell.dataset.p, 10);
+                            staffList[s].prevDays[p] = newSym;
+                        }
+                        cell.textContent = newSym;
+                        saveCurrentTermToStorage();
+                        showToast(`📋 【${newSym || '空欄'}】を貼り付けました`);
+                        return;
+                    }
+                }
+
+                let newSym = getActivePaletteSymbol(false);
                 if (currentSelectedSymbol === 'CLEAR') {
                     newSym = '';
                 }
@@ -3079,6 +3169,24 @@ document.addEventListener('DOMContentLoaded', () => {
     function checkOutputConstraints(showToastOnSuccess = false) {
         return checkFinalConstraints(false, showToastOnSuccess);
     }
+
+    
+    // ★ ユーザー指示: 記号パレットバグ修正＆リアルタイムアクティブ記号の取得
+    function getActivePaletteSymbol(isOutput = false) {
+        const activeTabPanel = document.querySelector('.tab-panel.active');
+        if (activeTabPanel) {
+            const btn = activeTabPanel.querySelector('.palette-btn.selected');
+            if (btn && btn.dataset.sym !== undefined) return btn.dataset.sym;
+        }
+        const anyBtn = document.querySelector('.palette-btn.selected');
+        if (anyBtn && anyBtn.dataset.sym !== undefined) return anyBtn.dataset.sym;
+        return isOutput ? currentOutputSelectedSymbol : currentSelectedSymbol;
+    }
+
+    // ★ ユーザー指示: コピペモード用状態変数
+    let isCopyMode = false;
+    let clipboardSymbol = null;
+    let selectedCopyCell = null;
 
     let currentOutputSelectedSymbol = '休';
 
@@ -4453,7 +4561,7 @@ document.addEventListener('DOMContentLoaded', () => {
             const dateInfo = term.dates[d];
             const cls = dateInfo.wIdx === 5 ? 'header-sat' : ((dateInfo.wIdx === 6 || dateInfo.isHoliday) ? 'header-sun' : '');
             // 7日ごと（週区切り）および28日目に太線
-            const thickCls = ((d + 1) % 7 === 0) ? 'border-thick-right' : '';
+            const thickCls = isSaturdayCol(d) ? 'border-thick-right' : '';
             headHtml += `<th class="${cls} ${thickCls} border-thick-bottom header-day-col col-day-fixed" style="width:52px; min-width:52px; max-width:52px;" title="${dateInfo.label} (${dateInfo.weekday})${dateInfo.isHoliday ? ' 祝日' : ''}">
                 <div class="day-label">${dateInfo.label}</div>
                 <div class="day-weekday"><small>${dateInfo.weekday}</small></div>
@@ -4520,7 +4628,7 @@ document.addEventListener('DOMContentLoaded', () => {
                     const staffStat = (stats && stats.staffStats && stats.staffStats[s]) || { workDays:0, offDays:0, paidDays:0, refDays:0, early:0, late:0, eve:0, h8:0 };
                     const isLastInFloor = (idxInFl === flStaffIndices.length - 1);
                     // 添付3の太い黒境界線！
-                    const rowBorderB = isLastInFloor ? 'border-bottom: 3px solid #1e293b !important;' : '';
+                    const rowBorderB = isLastInFloor ? 'border-bottom: 2px solid #94a3b8 !important;' : '';
 
                     bodyHtml += `<tr style="${rowBorderB}">`;
                     if (idxInFl === 0) {
@@ -4532,14 +4640,14 @@ document.addEventListener('DOMContentLoaded', () => {
                         const cell = (grid && grid[s] && grid[s][d]) ? grid[s][d] : { symbol: '' };
                         const displaySym = cell.symbol ? cell.symbol.replace(/[◦•･◯〇●]/g, '○') : '';
                         const cls = cell.isFixed ? 'day-cell fixed-cell' : 'day-cell auto-cell';
-                        const thickCls = ((d + 1) % 7 === 0) ? 'border-thick-right' : '';
+                        const thickCls = isSaturdayCol(d) ? 'border-thick-right' : '';
                         const titleText = cell.isFixed ? '🔒 事前固定希望枠（赤字・太字保持）' : 'システム自動配置';
                         bodyHtml += `<td class="${cls} ${thickCls}" data-s="${s}" data-d="${d}" title="${titleText}" style="${rowBorderB}">${displaySym}</td>`;
                     }
 
                     bodyHtml += `
                         <td class="stat-cell" data-s="${s}" data-stat="work" style="font-weight:700; color:#1e293b; background:transparent; ${rowBorderB}">${staffStat.workDays}</td>
-                        <td class="stat-cell" data-s="${s}" data-stat="off" style="font-weight:700; color:#1e293b; background:transparent; ${rowBorderB}">${staffStat.offDays}</td>
+                        <td class="stat-cell ${(!staff.isUnused && staffStat.offDays !== 8) ? 'holiday-alert-cell' : ''}" data-s="${s}" data-stat="off" title="${staffStat.offDays !== 8 ? '公休が8日ではありません（現在:' + staffStat.offDays + '日）' : '公休8日'}" style="font-weight:700; color:#1e293b; ${rowBorderB}">${staffStat.offDays}</td>
                         <td class="stat-cell" data-s="${s}" data-stat="paid" style="font-weight:800; color:#1e293b; background:transparent; ${rowBorderB}">${staffStat.paidDays}</td>
                         <td class="stat-cell" data-s="${s}" data-stat="ref" style="font-weight:600; color:#1e293b; background:transparent; ${rowBorderB}">${staffStat.refDays}</td>
                         <td class="stat-cell" data-s="${s}" data-stat="early" style="font-weight:600; color:#c2410c; background:transparent; ${rowBorderB}">${staffStat.early}</td>
@@ -4566,7 +4674,7 @@ document.addEventListener('DOMContentLoaded', () => {
                         const cell = (grid && grid[s] && grid[s][d]) ? grid[s][d] : { symbol: '' };
                         const displaySym = cell.symbol ? cell.symbol.replace(/[◦•･◯〇●]/g, '○') : '';
                         const cls = cell.isFixed ? 'day-cell fixed-cell' : 'day-cell auto-cell';
-                        const thickCls = ((d + 1) % 7 === 0) ? 'border-thick-right' : '';
+                        const thickCls = isSaturdayCol(d) ? 'border-thick-right' : '';
                         bodyHtml += `<td class="${cls} ${thickCls}" data-s="${s}" data-d="${d}">${displaySym}</td>`;
                     }
                     bodyHtml += `
@@ -4597,7 +4705,7 @@ document.addEventListener('DOMContentLoaded', () => {
                     const cell = grid[s][d];
                     const displaySym = cell.symbol ? cell.symbol.replace(/[◦•･◯〇●]/g, '○') : '';
                     const cls = cell.isFixed ? 'day-cell fixed-cell' : 'day-cell auto-cell';
-                    const thickCls = ((d + 1) % 7 === 0) ? 'border-thick-right' : '';
+                    const thickCls = isSaturdayCol(d) ? 'border-thick-right' : '';
                     const titleText = cell.isFixed ? '🔒 事前固定希望枠（赤字・太字保持）' : 'システム自動配置';
                     bodyHtml += `<td class="${cls} ${thickCls} ${rowBottomCls}" data-s="${s}" data-d="${d}" title="${titleText}">${displaySym}</td>`;
                 }
@@ -4628,7 +4736,7 @@ document.addEventListener('DOMContentLoaded', () => {
             bodyHtml += `
                 <tr style="background:${stThemeHeaderBg}; border-top: 3px solid ${stThemeBorder};">
                     <th colspan="${NUM_DAYS + 11}" style="text-align:left; padding:8px 12px; font-size:0.85rem; font-weight:800; color:${stThemeTextColor}; letter-spacing:0.03em;">
-                        【${currentFloor} 所属 STスタッフ（参照表示・ST専用テーブルで作成済み）】
+                        【${currentFloor} 所属 STスタッフ】
                     </th>
                 </tr>
             `;
@@ -4652,13 +4760,13 @@ document.addEventListener('DOMContentLoaded', () => {
                 for (let d = 0; d < NUM_DAYS; d++) {
                     const c = rowData[d] || { symbol: '' };
                     const sym = c.symbol ? c.symbol.replace(/[◦•･◯〇●]/g, '○') : '';
-                    const thickCls = ((d + 1) % 7 === 0) ? 'border-thick-right' : '';
+                    const thickCls = isSaturdayCol(d) ? 'border-thick-right' : '';
 
                     if (sym === '休') stOffCount++;
                     else if (sym === '有') stPaidCount++;
                     else if (sym && sym.includes('リフ')) stRefCount++;
-                    else if (sym === '早') { stEarlyCount++; stWorkCount += (st.isHalf ? 0.5 : 1); }
-                    else if (isWorkSymbol(sym)) { stWorkCount += (st.isHalf ? 0.5 : 1); }
+                    else if (sym === '早') { stEarlyCount++; stWorkCount += 1; }
+                    else if (isWorkSymbol(sym)) { stWorkCount += 1; }
 
                     // ★ 事前固定希望（本人が希望入力した枠）のみ赤字・太字（fixed-cell）！自動生成された公休等は通常文字
                     const originalWish = (st.days && st.days[d]) ? st.days[d] : '';
@@ -4694,8 +4802,7 @@ document.addEventListener('DOMContentLoaded', () => {
             bodyHtml += `
                 <tr style="background:#ecfdf5; border-top: 3px solid #10b981;">
                     <th colspan="${NUM_DAYS + 11}" style="text-align:left; padding:8px 12px; font-size:0.85rem; font-weight:800; color:#065f46; letter-spacing:0.03em;">
-                        【${currentFloor} 応援】ハーフマン (${haBadgeLabel} / 生活期テーブル連携・クリックで修正可能)
-                    </th>
+                        【${currentFloor} 応援 ハーフマン】</th>
                 </tr>
             `;
 
@@ -4717,7 +4824,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 let haRefCount = 0;
 
                 for (let d = 0; d < NUM_DAYS; d++) {
-                    const thickCls = ((d + 1) % 7 === 0) ? 'border-thick-right' : '';
+                    const thickCls = isSaturdayCol(d) ? 'border-thick-right' : '';
                     const c = rowData[d] || { symbol: '' };
                     const sym = (c && typeof c === 'object') ? (c.symbol || '') : (c || '');
 
@@ -4824,7 +4931,7 @@ document.addEventListener('DOMContentLoaded', () => {
                     <th class="sticky-col-1" rowspan="3" style="background:${fl.headerBg}; color:${fl.color}; font-size:1.05rem; font-weight:800; vertical-align:middle; text-align:center; border-right:1px solid ${fl.border}; border-bottom:2px solid #1e293b;">${fl.label}</th>
                     <th class="sticky-col-2" style="background:${fl.bg}; border-right:2px solid #475569; text-align:center; color:#1e293b; padding:4px 8px;">出勤人数</th>`;
                 for (let d = 0; d < NUM_DAYS; d++) {
-                    const thickCls = ((d + 1) % 7 === 0) ? 'border-thick-right' : '';
+                    const thickCls = isSaturdayCol(d) ? 'border-thick-right' : '';
                     footHtml += `<td class="${thickCls} col-day-fixed" style="width:52px; min-width:52px; max-width:52px; font-weight:800; color:#1e293b; text-align:center;">${dWork[d]}</td>`;
                 }
                 footHtml += `<td style="font-weight:700; color:#1e293b; text-align:center;">${sumWork}</td><td colspan="8"></td></tr>`;
@@ -4833,7 +4940,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 footHtml += `<tr style="background:${fl.bg}; font-weight:bold;">
                     <th class="sticky-col-2" style="background:${fl.bg}; border-right:2px solid #475569; text-align:center; color:#0369a1; padding:4px 8px;">実数</th>`;
                 for (let d = 0; d < NUM_DAYS; d++) {
-                    const thickCls = ((d + 1) % 7 === 0) ? 'border-thick-right' : '';
+                    const thickCls = isSaturdayCol(d) ? 'border-thick-right' : '';
                     footHtml += `<td class="${thickCls} col-day-fixed" style="width:52px; min-width:52px; max-width:52px; font-weight:800; color:#0369a1; text-align:center;">${dReal[d]}</td>`;
                 }
                 footHtml += `<td style="font-weight:700; color:#0369a1; text-align:center;">${sumReal}</td><td colspan="8"></td></tr>`;
@@ -4842,7 +4949,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 footHtml += `<tr style="background:${fl.bg}; font-weight:bold; border-bottom: 2px solid #1e293b;">
                     <th class="sticky-col-2" style="background:${fl.bg}; border-right:2px solid #475569; text-align:center; color:#c2410c; padding:4px 8px;">早</th>`;
                 for (let d = 0; d < NUM_DAYS; d++) {
-                    const thickCls = ((d + 1) % 7 === 0) ? 'border-thick-right' : '';
+                    const thickCls = isSaturdayCol(d) ? 'border-thick-right' : '';
                     footHtml += `<td class="${thickCls} col-day-fixed" style="width:52px; min-width:52px; max-width:52px; font-weight:800; color:#c2410c; text-align:center;">${dEarly[d]}</td>`;
                 }
                 footHtml += `<td style="font-weight:700; color:#c2410c; text-align:center;">${sumEarly}</td><td colspan="8"></td></tr>`;
@@ -4857,7 +4964,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 <th class="sticky-col-1" rowspan="3" style="background:#e2e8f0; color:#0f172a; font-size:1.05rem; font-weight:800; vertical-align:middle; text-align:center; border-right:1px solid #cbd5e1;">全階合計</th>
                 <th class="sticky-col-2" style="background:#f1f5f9; border-right:2px solid #475569; text-align:center; color:#0f172a; padding:4px 8px;">出勤合計</th>`;
             for (let d = 0; d < NUM_DAYS; d++) {
-                const thickCls = ((d + 1) % 7 === 0) ? 'border-thick-right' : '';
+                const thickCls = isSaturdayCol(d) ? 'border-thick-right' : '';
                 footHtml += `<td class="${thickCls} col-day-fixed" style="width:52px; min-width:52px; max-width:52px; font-weight:900; color:#0f172a; text-align:center; font-size:0.95rem;">${allFloorsWork[d]}</td>`;
             }
             footHtml += `<td style="font-weight:900; color:#0f172a; text-align:center;">${totalWorkAll}</td><td colspan="8"></td></tr>`;
@@ -4865,7 +4972,7 @@ document.addEventListener('DOMContentLoaded', () => {
             footHtml += `<tr style="background:#f1f5f9; font-weight:800;">
                 <th class="sticky-col-2" style="background:#f1f5f9; border-right:2px solid #475569; text-align:center; color:#0369a1; padding:4px 8px;">実数合計</th>`;
             for (let d = 0; d < NUM_DAYS; d++) {
-                const thickCls = ((d + 1) % 7 === 0) ? 'border-thick-right' : '';
+                const thickCls = isSaturdayCol(d) ? 'border-thick-right' : '';
                 footHtml += `<td class="${thickCls} col-day-fixed" style="width:52px; min-width:52px; max-width:52px; font-weight:900; color:#0369a1; text-align:center; font-size:0.95rem;">${allFloorsReal[d]}</td>`;
             }
             footHtml += `<td style="font-weight:900; color:#0369a1; text-align:center;">${totalRealAll}</td><td colspan="8"></td></tr>`;
@@ -4873,7 +4980,7 @@ document.addEventListener('DOMContentLoaded', () => {
             footHtml += `<tr style="background:#f1f5f9; font-weight:800; border-bottom: 3px solid #475569;">
                 <th class="sticky-col-2" style="background:#f1f5f9; border-right:2px solid #475569; text-align:center; color:#c2410c; padding:4px 8px;">早合計</th>`;
             for (let d = 0; d < NUM_DAYS; d++) {
-                const thickCls = ((d + 1) % 7 === 0) ? 'border-thick-right' : '';
+                const thickCls = isSaturdayCol(d) ? 'border-thick-right' : '';
                 footHtml += `<td class="${thickCls} col-day-fixed" style="width:52px; min-width:52px; max-width:52px; font-weight:900; color:#c2410c; text-align:center; font-size:0.95rem;">${allFloorsEarly[d]}</td>`;
             }
             footHtml += `<td style="font-weight:900; color:#c2410c; text-align:center;">${totalEarlyAll}</td><td colspan="8"></td></tr>`;
@@ -4900,7 +5007,7 @@ document.addEventListener('DOMContentLoaded', () => {
         `;
         for (let d = 0; d < NUM_DAYS; d++) {
             const dStat = stats.daily[d];
-            const thickCls = ((d + 1) % 7 === 0) ? 'border-thick-right' : '';
+            const thickCls = isSaturdayCol(d) ? 'border-thick-right' : '';
             footHtml += `<td class="${thickCls} col-day-fixed" style="width:52px; min-width:52px; max-width:52px; font-weight:800; color:#1e293b; font-size:0.95rem;">${dStat.totalWork}</td>`;
         }
         footHtml += `
@@ -4983,7 +5090,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 <th class="sticky-col-1" colspan="2" style="color:#1e293b;" title="各セクション（PT・OT・ST・ハーフマン）の出勤実数合計（増員枠オフセット反映）">実数合計</th>
         `;
         for (let d = 0; d < NUM_DAYS; d++) {
-            const thickCls = ((d + 1) % 7 === 0) ? 'border-thick-right' : '';
+            const thickCls = isSaturdayCol(d) ? 'border-thick-right' : '';
             const real = calculatedDailyReal[d];
             footHtml += `<td class="${thickCls} col-day-fixed" style="width:52px; min-width:52px; max-width:52px; vertical-align:middle; font-weight:800; color:#1e293b; font-size:0.95rem;">${real}</td>`;
         }
@@ -4999,7 +5106,7 @@ document.addEventListener('DOMContentLoaded', () => {
             for (let d = 0; d < NUM_DAYS; d++) {
                 const secVal = secDailyMap[sec.name][d];
                 secTotalSum += secVal;
-                const thickCls = ((d + 1) % 7 === 0) ? 'border-thick-right' : '';
+                const thickCls = isSaturdayCol(d) ? 'border-thick-right' : '';
                 const displayVal = secVal > 0 ? (secVal % 1 === 0 ? secVal : secVal.toFixed(1)) : (sec.name === 'ST' || sec.name === 'HA' ? '0' : '-');
                 footHtml += `<td class="${thickCls} col-day-fixed" style="width:52px; min-width:52px; max-width:52px; color:${sec.color}; font-weight:800;">${displayVal}</td>`;
             }
@@ -5019,7 +5126,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
         for (let d = 0; d < NUM_DAYS; d++) {
             const dStat = stats.daily[d];
-            const thickCls = ((d + 1) % 7 === 0) ? 'border-thick-right' : '';
+            const thickCls = isSaturdayCol(d) ? 'border-thick-right' : '';
             let earlyVal = dStat.early;
             if (!isST && !isLife) {
                 let poEarly = 0;
@@ -5049,7 +5156,12 @@ document.addEventListener('DOMContentLoaded', () => {
                 }
                 earlyVal = poEarly + stEarlyCount;
             }
-            footHtml += `<td class="${thickCls} col-day-fixed" data-d="${d}" data-footer-stat="early" style="width:52px; min-width:52px; max-width:52px; color:#334155; font-weight:700;">${earlyVal}</td>`;
+            
+            const needEarly = isSouth ? 2 : (isST || isLife ? null : 3);
+            const isEarlyMismatch = (needEarly !== null && earlyVal !== needEarly);
+            const earlyCls = isEarlyMismatch ? 'conflict-highlight' : '';
+            const earlyTitle = isEarlyMismatch ? `早番人数不一致（現在: ${earlyVal}名 / 基準: ${needEarly}名）` : `早番: ${earlyVal}名`;
+            footHtml += `<td class="${thickCls} ${earlyCls} col-day-fixed" data-d="${d}" data-footer-stat="early" title="${earlyTitle}" style="width:52px; min-width:52px; max-width:52px; color:#334155; font-weight:700;">${earlyVal}</td>`;
         }
         footHtml += `<td colspan="8" style="color:#94a3b8;">-</td></tr>`;
 
@@ -5060,7 +5172,7 @@ document.addEventListener('DOMContentLoaded', () => {
         `;
         for (let d = 0; d < NUM_DAYS; d++) {
             const dStat = stats.daily[d];
-            const thickCls = ((d + 1) % 7 === 0) ? 'border-thick-right' : '';
+            const thickCls = isSaturdayCol(d) ? 'border-thick-right' : '';
             let lateVal = dStat.late;
             if (!isST && !isLife) {
                 let poLate = 0;
@@ -5090,7 +5202,12 @@ document.addEventListener('DOMContentLoaded', () => {
                 }
                 lateVal = poLate + stLateCount;
             }
-            footHtml += `<td class="${thickCls} col-day-fixed" data-d="${d}" data-footer-stat="late" style="width:52px; min-width:52px; max-width:52px; color:#334155; font-weight:700;">${lateVal}</td>`;
+            
+            const needLate = isSouth ? 2 : (isST || isLife ? null : 1);
+            const isLateMismatch = (needLate !== null && lateVal !== needLate);
+            const lateCls = isLateMismatch ? 'conflict-highlight' : '';
+            const lateTitle = isLateMismatch ? `遅番人数不一致（現在: ${lateVal}名 / 基準: ${needLate}名）` : `遅番: ${lateVal}名`;
+            footHtml += `<td class="${thickCls} ${lateCls} col-day-fixed" data-d="${d}" data-footer-stat="late" title="${lateTitle}" style="width:52px; min-width:52px; max-width:52px; color:#334155; font-weight:700;">${lateVal}</td>`;
         }
         footHtml += `<td colspan="8" style="color:#94a3b8;">-</td></tr>`;
 
@@ -5101,7 +5218,7 @@ document.addEventListener('DOMContentLoaded', () => {
         `;
         for (let d = 0; d < NUM_DAYS; d++) {
             const dStat = stats.daily[d];
-            const thickCls = ((d + 1) % 7 === 0) ? 'border-thick-right' : '';
+            const thickCls = isSaturdayCol(d) ? 'border-thick-right' : '';
             let eveVal = dStat.eve;
             if (!isST && !isLife) {
                 let poEve = 0;
@@ -5131,7 +5248,12 @@ document.addEventListener('DOMContentLoaded', () => {
                 }
                 eveVal = poEve + stEveCount;
             }
-            footHtml += `<td class="${thickCls} col-day-fixed" data-d="${d}" data-footer-stat="eve" style="width:52px; min-width:52px; max-width:52px; color:#334155; font-weight:700;">${eveVal}</td>`;
+            
+            const needEve = isSouth ? 2 : (isST || isLife ? null : 2);
+            const isEveMismatch = (needEve !== null && eveVal !== needEve);
+            const eveCls = isEveMismatch ? 'conflict-highlight' : '';
+            const eveTitle = isEveMismatch ? `イブニング人数不一致（現在: ${eveVal}名 / 基準: ${needEve}名）` : `イブニング: ${eveVal}名`;
+            footHtml += `<td class="${thickCls} ${eveCls} col-day-fixed" data-d="${d}" data-footer-stat="eve" title="${eveTitle}" style="width:52px; min-width:52px; max-width:52px; color:#334155; font-weight:700;">${eveVal}</td>`;
         }
         footHtml += `<td colspan="8" style="color:#94a3b8;">-</td></tr>`;
 
@@ -5142,8 +5264,14 @@ document.addEventListener('DOMContentLoaded', () => {
         `;
         for (let d = 0; d < NUM_DAYS; d++) {
             const dStat = stats.daily[d];
-            const thickCls = ((d + 1) % 7 === 0) ? 'border-thick-right' : '';
-            footHtml += `<td class="${thickCls} border-thick-bottom col-day-fixed" data-d="${d}" data-footer-stat="h8" style="width:52px; min-width:52px; max-width:52px; color:#334155; font-weight:700;">${dStat.h8}</td>`;
+            const thickCls = isSaturdayCol(d) ? 'border-thick-right' : '';
+            
+            const h8Val = dStat.h8;
+            const needH8 = (!isST) ? 1 : null;
+            const isH8Mismatch = (needH8 !== null && h8Val !== needH8);
+            const h8Cls = isH8Mismatch ? 'conflict-highlight' : '';
+            const h8Title = isH8Mismatch ? `8時人数不一致（現在: ${h8Val}名 / 基準: ${needH8}名）` : `8時: ${h8Val}名`;
+            footHtml += `<td class="${thickCls} ${h8Cls} border-thick-bottom col-day-fixed" data-d="${d}" data-footer-stat="h8" title="${h8Title}" style="width:52px; min-width:52px; max-width:52px; color:#334155; font-weight:700;">${h8Val}</td>`;
         }
         footHtml += `<td class="border-thick-bottom" colspan="8" style="color:#94a3b8;">-</td></tr>`;
 
@@ -5446,7 +5574,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 <th class="sticky-col-2" style="background:${fc.headerBg}; color:#1e293b; width:95px; min-width:95px; max-width:105px; text-align:left; padding:2px 4px; border-right:2px solid #475569;">項目</th>`;
             for (let d = 0; d < numDays; d++) {
                 const di = term.dates[d];
-                const thickCls = ((d + 1) % 7 === 0) ? 'border-thick-right' : '';
+                const thickCls = isSaturdayCol(d) ? 'border-thick-right' : '';
                 html += `<th class="${thickCls} col-day-fixed" style="width:52px; min-width:52px; max-width:52px; background:${fc.headerBg}; font-size:0.78rem; padding:4px 2px; color:#1e293b; border-bottom:1px solid ${fc.border}; text-align:center; white-space:nowrap;">${di.m}/${di.day}</th>`;
             }
             html += `
@@ -5467,7 +5595,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 <th class="sticky-col-2" style="background:${fc.headerBg}; border-right:2px solid #475569; width:95px; min-width:95px; max-width:105px;"></th>`;
             for (let d = 0; d < numDays; d++) {
                 const di = term.dates[d];
-                const thickCls = ((d + 1) % 7 === 0) ? 'border-thick-right' : '';
+                const thickCls = isSaturdayCol(d) ? 'border-thick-right' : '';
                 const wColor = di.wIdx === 5 ? '#2563eb' : ((di.wIdx === 6 || di.isHoliday) ? '#dc2626' : '#334155');
                 const wBg = di.wIdx === 5 ? '#eff6ff' : ((di.wIdx === 6 || di.isHoliday) ? '#fef2f2' : fc.headerBg);
                 html += `<th class="${thickCls} col-day-fixed" style="width:52px; min-width:52px; max-width:52px; background:${wBg}; color:${wColor}; font-size:0.8rem; padding:2px; border-bottom:1px solid ${fc.border}; text-align:center;">${di.weekday}</th>`;
@@ -5479,7 +5607,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 <td class="sticky-col-1" rowspan="8" style="background:${fc.headerBg}; color:${fc.badgeColor}; font-size:1.05rem; font-weight:800; vertical-align:middle; text-align:center; border-right:1px solid ${fc.border}; width:44px; min-width:44px; max-width:44px;">${fc.label}</td>
                 <td class="sticky-col-2" style="background:${fc.bg}; color:#1e293b; border-right:2px solid #475569; font-weight:700; width:95px; min-width:95px; max-width:105px;">±補正</td>`;
             for (let d = 0; d < numDays; d++) {
-                const thickCls = ((d + 1) % 7 === 0) ? 'border-thick-right' : '';
+                const thickCls = isSaturdayCol(d) ? 'border-thick-right' : '';
                 const off = dailyOffsets[d];
                 const offText = off > 0 ? `+${off}` : `${off}`;
                 const offColor = off > 0 ? '#15803d' : (off < 0 ? '#dc2626' : '#64748b');
@@ -5491,7 +5619,7 @@ document.addEventListener('DOMContentLoaded', () => {
             html += `<tr style="background:#f1f5f9; font-weight:700;">
                 <td class="sticky-col-2" style="background:#f1f5f9; color:#0f172a; border-right:2px solid #475569; font-weight:800; width:95px; min-width:95px; max-width:105px;">出勤人数合計</td>`;
             for (let d = 0; d < numDays; d++) {
-                const thickCls = ((d + 1) % 7 === 0) ? 'border-thick-right' : '';
+                const thickCls = isSaturdayCol(d) ? 'border-thick-right' : '';
                 html += `<td class="${thickCls} col-day-fixed" style="width:52px; min-width:52px; max-width:52px; background:#f1f5f9; color:#0f172a; font-weight:800; border-bottom:1px solid #cbd5e1; text-align:center;">${dailyTotal[d]}</td>`;
             }
             html += `<td colspan="9" style="background:#f1f5f9;"></td></tr>`;
@@ -5500,7 +5628,7 @@ document.addEventListener('DOMContentLoaded', () => {
             html += `<tr style="background:#e2e8f0; font-weight:700;">
                 <td class="sticky-col-2" style="background:#e2e8f0; color:#0369a1; border-right:2px solid #475569; font-weight:800; width:95px; min-width:95px; max-width:105px;">実数合計</td>`;
             for (let d = 0; d < numDays; d++) {
-                const thickCls = ((d + 1) % 7 === 0) ? 'border-thick-right' : '';
+                const thickCls = isSaturdayCol(d) ? 'border-thick-right' : '';
                 html += `<td class="${thickCls} col-day-fixed" style="width:52px; min-width:52px; max-width:52px; background:#e2e8f0; color:#0369a1; font-weight:800; border-bottom:1px solid #cbd5e1; text-align:center;">${dailyReal[d]}</td>`;
             }
             html += `<td colspan="9" style="background:#e2e8f0;"></td></tr>`;
@@ -5516,7 +5644,7 @@ document.addEventListener('DOMContentLoaded', () => {
             html += `<tr style="background:${fc.bg}; font-weight:600;">
                 <td class="sticky-col-2" style="background:${fc.bg}; color:#1e293b; border-right:2px solid #475569; width:95px; min-width:95px; max-width:105px;">早</td>`;
             for (let d = 0; d < numDays; d++) {
-                const thickCls = ((d + 1) % 7 === 0) ? 'border-thick-right' : '';
+                const thickCls = isSaturdayCol(d) ? 'border-thick-right' : '';
                 const cnt = dailyEarly[d];
                 const isConflict = (cnt !== targetEarly);
                 const bgStyle = isConflict ? 'background:#dbeafe !important; color:#1d4ed8 !important;' : `background:${fc.bg}; color:#ea580c;`;
@@ -5529,7 +5657,7 @@ document.addEventListener('DOMContentLoaded', () => {
             html += `<tr style="background:${fc.bg}; font-weight:600;">
                 <td class="sticky-col-2" style="background:${fc.bg}; color:#1e293b; border-right:2px solid #475569; width:95px; min-width:95px; max-width:105px;">遅</td>`;
             for (let d = 0; d < numDays; d++) {
-                const thickCls = ((d + 1) % 7 === 0) ? 'border-thick-right' : '';
+                const thickCls = isSaturdayCol(d) ? 'border-thick-right' : '';
                 const cnt = dailyLate[d];
                 const isConflict = (cnt !== targetLate);
                 const bgStyle = isConflict ? 'background:#dbeafe !important; color:#1d4ed8 !important;' : `background:${fc.bg}; color:#0284c7;`;
@@ -5542,7 +5670,7 @@ document.addEventListener('DOMContentLoaded', () => {
             html += `<tr style="background:${fc.bg}; font-weight:600;">
                 <td class="sticky-col-2" style="background:${fc.bg}; color:#1e293b; border-right:2px solid #475569; width:95px; min-width:95px; max-width:105px;">E</td>`;
             for (let d = 0; d < numDays; d++) {
-                const thickCls = ((d + 1) % 7 === 0) ? 'border-thick-right' : '';
+                const thickCls = isSaturdayCol(d) ? 'border-thick-right' : '';
                 const cnt = dailyEve[d];
                 const isConflict = (cnt !== targetEve);
                 const bgStyle = isConflict ? 'background:#dbeafe !important; color:#1d4ed8 !important;' : `background:${fc.bg}; color:#7c3aed;`;
@@ -5555,7 +5683,7 @@ document.addEventListener('DOMContentLoaded', () => {
             html += `<tr style="background:${fc.bg}; font-weight:600;">
                 <td class="sticky-col-2" style="background:${fc.bg}; color:#1e293b; border-right:2px solid #475569; width:95px; min-width:95px; max-width:105px;">8時</td>`;
             for (let d = 0; d < numDays; d++) {
-                const thickCls = ((d + 1) % 7 === 0) ? 'border-thick-right' : '';
+                const thickCls = isSaturdayCol(d) ? 'border-thick-right' : '';
                 const cnt = dailyH8[d];
                 const isConflict = (cnt !== targetH8);
                 const bgStyle = isConflict ? 'background:#dbeafe !important; color:#1d4ed8 !important;' : `background:${fc.bg}; color:#059669;`;
@@ -5572,7 +5700,7 @@ document.addEventListener('DOMContentLoaded', () => {
                     </button>
                 </td>`;
             for (let d = 0; d < numDays; d++) {
-                const thickCls = ((d + 1) % 7 === 0) ? 'border-thick-right' : '';
+                const thickCls = isSaturdayCol(d) ? 'border-thick-right' : '';
                 html += `<td class="${thickCls} col-day-fixed" style="width:52px; min-width:52px; max-width:52px; background:${fc.bg}; border-bottom:2px solid ${fc.border};"></td>`;
             }
             html += `<td colspan="9" style="background:${fc.bg};"></td></tr>`;
@@ -5683,7 +5811,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 const isHalf = !!s.isHalf;
 
                 for (let d = 0; d < numDays; d++) {
-                    const thickCls = ((d + 1) % 7 === 0) ? 'border-thick-right' : '';
+                    const thickCls = isSaturdayCol(d) ? 'border-thick-right' : '';
                     const cell = item.gridRow ? item.gridRow[d] : null;
                     const sym = (cell && typeof cell === 'object') ? (cell.symbol || '') : (cell || '');
                     
@@ -5833,7 +5961,7 @@ document.addEventListener('DOMContentLoaded', () => {
                     <td class="sticky-col-1" style="background:${fr.bg}; color:${fr.color}; font-size:0.75rem; text-align:center; border-right:1px solid #cbd5e1;">集計</td>
                     <td class="sticky-col-2" style="background:${fr.bg}; color:${fr.color}; font-weight:${fr.bold ? '800' : '700'}; font-size:0.82rem; text-align:left; border-right:2px solid #475569; padding-left:8px;">${fr.label}</td>`;
                 for (let d = 0; d < numDays; d++) {
-                    const thickCls = ((d + 1) % 7 === 0) ? 'border-thick-right' : '';
+                    const thickCls = isSaturdayCol(d) ? 'border-thick-right' : '';
                     const v = fr.vals[d];
                     const dispV = (v > 0) ? (v % 1 === 0 ? v : v.toFixed(1)) : (['早番', '遅番', 'E', '8時', '出勤人数合計', '実数合計'].includes(fr.label) ? v : '-');
                     html += `<td class="${thickCls} col-day-fixed" style="width:52px; min-width:52px; max-width:52px; background:${fr.bg}; color:${fr.color}; text-align:center; border-bottom:1px solid #cbd5e1; font-weight:${fr.bold ? '800' : '700'};">${dispV}</td>`;
@@ -5850,7 +5978,7 @@ document.addEventListener('DOMContentLoaded', () => {
             <th class="sticky-col-1" rowspan="6" style="background:#e2e8f0; color:#1e293b; font-size:1.1rem; font-weight:900; vertical-align:middle; text-align:center; border-right:1px solid #cbd5e1; width:44px; min-width:44px; max-width:44px;">集計</th>
             <td class="sticky-col-2" style="background:#f8fafc; color:#0f172a; border-right:2px solid #475569; font-weight:800; font-size:0.9rem; width:95px; min-width:95px; max-width:105px;">出勤人数合計</td>`;
         for (let d = 0; d < numDays; d++) {
-            const thickCls = ((d + 1) % 7 === 0) ? 'border-thick-right' : '';
+            const thickCls = isSaturdayCol(d) ? 'border-thick-right' : '';
             html += `<td class="${thickCls} col-day-fixed" style="width:52px; min-width:52px; max-width:52px; background:#f8fafc; color:#0f172a; font-weight:800; font-size:0.95rem; border-bottom:1px solid #cbd5e1; text-align:center;">${grandTotal[d]}</td>`;
         }
         html += `<td colspan="9" style="background:#f8fafc;"></td></tr>`;
@@ -5859,7 +5987,7 @@ document.addEventListener('DOMContentLoaded', () => {
         html += `<tr style="background:#f8fafc; font-weight:700;">
             <td class="sticky-col-2" style="background:#f8fafc; color:#0369a1; border-right:2px solid #475569; font-weight:800; font-size:0.9rem; width:95px; min-width:95px; max-width:105px;">実数合計</td>`;
         for (let d = 0; d < numDays; d++) {
-            const thickCls = ((d + 1) % 7 === 0) ? 'border-thick-right' : '';
+            const thickCls = isSaturdayCol(d) ? 'border-thick-right' : '';
             html += `<td class="${thickCls} col-day-fixed" style="width:52px; min-width:52px; max-width:52px; background:#f8fafc; color:#0369a1; font-weight:800; font-size:0.95rem; border-bottom:1px solid #cbd5e1; text-align:center;">${Number(grandReal[d].toFixed(1))}</td>`;
         }
         html += `<td colspan="9" style="background:#f8fafc;"></td></tr>`;
@@ -5868,7 +5996,7 @@ document.addEventListener('DOMContentLoaded', () => {
         html += `<tr style="background:#f8fafc; font-weight:700;">
             <td class="sticky-col-2" style="background:#f8fafc; color:#ea580c; border-right:2px solid #475569; font-weight:700; width:95px; min-width:95px; max-width:105px;">早</td>`;
         for (let d = 0; d < numDays; d++) {
-            const thickCls = ((d + 1) % 7 === 0) ? 'border-thick-right' : '';
+            const thickCls = isSaturdayCol(d) ? 'border-thick-right' : '';
             const cnt = grandEarly[d];
             const isConflict = (cnt !== 11);
             const bgStyle = isConflict ? 'background:#dbeafe !important; color:#1d4ed8 !important;' : 'background:#f8fafc; color:#ea580c;';
@@ -5881,7 +6009,7 @@ document.addEventListener('DOMContentLoaded', () => {
         html += `<tr style="background:#f8fafc; font-weight:700;">
             <td class="sticky-col-2" style="background:#f8fafc; color:#0284c7; border-right:2px solid #475569; font-weight:700; width:95px; min-width:95px; max-width:105px;">遅</td>`;
         for (let d = 0; d < numDays; d++) {
-            const thickCls = ((d + 1) % 7 === 0) ? 'border-thick-right' : '';
+            const thickCls = isSaturdayCol(d) ? 'border-thick-right' : '';
             const cnt = grandLate[d];
             const isConflict = (cnt !== 5);
             const bgStyle = isConflict ? 'background:#dbeafe !important; color:#1d4ed8 !important;' : 'background:#f8fafc; color:#0284c7;';
@@ -5894,7 +6022,7 @@ document.addEventListener('DOMContentLoaded', () => {
         html += `<tr style="background:#f8fafc; font-weight:700;">
             <td class="sticky-col-2" style="background:#f8fafc; color:#7c3aed; border-right:2px solid #475569; font-weight:700; width:95px; min-width:95px; max-width:105px;">E</td>`;
         for (let d = 0; d < numDays; d++) {
-            const thickCls = ((d + 1) % 7 === 0) ? 'border-thick-right' : '';
+            const thickCls = isSaturdayCol(d) ? 'border-thick-right' : '';
             const cnt = grandEve[d];
             const isConflict = (cnt !== 8);
             const bgStyle = isConflict ? 'background:#dbeafe !important; color:#1d4ed8 !important;' : 'background:#f8fafc; color:#7c3aed;';
@@ -5907,7 +6035,7 @@ document.addEventListener('DOMContentLoaded', () => {
         html += `<tr style="background:#f8fafc; font-weight:700; border-bottom:3px solid #334155;">
             <td class="sticky-col-2" style="background:#f8fafc; color:#059669; border-right:2px solid #475569; font-weight:700; width:95px; min-width:95px; max-width:105px;">8時</td>`;
         for (let d = 0; d < numDays; d++) {
-            const thickCls = ((d + 1) % 7 === 0) ? 'border-thick-right' : '';
+            const thickCls = isSaturdayCol(d) ? 'border-thick-right' : '';
             const cnt = grandH8[d];
             const isConflict = (cnt !== 3);
             const bgStyle = isConflict ? 'background:#dbeafe !important; color:#1d4ed8 !important;' : 'background:#f8fafc; color:#059669;';
@@ -6105,7 +6233,7 @@ document.addEventListener('DOMContentLoaded', () => {
         const stId = cell.dataset.stId;
         const stIdx = parseInt(cell.dataset.stIdx, 10);
         const d = parseInt(cell.dataset.d, 10);
-        let newSym = currentOutputSelectedSymbol;
+        let newSym = getActivePaletteSymbol(true);
         const activePaletteBtn = document.querySelector('.output-palette-btn.selected, .check-palette-btn.selected');
         if (activePaletteBtn && activePaletteBtn.dataset.sym !== undefined) {
             newSym = activePaletteBtn.dataset.sym;
@@ -6181,7 +6309,7 @@ document.addEventListener('DOMContentLoaded', () => {
         const haId = cell.dataset.haId;
         const haIdx = parseInt(cell.dataset.haIdx, 10);
         const d = parseInt(cell.dataset.d, 10);
-        let newSym = currentOutputSelectedSymbol;
+        let newSym = getActivePaletteSymbol(true);
         const activePaletteBtn = document.querySelector('.output-palette-btn.selected, .check-palette-btn.selected');
         if (activePaletteBtn && activePaletteBtn.dataset.sym !== undefined) {
             newSym = activePaletteBtn.dataset.sym;
@@ -6267,6 +6395,34 @@ document.addEventListener('DOMContentLoaded', () => {
                 const d = parseInt(cell.dataset.d, 10);
                 if (!lastSolveResult || !lastSolveResult.grid) return;
 
+                // ★ コピペモード時の処理（出力シート/修正作業エリア）
+                if (isCopyMode) {
+                    if (clipboardSymbol === null || selectedCopyCell === null) {
+                        clipboardSymbol = cell.textContent.trim();
+                        if (selectedCopyCell) selectedCopyCell.classList.remove('copy-selected-cell');
+                        selectedCopyCell = cell;
+                        cell.classList.add('copy-selected-cell');
+                        showToast(`📋 【${clipboardSymbol || '空欄'}】をコピーしました。貼り付け先をクリックしてください`);
+                        return;
+                    } else {
+                        pushHistory();
+                        const cellData = lastSolveResult.grid[s][d];
+                        cellData.symbol = clipboardSymbol;
+                        if (lastScheduler) {
+                            lastScheduler.grid[s][d].symbol = clipboardSymbol;
+                            const newStats = lastScheduler.calculateStats();
+                            lastSolveResult.stats = newStats;
+                            renderOutputTable(lastSolveResult.grid, newStats);
+                            renderStatsDashboard(newStats);
+                        } else {
+                            renderOutputTable(lastSolveResult.grid, lastSolveResult.stats);
+                        }
+                        saveCurrentTermToStorage();
+                        showToast(`📋 【${clipboardSymbol || '空欄'}】を貼り付けました`);
+                        return;
+                    }
+                }
+
                 // ★ P（プロテクト）ボタンが選択されている場合: 固定保護のトグル切り替え
                 if (currentOutputSelectedSymbol === 'P') {
                     pushHistory();
@@ -6295,7 +6451,7 @@ document.addEventListener('DOMContentLoaded', () => {
                     return;
                 }
 
-                let newSym = currentOutputSelectedSymbol;
+                let newSym = getActivePaletteSymbol(true);
                 if (newSym === 'CLEAR') newSym = '';
 
                 const cellData = lastSolveResult.grid[s][d];
@@ -9085,3 +9241,72 @@ document.addEventListener('DOMContentLoaded', () => {
     window.addEventListener('pagehide', flushCloudSync);
     window.addEventListener('beforeunload', flushCloudSync);
 });
+
+
+    // ★ ユーザー指示: コピペモード（セル選択 Ctrl+C / Ctrl+V またはクリック貼付）
+    document.addEventListener('click', (e) => {
+        const toggleBtn = e.target.closest('#copyModeToggleBtn, .copy-mode-btn');
+        if (toggleBtn) {
+            isCopyMode = !isCopyMode;
+            if (isCopyMode) {
+                toggleBtn.classList.remove('btn-outline-primary');
+                toggleBtn.classList.add('btn-primary');
+                toggleBtn.textContent = '📋 コピペモードON';
+                showToast('📋 コピペモードON: セルをクリックして選択・コピー、貼り付け先のセルをクリック（Ctrl+C / Ctrl+Vも利用可能）');
+            } else {
+                toggleBtn.classList.remove('btn-primary');
+                toggleBtn.classList.add('btn-outline-primary');
+                toggleBtn.textContent = '📋 コピペモード';
+                if (selectedCopyCell) selectedCopyCell.classList.remove('copy-selected-cell');
+                selectedCopyCell = null;
+                clipboardSymbol = null;
+                showToast('📋 コピペモードOFF');
+            }
+        }
+    });
+
+    // キーボードショートカット Ctrl+C / Ctrl+V
+    window.addEventListener('keydown', (e) => {
+        if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'c') {
+            const activeCell = document.querySelector('.copy-selected-cell') || (document.activeElement && document.activeElement.classList.contains('day-cell') ? document.activeElement : null);
+            if (activeCell) {
+                clipboardSymbol = activeCell.textContent.trim();
+                showToast(`📋 【${clipboardSymbol || '空欄'}】をコピーしました (Ctrl+C)`);
+                e.preventDefault();
+            }
+        } else if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'v') {
+            const activeCell = document.querySelector('.copy-selected-cell') || (document.activeElement && document.activeElement.classList.contains('day-cell') ? document.activeElement : null);
+            if (activeCell && clipboardSymbol !== null) {
+                activeCell.click(); // クリックイベントを発火して貼り付け適用
+                e.preventDefault();
+            }
+        }
+    });
+
+
+    // ★ ユーザー指示: マスターテーブルでもPOテーブルのようにタームを指定可能にする
+    function initMasterTermSelect() {
+        const masterSel = document.getElementById('masterTermSelect');
+        if (!masterSel) return;
+        masterSel.innerHTML = '';
+        GLOBAL_TERMS.forEach(term => {
+            const opt = document.createElement('option');
+            opt.value = term.startDate;
+            opt.textContent = term.label;
+            if (term.startDate === currentWorkingStartDate) opt.selected = true;
+            masterSel.appendChild(opt);
+        });
+
+        masterSel.addEventListener('change', (e) => {
+            const newStart = e.target.value;
+            currentWorkingStartDate = newStart;
+            localStorage.setItem('shift_schedule_current_start_date', newStart);
+            showToast(`📅 マスターテーブル: ${masterSel.options[masterSel.selectedIndex].text} に切り替えました`);
+            // マスター統合再描画
+            if (typeof renderMasterIntegrationView === 'function') {
+                renderMasterIntegrationView();
+            }
+        });
+    }
+    // DOM初期化時に呼び出し
+    setTimeout(initMasterTermSelect, 100);

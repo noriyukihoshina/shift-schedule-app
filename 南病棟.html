@@ -71,16 +71,6 @@
                     <div style="display: flex; align-items: center; gap: 0.75rem; font-size: 0.88rem; flex-wrap: wrap;">
                         <span style="font-weight: 700; color: #1e293b;">📅 対象期間（ターム固定）:</span>
                         <select id="termSelect" style="padding: 4px 8px; border: 1px solid #0284c7; background: #f0f9ff; border-radius: 4px; font-weight: 700; color: #0369a1; font-size: 0.88rem; cursor: pointer;" title="年度ごとの正規13ターム（第1〜12ターム:28日間、第13ターム:29日間）を選択します">
-                            <option value="2025-04-01">【2025年度 第1ターム】 4/1 〜 4/28 (28日間)</option>
-                            <option value="2025-04-29">【2025年度 第2ターム】 4/29 〜 5/26 (28日間)</option>
-                            <option value="2025-05-27">【2025年度 第3ターム】 5/27 〜 6/23 (28日間)</option>
-                            <option value="2025-06-24">【2025年度 第4ターム】 6/24 〜 7/21 (28日間)</option>
-                            <option value="2025-07-22">【2025年度 第5ターム】 7/22 〜 8/18 (28日間)</option>
-                            <option value="2025-08-19">【2025年度 第6ターム】 8/19 〜 9/15 (28日間)</option>
-                            <option value="2025-09-16">【2025年度 第7ターム】 9/16 〜 10/13 (28日間)</option>
-                            <option value="2025-10-14">【2025年度 第8ターム】 10/14 〜 11/10 (28日間)</option>
-                            <option value="2025-11-11">【2025年度 第9ターム】 11/11 〜 12/8 (28日間)</option>
-                            <option value="2025-12-09">【2025年度 第10ターム】 12/9 〜 1/5 (28日間)</option>
                             <option value="2026-01-06">【2025年度 第11ターム】 1/6 〜 2/2 (28日間)</option>
                             <option value="2026-02-03">【2025年度 第12ターム】 2/3 〜 3/2 (28日間)</option>
                             <option value="2026-03-03">【2025年度 第13ターム】 3/3 〜 3/31 (29日間・年度末調整)</option>
@@ -119,12 +109,7 @@
                         <span id="refreshTermBadge" style="display:none; background: #ecfdf5; color: #047857; border: 1px solid #a7f3d0; padding: 2px 8px; border-radius: 4px; font-weight: 700; font-size: 0.82rem;">🌴 リフ対象月</span>
                     </div>
                     <div style="display: flex; align-items: center; gap: 0.75rem; font-size: 0.88rem; flex-wrap: wrap;">
-                        <div style="display: flex; align-items: center; gap: 0.4rem;">
-                            <span style="font-weight: 700; color: #1e293b;" title="ブラウザ内に自動保存された他の期間を呼び出します">📁 保存済み期間:</span>
-                            <select id="savedTermsSelect" style="padding: 4px 8px; border: 1px solid #cbd5e1; border-radius: 4px; font-weight: 600; background: white; font-size: 0.82rem;">
-                                <option value="">(保存済み期間の呼出)</option>
-                            </select>
-                        </div>
+                        
                         <div style="display: flex; align-items: center; gap: 0.4rem;">
                             <span style="font-weight: 700; color: #1e293b;">🏖️ 公休枠制限:</span>
                             <select id="standardHolidaySelect" style="padding: 4px 8px; border: 1px solid #cbd5e1; border-radius: 4px; font-weight: 600; background: white; font-size: 0.82rem;">
@@ -189,7 +174,7 @@
                     <button class="palette-btn" data-sym="○" title="日勤（基本勤務）">○</button>
                     <button class="palette-btn" data-sym="ー" title="勤務対象外（異動・退職等。出勤・公休カウントから完全除外）" style="background:#f1f5f9; border-color:#cbd5e1; color:#64748b; font-weight:800;">ー</button>
                     <button class="palette-btn palette-btn-protect" data-sym="P" title="P（プロテクト保護）: クリックしたセルの勤務を赤文字で固定保護／解除します（他の勤務の誤上書き防止）" style="background:#fdf2f8; border-color:#f472b6; color:#be185d; font-weight:800;">🛡️ P</button>
-                    <button class="palette-btn" data-sym="出" title="出張">出</button>
+                    <button class="palette-btn" data-sym="出張" title="出張">出張</button>
                     <button class="palette-btn" data-sym="早" title="早番 (7:00〜15:30)">早</button>
                     <button class="palette-btn" data-sym="遅" title="遅番 (11:00〜19:30)">遅</button>
                     <button class="palette-btn" data-sym="E" title="イブニング (13:00〜21:30)">E</button>
@@ -231,7 +216,7 @@
                         <button type="button" class="scroll-btn" data-target="inputSheetWrapper" data-dir="right" title="表を右（〜28日・属性）へスクロール">
                             右へ ▶
                         </button>
-                    </div>
+                    <button type="button" class="btn btn-sm btn-outline-primary copy-mode-btn" id="copyModeToggleBtn" style="font-weight:700; margin-left:8px; padding:2px 8px;" title="セルを選択してCtrl+Cでコピー、別セルでCtrl+Vまたはクリックで貼り付け">📋 コピペモード</button></div>
                 </div>
 
                 <!-- 3行目: ガイドライン・注記 -->
@@ -289,7 +274,7 @@
                     <button class="palette-btn output-palette-btn" data-sym="○" title="日勤（基本勤務）">○</button>
                     <button class="palette-btn output-palette-btn" data-sym="ー" title="勤務対象外（異動・退職等。出勤・公休カウントから完全除外）" style="background:#f1f5f9; border-color:#cbd5e1; color:#64748b; font-weight:800;">ー</button>
                     <button class="palette-btn output-palette-btn palette-btn-protect" data-sym="P" title="P（プロテクト保護）: クリックしたセルの勤務を赤文字で固定保護／解除します（他の勤務の誤上書き防止）" style="background:#fdf2f8; border-color:#f472b6; color:#be185d; font-weight:800;">🛡️ P</button>
-                    <button class="palette-btn output-palette-btn" data-sym="出" title="出張">出</button>
+                    <button class="palette-btn output-palette-btn" data-sym="出張" title="出張">出張</button>
                     <button class="palette-btn output-palette-btn" data-sym="早" title="早番 (7:00〜15:30)">早</button>
                     <button class="palette-btn output-palette-btn" data-sym="遅" title="遅番 (11:00〜19:30)">遅</button>
                     <button class="palette-btn output-palette-btn" data-sym="E" title="イブニング (13:00〜21:30)">E</button>
@@ -331,7 +316,7 @@
                         <button type="button" class="scroll-btn" data-target="outputSheetWrapper" data-dir="right" title="表を右（〜28日・集計）へスクロール">
                             右へ ▶
                         </button>
-                    </div>
+                    <button type="button" class="btn btn-sm btn-outline-primary copy-mode-btn" id="copyModeToggleBtn" style="font-weight:700; margin-left:8px; padding:2px 8px;" title="セルを選択してCtrl+Cでコピー、別セルでCtrl+Vまたはクリックで貼り付け">📋 コピペモード</button></div>
                 </div>
 
                 <!-- 3行目: ガイドライン・注記 -->
@@ -390,7 +375,7 @@
                     <button class="palette-btn check-palette-btn" data-sym="○" title="日勤（基本勤務）">○</button>
                     <button class="palette-btn check-palette-btn" data-sym="ー" title="勤務対象外（異動・退職等。出勤・公休カウントから完全除外）" style="background:#f1f5f9; border-color:#cbd5e1; color:#64748b; font-weight:800;">ー</button>
                     <button class="palette-btn check-palette-btn palette-btn-protect" data-sym="P" title="P（プロテクト保護）: クリックしたセルの勤務を赤文字で固定保護／解除します（他の勤務の誤上書き防止）" style="background:#fdf2f8; border-color:#f472b6; color:#be185d; font-weight:800;">🛡️ P</button>
-                    <button class="palette-btn check-palette-btn" data-sym="出" title="出張">出</button>
+                    <button class="palette-btn check-palette-btn" data-sym="出張" title="出張">出張</button>
                     <button class="palette-btn check-palette-btn" data-sym="早" title="早番 (7:00〜15:30)">早</button>
                     <button class="palette-btn check-palette-btn" data-sym="遅" title="遅番 (11:00〜19:30)">遅</button>
                     <button class="palette-btn check-palette-btn" data-sym="E" title="イブニング (13:00〜21:30)">E</button>
@@ -432,7 +417,7 @@
                         <button type="button" class="scroll-btn" data-target="checkSheetWrapper" data-dir="right" title="表を右（〜28日・集計）へスクロール">
                             右へ ▶
                         </button>
-                    </div>
+                    <button type="button" class="btn btn-sm btn-outline-primary copy-mode-btn" id="copyModeToggleBtn" style="font-weight:700; margin-left:8px; padding:2px 8px;" title="セルを選択してCtrl+Cでコピー、別セルでCtrl+Vまたはクリックで貼り付け">📋 コピペモード</button></div>
                 </div>
 
                 <!-- 3行目: ガイドライン・注記 -->
