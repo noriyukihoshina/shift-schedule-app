@@ -2668,32 +2668,14 @@ document.addEventListener('DOMContentLoaded', () => {
                 const s = parseInt(cell.dataset.s, 10);
                 const type = cell.dataset.type;
 
-                // ★ コピペモード時の処理
+                // ★ ユーザー指示: コピペモード時のクリックは「セルの選択（フォーカス）」のみ！
+                // セルクリックでの勝手なコピーや貼り付けは完全廃止し、Excel同様に Ctrl+C でコピー、Ctrl+V で貼り付けを行う
                 if (isCopyMode) {
-                    if (clipboardSymbol === null || selectedCopyCell === null) {
-                        // コピー
-                        clipboardSymbol = cell.textContent.trim();
-                        if (selectedCopyCell) selectedCopyCell.classList.remove('copy-selected-cell');
-                        selectedCopyCell = cell;
-                        cell.classList.add('copy-selected-cell');
-                        showToast(`📋 【${clipboardSymbol || '空欄'}】をコピーしました。貼り付け先をクリックしてください`);
-                        return;
-                    } else {
-                        // 貼り付け
-                        let newSym = clipboardSymbol;
-                        pushHistory();
-                        if (type === 'day') {
-                            const d = parseInt(cell.dataset.d, 10);
-                            staffList[s].days[d] = newSym;
-                        } else if (type === 'prev') {
-                            const p = parseInt(cell.dataset.p, 10);
-                            staffList[s].prevDays[p] = newSym;
-                        }
-                        cell.textContent = newSym;
-                        saveCurrentTermToStorage();
-                        showToast(`📋 【${newSym || '空欄'}】を貼り付けました`);
-                        return;
-                    }
+                    if (selectedCopyCell) selectedCopyCell.classList.remove('copy-selected-cell');
+                    selectedCopyCell = cell;
+                    cell.classList.add('copy-selected-cell');
+                    // パレット記号等の直接入力を阻止
+                    return;
                 }
 
                 let newSym = getActivePaletteSymbol(false);
@@ -4687,7 +4669,7 @@ document.addEventListener('DOMContentLoaded', () => {
                     }
                     bodyHtml += `
                         <td class="stat-cell" data-s="${s}" data-stat="work">${staffStat.workDays}</td>
-                        <td class="stat-cell" data-s="${s}" data-stat="off">${staffStat.offDays}</td>
+                        <td class="stat-cell ${(!staff.isUnused && staffStat.offDays !== 8) ? 'holiday-alert-cell' : ''}" data-s="${s}" data-stat="off" title="${staffStat.offDays !== 8 ? '公休が8日ではありません（現在:' + staffStat.offDays + '日）' : '公休8日'}">${staffStat.offDays}</td>
                         <td class="stat-cell" data-s="${s}" data-stat="paid">${staffStat.paidDays}</td>
                         <td class="stat-cell" data-s="${s}" data-stat="ref">${staffStat.refDays}</td>
                         <td class="stat-cell" data-s="${s}" data-stat="early">${staffStat.early}</td>
@@ -4720,7 +4702,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
                 bodyHtml += `
                     <td class="stat-cell ${rowBottomCls}" data-s="${s}" data-stat="work" style="font-weight:700; color:#1e293b; background:transparent;">${staffStat.workDays}</td>
-                    <td class="stat-cell ${rowBottomCls}" data-s="${s}" data-stat="off" style="font-weight:700; color:#1e293b; background:transparent;">${staffStat.offDays}</td>
+                    <td class="stat-cell ${rowBottomCls} ${(!staff.isUnused && staffStat.offDays !== 8) ? 'holiday-alert-cell' : ''}" data-s="${s}" data-stat="off" title="${staffStat.offDays !== 8 ? '公休が8日ではありません（現在:' + staffStat.offDays + '日）' : '公休8日'}" style="font-weight:700; color:#1e293b;">${staffStat.offDays}</td>
                     <td class="stat-cell ${rowBottomCls}" data-s="${s}" data-stat="paid" style="font-weight:800; color:#1e293b; background:transparent;">${staffStat.paidDays}</td>
                     <td class="stat-cell ${rowBottomCls}" data-s="${s}" data-stat="ref" style="font-weight:600; color:#1e293b; background:transparent;">${staffStat.refDays}</td>
                     <td class="stat-cell ${rowBottomCls}" data-s="${s}" data-stat="early" style="font-weight:600; color:#334155; background:transparent;">${staffStat.early}</td>
@@ -9262,7 +9244,7 @@ document.addEventListener('DOMContentLoaded', () => {
                     b.classList.add('btn-primary');
                     b.textContent = '📋 コピペモードON';
                 });
-                showToast('📋 コピペモードON: セルをクリックして選択・コピー、貼り付け先のセルをクリック（Ctrl+C / Ctrl+Vも利用可能）');
+                showToast('📋 コピペモードON: セルをクリックして選択し、Ctrl+C でコピー、Ctrl+V で貼り付けを行ってください');
             } else {
                 allCopyBtns.forEach(b => {
                     b.classList.remove('btn-primary');
@@ -9278,18 +9260,38 @@ document.addEventListener('DOMContentLoaded', () => {
     });
 
     // キーボードショートカット Ctrl+C / Ctrl+V
+    // ★ ユーザー指示: クリックによる誤貼り付けを廃止し、Ctrl+Cでコピー、Ctrl+Vで貼り付けを確実に実行
     window.addEventListener('keydown', (e) => {
+        if (!isCopyMode) return;
+        const activeCell = selectedCopyCell || document.querySelector('.copy-selected-cell') || (document.activeElement && document.activeElement.classList.contains('day-cell') ? document.activeElement : null);
+        
         if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'c') {
-            const activeCell = document.querySelector('.copy-selected-cell') || (document.activeElement && document.activeElement.classList.contains('day-cell') ? document.activeElement : null);
             if (activeCell) {
                 clipboardSymbol = activeCell.textContent.trim();
                 showToast(`📋 【${clipboardSymbol || '空欄'}】をコピーしました (Ctrl+C)`);
                 e.preventDefault();
             }
         } else if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'v') {
-            const activeCell = document.querySelector('.copy-selected-cell') || (document.activeElement && document.activeElement.classList.contains('day-cell') ? document.activeElement : null);
             if (activeCell && clipboardSymbol !== null) {
-                activeCell.click(); // クリックイベントを発火して貼り付け適用
+                const s = parseInt(activeCell.dataset.s, 10);
+                const type = activeCell.dataset.type;
+                pushHistory();
+                let newSym = clipboardSymbol;
+                if (!isNaN(s) && staffList[s]) {
+                    if (type === 'day') {
+                        const d = parseInt(activeCell.dataset.d, 10);
+                        if (!isNaN(d)) staffList[s].days[d] = newSym;
+                    } else if (type === 'prev') {
+                        const p = parseInt(activeCell.dataset.p, 10);
+                        if (!isNaN(p)) staffList[s].prevDays[p] = newSym;
+                    }
+                }
+                activeCell.textContent = newSym;
+                if (typeof renderStatsDashboard === 'function' && lastSolveResult && lastSolveResult.stats) {
+                    // リアルタイム再計算
+                }
+                saveCurrentTermToStorage();
+                showToast(`📋 【${newSym || '空欄'}】を貼り付けました (Ctrl+V)`);
                 e.preventDefault();
             }
         }

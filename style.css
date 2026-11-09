@@ -1367,6 +1367,7 @@ td.remarks-cell {
 /* ★ ユーザー指示: 公休が8以外のスタッフは網掛け */
 .holiday-alert-cell {
     background: #e0f2fe !important;
+    background-color: #e0f2fe !important;
     color: #0369a1 !important;
     font-weight: 800 !important;
     box-shadow: inset 0 0 0 2px #0284c7 !important;
