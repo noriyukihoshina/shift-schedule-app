@@ -889,7 +889,10 @@ document.addEventListener('DOMContentLoaded', () => {
                 termSet.add(curDate);
             }
 
-            const sorted = Array.from(termSet).sort();
+            // ★ ユーザー指示: 2025年度のタームは不要。2026-04-01以降のタームのみ保持・表示
+            const sorted = Array.from(termSet)
+                .filter(dStr => dStr >= '2026-04-01')
+                .sort();
             localStorage.setItem(STORAGE_KEY_SAVED_TERMS, JSON.stringify(sorted));
             return sorted;
         } catch (e) {
@@ -9298,32 +9301,82 @@ document.addEventListener('DOMContentLoaded', () => {
     });
 
 
-    // ★ ユーザー指示: マスターテーブルでもPOテーブルのようにタームを指定可能にする
+    // ★ ユーザー指示: マスターテーブルでも他テーブル（PO/各病棟）と同様に確実にタームを選択・即時切替可能にする！
     function initMasterTermSelect() {
         const masterSel = document.getElementById('masterTermSelect');
         if (!masterSel) return;
+
+        const curStart = currentWorkingStartDate || localStorage.getItem('shift_schedule_current_start_date') || '2026-04-01';
+
         masterSel.innerHTML = '';
         GLOBAL_TERMS.forEach(term => {
             const opt = document.createElement('option');
             opt.value = term.startDate;
             opt.textContent = term.label;
-            if (term.startDate === currentWorkingStartDate) opt.selected = true;
+            if (term.startDate === curStart) opt.selected = true;
             masterSel.appendChild(opt);
         });
 
-        masterSel.addEventListener('change', (e) => {
+        // 終了日・バッジの初期表示更新
+        const updateTermBadges = (startDateStr) => {
+            const termDef = findTermByStartDate(startDateStr);
+            if (termDef) {
+                const endDisplay = document.getElementById('termEndDateDisplay');
+                if (endDisplay) endDisplay.textContent = termDef.endDate;
+                const badge = document.getElementById('termLabelBadge');
+                if (badge) badge.textContent = `【${termDef.year}年度 第${termDef.termNo}ターム】`;
+                const daysBadge = document.getElementById('termDaysBadge');
+                if (daysBadge) daysBadge.textContent = `${termDef.numDays}日間`;
+            }
+        };
+        updateTermBadges(curStart);
+
+        masterSel.onchange = async (e) => {
             const newStart = e.target.value;
+            if (!newStart) return;
+
             currentWorkingStartDate = newStart;
             localStorage.setItem('shift_schedule_current_start_date', newStart);
-            showToast(`📅 マスターテーブル: ${masterSel.options[masterSel.selectedIndex].text} に切り替えました`);
-            // マスター統合再描画
+
+            // hidden input も更新
+            const dateInput = document.getElementById('termStartDate');
+            if (dateInput) dateInput.value = newStart;
+
+            // termSelect（もし存在すれば）も同期
+            const otherTermSel = document.getElementById('termSelect');
+            if (otherTermSel && otherTermSel !== masterSel) otherTermSel.value = newStart;
+
+            updateTermBadges(newStart);
+
+            const curTermDef = findTermByStartDate(newStart);
+            const selText = (masterSel.options && masterSel.selectedIndex >= 0) ? masterSel.options[masterSel.selectedIndex]?.text : (curTermDef ? curTermDef.label : newStart);
+            showToast(`📅 マスターテーブル: ${selText} に切り替え中...`);
+
+            // ★ クラウドから新タームの全病棟（1f, 2f, 3f, south, st, life）最新データを一括自動取得！
+            if (typeof pullStateFromCloud === 'function') {
+                try {
+                    await pullStateFromCloud(true, false);
+                } catch (err) {
+                    console.warn('Cloud sync error on term switch:', err);
+                }
+            }
+
+            // ★ 全フロア統合テーブルを新タームの内容で完全再描画！
             if (typeof renderMasterIntegrationView === 'function') {
                 renderMasterIntegrationView();
             }
-        });
+
+            // ★ 勤務分析・平準化ダッシュボードも新タームの内容で完全再計算・再描画！
+            if (typeof renderStatsDashboard === 'function' && lastSolveResult && lastSolveResult.stats) {
+                renderStatsDashboard(lastSolveResult.stats);
+            }
+
+            showToast(`✅ マスターテーブル: ${selText} に切り替え完了しました`);
+        };
     }
-    // DOM初期化時に呼び出し
-    setTimeout(initMasterTermSelect, 100);
+    // DOM初期化時に即座に呼び出し
+    initMasterTermSelect();
+    setTimeout(initMasterTermSelect, 150);
 
 
 });
