@@ -158,7 +158,11 @@ document.addEventListener('DOMContentLoaded', () => {
         const select = document.getElementById('termSelect');
         if (!select) return;
 
-        const curStart = document.getElementById('termStartDate')?.value || currentWorkingStartDate || '2026-04-01';
+        const curStart = localStorage.getItem(STORAGE_KEY_GLOBAL_CURRENT_TERM) || localStorage.getItem('shift_schedule_current_start_date') || document.getElementById('termStartDate')?.value || currentWorkingStartDate || '2026-04-01';
+        currentWorkingStartDate = curStart;
+        const startDateInput = document.getElementById('termStartDate');
+        if (startDateInput) startDateInput.value = curStart;
+        getTermInfo(curStart);
         select.innerHTML = '';
         GLOBAL_TERMS.forEach(t => {
             const opt = document.createElement('option');
@@ -203,8 +207,28 @@ document.addEventListener('DOMContentLoaded', () => {
                 }
             }
             localStorage.setItem(STORAGE_KEY_LAST_ACTIVE, newDate);
+            localStorage.setItem(STORAGE_KEY_GLOBAL_CURRENT_TERM, newDate);
+            localStorage.setItem('shift_schedule_current_start_date', newDate);
             renderSavedTermsSelect();
-            if (isMaster) renderMasterIntegrationView();
+
+            // 終了日・バッジ・タイトルの動的更新
+            getTermInfo(newDate);
+
+            if (isMaster) {
+                // マスターテーブルの場合: クラウドから最新データを同期して統合テーブルを即時再描画！
+                if (typeof pullStateFromCloud === 'function') {
+                    pullStateFromCloud(true, false).then(() => {
+                        if (typeof renderMasterIntegrationView === 'function') renderMasterIntegrationView();
+                        if (typeof renderStatsDashboard === 'function' && lastSolveResult && lastSolveResult.stats) {
+                            renderStatsDashboard(lastSolveResult.stats);
+                        }
+                    }).catch(() => {
+                        if (typeof renderMasterIntegrationView === 'function') renderMasterIntegrationView();
+                    });
+                } else {
+                    if (typeof renderMasterIntegrationView === 'function') renderMasterIntegrationView();
+                }
+            }
         });
     }
 
@@ -383,6 +407,7 @@ document.addEventListener('DOMContentLoaded', () => {
     let NUM_DAYS = 28;
     const WEEKDAYS = ['月', '火', '水', '木', '金', '土', '日'];
     const STORAGE_KEY_PREFIX = `shift_schedule_${deptPrefix}term_`;
+    const STORAGE_KEY_GLOBAL_CURRENT_TERM = 'shift_schedule_global_active_term_start_date';
     const STORAGE_KEY_LAST_ACTIVE = `shift_schedule_${deptPrefix}last_active_start_date`;
     const STORAGE_KEY_SAVED_TERMS = `shift_schedule_${deptPrefix}saved_terms`;
     const STORAGE_KEY_STAFF_MASTER = `shift_schedule_${deptPrefix}staff_master`;
@@ -3945,6 +3970,20 @@ document.addEventListener('DOMContentLoaded', () => {
 
     if (solveBtn) {
         solveBtn.addEventListener('click', () => {
+        // ★ ユーザー指示: ⚡ 勤務表を自動生成するを押したタイミングで前ターム最終5日間実績を読み込んでいない場合は自動で前ターム最終5日間実績を読み込んでから作業を開始
+        const hasPrevHistory = staffList.some(s => !s.isUnused && s.prevDays && s.prevDays.some(p => p && p.trim() !== ''));
+        if (!hasPrevHistory) {
+            const curDate = document.getElementById('termStartDate')?.value || currentWorkingStartDate;
+            const prevTerm = findPreviousTerm(curDate);
+            if (prevTerm) {
+                const applied = applyPreviousTermHistory(prevTerm, false);
+                if (applied) {
+                    showToast('🔗 直前の前ターム最終5日間実績を自動取込しました');
+                    renderInputTable();
+                }
+            }
+        }
+
             pushHistory(); // ★ 勤務表生成前の状態を記録し、「↩ 戻る」で元に戻せるようにする
             // ★ リフレッシュ休暇自動配分連携:
             // ターム内にリフ対象月が含まれており、まだ必要人数分に達していないグループ（月末最終タームの未消化分含む）があれば自動配分を補完適用！
@@ -5477,8 +5516,20 @@ document.addEventListener('DOMContentLoaded', () => {
 
         const checkTitle = document.getElementById('checkTitleDisplay');
         if (checkTitle) {
-            checkTitle.textContent = `🏢 全フロア統合（各階サマリー＆勤務詳細集約）`;
+            checkTitle.textContent = `🏢 ${term.title}（全フロア統合サマリー＆勤務詳細集約）`;
         }
+        const endDisplay = document.getElementById('termEndDateDisplay');
+        if (endDisplay && term && term.last) {
+            const lastY = term.last.dateObj.getFullYear();
+            const lastM = String(term.last.m).padStart(2, '0');
+            const lastD = String(term.last.day).padStart(2, '0');
+            endDisplay.textContent = `${lastY}-${lastM}-${lastD}`;
+        }
+        const badge = document.getElementById('termTitleBadge');
+        if (badge && term) badge.textContent = term.badgeText;
+        const daysBadge = document.getElementById('termDaysBadge');
+        if (daysBadge) daysBadge.textContent = `${numDays}日間`;
+
 
         const floorConfigs = [
             { id: '1f', floorKey: '1F', label: '1階', bg: '#f0f8ff', headerBg: '#e0f2fe', border: '#bae6fd', badgeColor: '#0369a1' },
@@ -5562,16 +5613,9 @@ document.addEventListener('DOMContentLoaded', () => {
                 const gridRow = (lifeData && lifeData.outputGrid && lifeData.outputGrid[idx]) ? lifeData.outputGrid[idx] : null;
                 for (let d = 0; d < numDays; d++) {
                     const c = gridRow ? gridRow[d] : null;
-                    let sym = (c && typeof c === 'object') ? (c.symbol || '') : (c || (st.days ? st.days[d] : ''));
-                    if (!sym) {
-                        const dInfo = (term && term.dates && term.dates[d]) ? term.dates[d] : null;
-                        const wDay = dInfo ? dInfo.weekday : (d % 7 === 5 ? '土' : (d % 7 === 6 ? '日' : '月'));
-                        if (def.isWeekendOff) {
-                            sym = (wDay === '土' || wDay === '日') ? '休' : '○';
-                        } else {
-                            sym = (wDay === '日') ? '休' : '○';
-                        }
-                    }
+                    // ★ ユーザー指示: まだ組んでいない時（gridRowが空、またはセルが空欄）は出勤とみなさず加算しない！
+                    // 実際に生活期テーブルで自動生成・確定された出勤記号がある場合のみ加算！
+                    let sym = (c && typeof c === 'object') ? (c.symbol || '') : (c || '');
                     if (isWorkSymbol(sym) && sym !== '研' && sym !== '張') {
                         lifeHaDataMap[def.flId][d] += 0.5; // ★ 生活期ハ応援スタッフが出勤している日は病棟実数に0.5加算！
                     } else if (sym === '○/休' || sym === '休/○' || sym === '○/有' || sym === '有/○' || sym === '〇/休' || sym === '休/〇' || sym === '〇/有' || sym === '有/〇') {
@@ -5579,17 +5623,8 @@ document.addEventListener('DOMContentLoaded', () => {
                     }
                 }
             });
+            // ★ ユーザー指示: まだ組んでいない時は勝手なハーフマン加算を行わず正確に0にする（フォールバック加算完全撤廃）
 
-            // 未設定時のフォールバック
-            if (!staffFound) {
-                for (let d = 0; d < numDays; d++) {
-                    const dInfo = (term && term.dates && term.dates[d]) ? term.dates[d] : null;
-                    const wDay = dInfo ? dInfo.weekday : (d % 7 === 5 ? '土' : (d % 7 === 6 ? '日' : '月'));
-                    const isWork = def.isWeekendOff ? (wDay !== '土' && wDay !== '日') : (wDay !== '日');
-                    if (isWork) {
-                        lifeHaDataMap[def.flId][d] += 0.5;
-                    }
-                }
             }
         });
 
@@ -6891,7 +6926,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 }
                 pct = Math.min(100, Math.max(3, pct));
 
-                let barColor = '#3b82f6'; // 平日: 青
+                let barColor = '#10b981'; // 平日: 緑 (エメラルドグリーン) ★土曜・平日を明確識別
                 let dayLabelColor = '#64748b';
                 if (di.isHoliday || di.wIdx === 6) {
                     barColor = '#ef4444'; // 祝日・日曜: 赤
@@ -9317,7 +9352,7 @@ document.addEventListener('DOMContentLoaded', () => {
     initStaffData();
     loadStaffMaster(); // ★ スタッフの基本属性・トグル設定（係長/主任/副主任/0.5/専従/所属/備考等）を確実に復元
 
-    const lastActiveDate = localStorage.getItem(STORAGE_KEY_LAST_ACTIVE) || localStorage.getItem('shift_schedule_last_active_start_date');
+    const lastActiveDate = localStorage.getItem(STORAGE_KEY_GLOBAL_CURRENT_TERM) || localStorage.getItem('shift_schedule_current_start_date') || localStorage.getItem(STORAGE_KEY_LAST_ACTIVE) || localStorage.getItem('shift_schedule_last_active_start_date');
     const defaultDate = document.getElementById('termStartDate')?.value || '2026-04-01';
     const matchedTerm = findTermByStartDate(lastActiveDate || defaultDate);
     const targetDate = matchedTerm ? matchedTerm.startDate : (lastActiveDate || defaultDate);
