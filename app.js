@@ -860,9 +860,9 @@ document.addEventListener('DOMContentLoaded', () => {
                 }
 
                 // 4. 表示中タームの再読込＆画面反映
-                const targetTermDate = (isInitialBoot && cloud.lastActiveDate)
-                    ? cloud.lastActiveDate
-                    : (currentWorkingStartDate || cloud.lastActiveDate || '2026-04-01');
+                // ★ ユーザー指示: 他テーブルへ遷移した際にクラウドの古い日付でタームが進んだり戻ったりするのを完全遮断！
+                const globalSyncDate = window.localStorage.getItem(STORAGE_KEY_GLOBAL_CURRENT_TERM) || window.localStorage.getItem('shift_schedule_current_start_date');
+                const targetTermDate = globalSyncDate || currentWorkingStartDate || (isInitialBoot && cloud.lastActiveDate ? cloud.lastActiveDate : '2026-04-01');
 
                 const matchedTerm = findTermByStartDate(targetTermDate);
                 const finalDate = matchedTerm ? matchedTerm.startDate : targetTermDate;

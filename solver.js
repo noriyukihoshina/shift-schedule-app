@@ -412,7 +412,12 @@ function validateInitialState(staffList, options = {}) {
             }
 
             const totalCan8 = staffList.filter(s => !s.isUnused && !s.isSectionChief && s.can8).length;
-            if (totalCan8 >= 1 && can8Available < 1) {
+            // ★ 生活期テーブルでは土日は8時勤務が不要（定数0名）のため、平日の場合のみ8時可充足チェックを実施
+            const di = (options.dates && options.dates[d]) ? options.dates[d] : null;
+            const isWeekendDay = di ? (di.wIdx === 5 || di.wIdx === 6) : ((d % 7 === 5) || (d % 7 === 6));
+            const isH8RequiredDay = isLife ? !isWeekendDay : true;
+
+            if (isH8RequiredDay && totalCan8 >= 1 && can8Available < 1) {
                 errors.push(`【${dayNum}日目】「8時可」スタッフの出勤可能人数が0名となっており、8時勤務（1名）を配置できません（8時可スタッフの希望休重複をご確認ください）。`);
                 staffList.forEach((st, sIdx) => {
                     if (st.isUnused || st.isSectionChief || !st.can8) return;
@@ -1228,10 +1233,11 @@ class ShiftScheduler {
 
             floorStaff.forEach((s, idxInFloor) => {
                 let currentOff = 0;
+                // ★ ユーザー指示: リフレッシュ休暇(上/下)や有休は公休とは別枠！純粋な公休「休」だけで必ず8日満額配置する！
                 for (let d = 0; d < this.numDays; d++) {
                     const sym = this.grid[s][d].symbol;
-                    if (isFullOffSymbol(sym)) currentOff += 1.0;
-                    else if (isHalfDuty(sym)) currentOff += 0.5;
+                    if (sym === SYMBOLS.OFF) currentOff += 1.0;
+                    else if (sym === '○/休' || sym === '休/○' || sym === '〇/休' || sym === '休/〇') currentOff += 0.5;
                 }
 
                 const pattern = basePatterns[idxInFloor % 4];
@@ -1882,13 +1888,14 @@ class ShiftScheduler {
         }
 
         // 5. 訪問スタッフから月〜金（平日）に毎日1名「8時」勤務を選出！
+        // ★ ユーザー指示: 8時可トグルがONの訪問スタッフのみを候補として選出！OFFの人には絶対に振らない
         const h8StaffList = [];
         for (let s = 0; s < this.numStaff; s++) {
             const staff = this.staffList[s];
             if (staff.isUnused || staff.isSectionChief) continue;
             const sec = staff.lifeSection || '';
             const isVisit = (sec === '訪問' || (!staff.isSunOff && !staff.isSatSunOff && sec !== '通所' && sec !== 'Cl2'));
-            if (isVisit && (staff.can8 || sec === '訪問')) {
+            if (isVisit && staff.can8) {
                 h8StaffList.push(s);
             }
         }
