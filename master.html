@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>勤務予定表 自動作成システム - マスターテーブル</title>
-    <link rel="stylesheet" href="style.css?v=20261111_2345">
+    <link rel="stylesheet" href="style.css?v=20261111_2355">
 </head>
 <body class="theme-master">
 
@@ -455,6 +455,19 @@
 
         <!-- 4. 勤務分析・統計ダッシュボードタブ -->
         <section id="statsTab" class="tab-panel">
+            <!-- ★ ユーザー指示: マスターテーブル平準化ダッシュボードの最上部に「平日出勤ブレ最少化」ボタンを常時大きく表示！ -->
+            <div class="toolbar-card" style="margin-bottom: 1rem; background: #ecfdf5; border: 1.5px solid #a7f3d0; border-radius: 8px; padding: 12px 18px; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 12px; box-shadow: 0 1px 3px rgba(0,0,0,0.05);">
+                <div style="display: flex; align-items: center; gap: 10px;">
+                    <span style="font-size: 1.25rem;">⚖️</span>
+                    <div>
+                        <div style="font-weight: 800; color: #065f46; font-size: 0.95rem;">全フロア平日出勤ブレ最少化システム（マスター統括平準化）</div>
+                        <div style="font-size: 0.8rem; color: #047857;">実務で発生する平日出勤人数・実数の上下ブレ（14.5名等）を、各階の制約（連勤・週休2日・特殊勤務翌日休）を守りながら自動スワップして最小化します</div>
+                    </div>
+                </div>
+                <button class="btn btn-success" id="masterBalanceWeekdaysBtnStats" style="background: #059669; border-color: #047857; color: white; font-weight: 800; font-size: 0.92rem; padding: 8px 18px; display: inline-flex; align-items: center; gap: 6px; box-shadow: 0 2px 4px rgba(5,150,105,0.25); cursor: pointer;" title="全フロア合算の平日出勤実数ブレを各階の公休スワップで最小化（平準化）します">
+                    ⚡ 平日出勤ブレを最少化
+                </button>
+            </div>
             <div class="stats-grid">
                 <!-- 1. 平日の出勤人数（平準化状況 & 平均） -->
                 <div class="stat-card" style="border-top: 4px solid #2563eb;">
@@ -680,8 +693,8 @@
             theme: 'theme-master'
         };
     </script>
-    <script src="solver.js?v=20261111_2345"></script>
-    <script src="app.js?v=20261111_2345"></script>
+    <script src="solver.js?v=20261111_2355"></script>
+    <script src="app.js?v=20261111_2355"></script>
 </body>
 </html>
 

@@ -4121,10 +4121,16 @@ class ShiftScheduler {
                     teamPenalty += 200000; // 枠が多いチームは超強力に抑止
                 }
 
-                // 回数ペナルティ: 既に8時を担当した回数が少ないスタッフを優先（全員に均等に3〜4回ずつ配分）
-                const countPenalty = counts[s] * 3000;
+                // ★ ユーザー指示: 8時は特定スタッフに偏らせず全体に均等配分（1人3〜4回程度に抑制）！
+                // 既に4回以上（または平均回数+1）担当しているスタッフは極力除外
+                const totalCan8Count = this.staffList.filter(st => !st.isUnused && !st.isSectionChief && st.can8).length;
+                const maxAllowed8h = Math.max(3, Math.ceil(this.numDays / Math.max(1, totalCan8Count)) + 1);
+                if (counts[s] >= maxAllowed8h && !force) continue; // 上限到達者は除外！
 
-                // スコア: チーム均等（A対B 14回対14回） + 個人回数平準化 + 直近ローテーション間隔
+                // 回数ペナルティ: 指数関数的にペナルティを爆発させ、全員に完全均等（3〜4回）に分散！
+                const countPenalty = Math.pow(counts[s], 2) * 80000;
+
+                // スコア: 個人回数最優先均等化 + チーム均等（A対B 14回対14回） + 直近ローテーション間隔
                 let score = countPenalty + teamPenalty - (d - lastAssignedDay[s]);
                 candidates.push({ staffIndex: s, score, team });
             }
@@ -4995,15 +5001,26 @@ class ShiftScheduler {
                 }
 
                 if (curH8 === 0) {
-                    // 出勤中の8時可（can8）スタッフから1名選出して8時に変更
+                    // ★ ユーザー指示: 先頭スタッフに集中させず、当タームで8時割当回数が最少のcan8スタッフから公平に選出！
+                    let bestS = -1;
+                    let minH8Count = 999;
                     for (let s = 0; s < this.numStaff; s++) {
                         if (this.staffList[s].isUnused || this.staffList[s].isSectionChief) continue;
                         if (!this.staffList[s].can8) continue;
                         if (this.isSouth && this.getSubFloor(s) !== '南3' && this.getSubFloor(s) !== '南2') continue;
                         if (this.grid[s][d].symbol === SYMBOLS.WORK && !this.grid[s][d].isFixed) {
-                            this.setSymbol(s, d, SYMBOLS.H8, false);
-                            break;
+                            let sH8 = 0;
+                            for (let cd = 0; cd < this.numDays; cd++) {
+                                if (this.grid[s][cd].symbol === SYMBOLS.H8) sH8++;
+                            }
+                            if (sH8 < minH8Count) {
+                                minH8Count = sH8;
+                                bestS = s;
+                            }
                         }
+                    }
+                    if (bestS >= 0) {
+                        this.setSymbol(bestS, d, SYMBOLS.H8, false);
                     }
                 }
             }

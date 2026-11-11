@@ -5593,6 +5593,37 @@ document.addEventListener('DOMContentLoaded', () => {
             }
         });
 
+        // STおよび生活期の固定出勤実数も加算ベースとして読み込み（全体の正確な波を検知）
+        const stLifeBaseReal = new Array(numDays).fill(0);
+        try {
+            const rawSt = localStorage.getItem(`shift_schedule_st_term_${curStartDate}`);
+            if (rawSt) {
+                const parsedSt = JSON.parse(rawSt);
+                const stList = parsedSt.staffList || [];
+                const stGrid = parsedSt.outputGrid || parsedSt.intermediateGrid || [];
+                for (let d = 0; d < numDays; d++) {
+                    stList.forEach((st, s) => {
+                        if (st.isUnused) return;
+                        const sym = (stGrid[s] && stGrid[s][d]) ? (stGrid[s][d].symbol || stGrid[s][d]) : '';
+                        if (isWorkSymbol(sym)) stLifeBaseReal[d] += (st.isHalf ? 0.5 : 1.0);
+                    });
+                }
+            }
+            const rawLife = localStorage.getItem(`shift_schedule_life_term_${curStartDate}`);
+            if (rawLife) {
+                const parsedLife = JSON.parse(rawLife);
+                const lifeList = parsedLife.staffList || [];
+                const lifeGrid = parsedLife.outputGrid || parsedLife.intermediateGrid || [];
+                for (let d = 0; d < numDays; d++) {
+                    lifeList.forEach((st, s) => {
+                        if (st.isUnused) return;
+                        const sym = (lifeGrid[s] && lifeGrid[s][d]) ? (lifeGrid[s][d].symbol || lifeGrid[s][d]) : '';
+                        if (isWorkSymbol(sym)) lifeBaseReal[d] += (st.isHalf ? 0.5 : 1.0);
+                    });
+                }
+            }
+        } catch (e) {}
+
         if (floors.length === 0) {
             alert('平準化対象となる各フロアの勤務表データが見つかりません。先に各階の勤務表を作成してください。');
             return;
@@ -5613,12 +5644,12 @@ document.addEventListener('DOMContentLoaded', () => {
 
         let totalSwaps = 0;
 
-        // 最大60回の反復平準化
-        for (let iter = 0; iter < 60; iter++) {
+        // 最大150回の反復平準化
+        for (let iter = 0; iter < 150; iter++) {
             // 平日の日別全フロア合算実数を集計
             const dailyGrandReal = {};
             weekdayIndices.forEach(d => {
-                let dReal = 0;
+                let dReal = stLifeBaseReal[d] || 0;
                 floors.forEach(fl => {
                     fl.staffList.forEach((st, s) => {
                         if (st.isUnused) return;
@@ -5641,7 +5672,7 @@ document.addEventListener('DOMContentLoaded', () => {
             const minD = sortedWeekdays[sortedWeekdays.length - 1];
             const diff = dailyGrandReal[maxD] - dailyGrandReal[minD];
 
-            if (diff <= 1.5) break; // ブレ幅が1.5名以内なら平準化完了！
+            if (diff <= 2.0) break; // ブレ幅が2.0名以内なら平準化完了！
 
             let swappedInIter = false;
 
@@ -7782,6 +7813,10 @@ function renderMasterIntegrationView() {
         const masterBalanceWeekdaysBtn = document.getElementById('masterBalanceWeekdaysBtn');
     if (masterBalanceWeekdaysBtn) {
         masterBalanceWeekdaysBtn.addEventListener('click', handleMasterBalanceWeekdays);
+    }
+    const masterBalanceWeekdaysBtnStats = document.getElementById('masterBalanceWeekdaysBtnStats');
+    if (masterBalanceWeekdaysBtnStats) {
+        masterBalanceWeekdaysBtnStats.addEventListener('click', handleMasterBalanceWeekdays);
     }
     const copyForExcelBtn = document.getElementById('copyForExcelBtn');
     if (copyForExcelBtn) {
