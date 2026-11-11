@@ -1,3 +1,12 @@
+// ★ リフレッシュ休暇記号判定（上1〜5、下1〜3。これらはいかなる場合も赤字固定にせず通常黒字！）
+function isRefreshHolidaySymbol(sym) {
+    if (!sym || typeof sym !== 'string') return false;
+    const cleanSym = sym.trim();
+    if (['上1', '上2', '上3', '上4', '上5', '下1', '下2', '下3'].includes(cleanSym)) return true;
+    if (cleanSym.startsWith('上') || cleanSym.startsWith('下') || cleanSym.includes('リフ')) return true;
+    return false;
+}
+
 /**
  * 勤務表作成システム - アプリケーションロジック (app.js)
  * 最新版:
@@ -2084,9 +2093,9 @@ document.addEventListener('DOMContentLoaded', () => {
             const curStartDate = document.getElementById('termStartDate')?.value || currentWorkingStartDate;
             for (let d = 0; d < NUM_DAYS; d++) {
                 const val = staff.days[d] || '';
-                const isAutoRef = autoAssignedRefKeys.has(`${curStartDate}:${sIdx},${d}`);
-                // ★ ユーザー指示: 自動配分されたリフ「上1」は赤字固定ではなく通常黒字（編集自由）！
-                const isFixed = val ? (!isAutoRef) : false;
+                const isRef = isRefreshHolidaySymbol(val);
+                // ★ ユーザー指示: リフレッシュ休暇「上1〜5」「下1〜3」はいかなる場合も赤字固定にせず通常黒字（編集自由）！
+                const isFixed = (val && !isRef) ? true : false;
                 const cls = isFixed ? 'day-cell fixed-cell' : (val ? 'day-cell auto-ref-cell' : 'day-cell');
                 const thickCls = getDayBorderClass(d);
                 const lockTitle = isFixed ? `事前固定枠: ${val}（自動上書きロック中）` : (val ? `自動配分リフ: ${val}（編集・変更自由）` : 'クリックで記号入力');
@@ -2450,11 +2459,12 @@ document.addEventListener('DOMContentLoaded', () => {
 
                     // ★ 事前固定希望（本人が希望入力した枠）のみ赤字・太字（fixed-cell）！自動生成された公休等は通常文字
                     const originalWish = (st.days && st.days[d]) ? st.days[d] : '';
-                    const isCellFixed = !!(
+                    const isRef = isRefreshHolidaySymbol(sym) || isRefreshHolidaySymbol(originalWish);
+                    const isCellFixed = !isRef && !!(
                         (originalWish !== '' && originalWish === sym) ||
                         (c && c.isFixed && originalWish !== '')
                     );
-                    const cellCls = isCellFixed ? 'day-cell fixed-cell' : 'day-cell auto-cell';
+                    const cellCls = isCellFixed ? 'day-cell fixed-cell' : (isRef ? 'day-cell auto-ref-cell' : 'day-cell auto-cell');
                     const cellTitle = isCellFixed
                         ? `STスタッフ（事前固定希望）: ${escapeHtmlText(st.name)} / ${sym}`
                         : `STスタッフ（自動配置）: ${escapeHtmlText(st.name)} / ${sym}`;
@@ -3340,7 +3350,7 @@ document.addEventListener('DOMContentLoaded', () => {
         if (isLife && tabId === 'checkTab') {
             // 生活期は基本勤務表がそのまま完成版のため、checkTableに自動同期描画！
             if (lastSolveResult && lastSolveResult.grid) {
-                renderCheckTable(lastSolveResult.grid, lastSolveResult.stats);
+                renderOutputTable(lastSolveResult.grid, lastSolveResult.stats);
             }
         }
         saveCurrentTermToStorage(); // ★ アクティブタブ状態も自動保存
@@ -4071,9 +4081,6 @@ document.addEventListener('DOMContentLoaded', () => {
                         lastScheduler = scheduler;
                         lastSolveResult = result;
                         renderOutputTable(result.grid, result.stats);
-                        if (isLife) {
-                            renderCheckTable(result.grid, result.stats);
-                        }
                         renderStatsDashboard(result.stats);
                         switchTab('outputTab');
                         checkWorkAreaConstraints(false);
@@ -4106,9 +4113,6 @@ document.addEventListener('DOMContentLoaded', () => {
                                 lastScheduler = scheduler;
                                 lastSolveResult = forceResult;
                                 renderOutputTable(forceResult.grid, forceResult.stats);
-                                if (isLife) {
-                                    renderCheckTable(forceResult.grid, forceResult.stats);
-                                }
                                 renderStatsDashboard(forceResult.stats);
                                 switchTab('outputTab');
                                 checkWorkAreaConstraints(false);
@@ -4759,7 +4763,9 @@ document.addEventListener('DOMContentLoaded', () => {
                     for (let d = 0; d < NUM_DAYS; d++) {
                         const cell = (grid && grid[s] && grid[s][d]) ? grid[s][d] : { symbol: '' };
                         const displaySym = cell.symbol ? cell.symbol.replace(/[◦•･◯〇●]/g, '○') : '';
-                        const cls = cell.isFixed ? 'day-cell fixed-cell' : 'day-cell auto-cell';
+                        const isRef = isRefreshHolidaySymbol(displaySym) || isRefreshHolidaySymbol(cell.symbol);
+                        const isFixedCell = cell.isFixed && !isRef;
+                        const cls = isFixedCell ? 'day-cell fixed-cell' : (isRef ? 'day-cell auto-ref-cell' : 'day-cell auto-cell');
                         const thickCls = getDayBorderClass(d);
                         const titleText = cell.isFixed ? '🔒 事前固定希望枠（赤字・太字保持）' : 'システム自動配置';
                         bodyHtml += `<td class="${cls} ${thickCls}" data-s="${s}" data-d="${d}" title="${titleText}" style="${rowBorderB}">${displaySym}</td>`;
@@ -4793,7 +4799,9 @@ document.addEventListener('DOMContentLoaded', () => {
                     for (let d = 0; d < NUM_DAYS; d++) {
                         const cell = (grid && grid[s] && grid[s][d]) ? grid[s][d] : { symbol: '' };
                         const displaySym = cell.symbol ? cell.symbol.replace(/[◦•･◯〇●]/g, '○') : '';
-                        const cls = cell.isFixed ? 'day-cell fixed-cell' : 'day-cell auto-cell';
+                        const isRef = isRefreshHolidaySymbol(displaySym) || isRefreshHolidaySymbol(cell.symbol);
+                        const isFixedCell = cell.isFixed && !isRef;
+                        const cls = isFixedCell ? 'day-cell fixed-cell' : (isRef ? 'day-cell auto-ref-cell' : 'day-cell auto-cell');
                         const thickCls = getDayBorderClass(d);
                         bodyHtml += `<td class="${cls} ${thickCls}" data-s="${s}" data-d="${d}">${displaySym}</td>`;
                     }
@@ -4825,9 +4833,10 @@ document.addEventListener('DOMContentLoaded', () => {
                 for (let d = 0; d < NUM_DAYS; d++) {
                     const cell = grid[s][d];
                     const displaySym = cell.symbol ? cell.symbol.replace(/[◦•･◯〇●]/g, '○') : '';
-                    const isAutoRef = cell.isAutoAssignedRef || autoAssignedRefKeys.has(`${curStartDate}:${s},${d}`);
-                    const isCellFixed = cell.isFixed && !isAutoRef;
-                    const cls = isCellFixed ? 'day-cell fixed-cell' : (isAutoRef ? 'day-cell auto-ref-cell' : 'day-cell auto-cell');
+                    const isRef = isRefreshHolidaySymbol(displaySym) || isRefreshHolidaySymbol(cell.symbol);
+                    // ★ ユーザー指示: リフレッシュ休暇「上1」等は希望と同じ赤字にせず、通常黒字（auto-ref-cell）！
+                    const isCellFixed = cell.isFixed && !isRef;
+                    const cls = isCellFixed ? 'day-cell fixed-cell' : (isRef ? 'day-cell auto-ref-cell' : 'day-cell auto-cell');
                     const thickCls = getDayBorderClass(d);
                     const titleText = isCellFixed ? '🔒 事前固定希望枠（赤字・太字保持）' : (isAutoRef ? '🌴 自動配分リフ（通常編集自由）' : 'システム自動配置');
                     bodyHtml += `<td class="${cls} ${thickCls} ${rowBottomCls}" data-s="${s}" data-d="${d}" title="${titleText}">${displaySym}</td>`;
@@ -4893,11 +4902,12 @@ document.addEventListener('DOMContentLoaded', () => {
 
                     // ★ 事前固定希望（本人が希望入力した枠）のみ赤字・太字（fixed-cell）！自動生成された公休等は通常文字
                     const originalWish = (st.days && st.days[d]) ? st.days[d] : '';
-                    const isCellFixed = !!(
+                    const isRef = isRefreshHolidaySymbol(sym) || isRefreshHolidaySymbol(originalWish);
+                    const isCellFixed = !isRef && !!(
                         (originalWish !== '' && originalWish === sym) ||
                         (c && c.isFixed && originalWish !== '')
                     );
-                    const cellCls = isCellFixed ? 'day-cell fixed-cell' : 'day-cell auto-cell';
+                    const cellCls = isCellFixed ? 'day-cell fixed-cell' : (isRef ? 'day-cell auto-ref-cell' : 'day-cell auto-cell');
                     const cellTitle = isCellFixed
                         ? `STスタッフ（事前固定希望）: ${escapeHtmlText(st.name)} / ${sym}`
                         : `STスタッフ（自動配置）: ${escapeHtmlText(st.name)} / ${sym}`;
@@ -4965,8 +4975,9 @@ document.addEventListener('DOMContentLoaded', () => {
                         haRefCount += 1.0;
                     }
 
-                    const isCellFixed = (c && typeof c === 'object') ? !!c.isFixed : false;
-                    const cellCls = isCellFixed ? 'day-cell fixed-cell' : 'day-cell auto-cell';
+                    const isRef = isRefreshHolidaySymbol(sym);
+                    const isCellFixed = !isRef && ((c && typeof c === 'object') ? !!c.isFixed : false);
+                    const cellCls = isCellFixed ? 'day-cell fixed-cell' : (isRef ? 'day-cell auto-ref-cell' : 'day-cell auto-cell');
                     const cellTitle = `ハーフマン応援（生活期連携）: ${escapeHtmlText(st.name)} / ${sym}`;
 
                     bodyHtml += `<td class="${thickCls} ${cellCls} editable-ha-cell" data-is-ha="1" data-ha-id="${st.id || ''}" data-ha-idx="${stIdx}" data-d="${d}" style="text-align:center; font-size:0.85rem; background:#f0fdf4; cursor:pointer;" title="${cellTitle}">${sym}</td>`;
@@ -6278,15 +6289,16 @@ function renderMasterIntegrationView() {
 
                     // ★ ご要望: 特殊勤務などに色が付いているが不要（白背景・通常文字、事前希望のみ赤字保持）
                     const originalWish = (s.days && s.days[d]) ? s.days[d] : '';
-                    const isCellFixed = !!(
+                    const isRef = isRefreshHolidaySymbol(sym) || isRefreshHolidaySymbol(originalWish);
+                    const isCellFixed = !isRef && !!(
                         (originalWish !== '' && originalWish === sym) ||
                         (cell && typeof cell === 'object' && cell.isFixed && originalWish !== '')
                     );
 
-                    const color = isCellFixed ? '#dc2626' : '#334155';
+                    const color = isCellFixed ? '#dc2626' : (isRef ? '#0f172a' : '#334155');
                     const bg = '#ffffff';
 
-                    const fixedCls = isCellFixed ? 'fixed-cell' : 'auto-cell';
+                    const fixedCls = isCellFixed ? 'fixed-cell' : (isRef ? 'auto-ref-cell' : 'auto-cell');
                     const titleText = isCellFixed ? '🔒 事前固定希望枠（赤字・クリックで修正可能）' : 'システム自動配置（クリックで修正可能）';
 
                     html += `<td class="${thickCls} ${fixedCls} master-editable-cell col-day-fixed" data-floor="${fc.id}" data-is-st="${item.isST ? '1' : '0'}" data-is-ha="${item.isHa ? '1' : '0'}" data-ha-idx="${item.lifeStaffIdx !== undefined ? item.lifeStaffIdx : -1}" data-staff-id="${s.id || ''}" data-staff-name="${escapeHtmlText(s.name)}" data-day="${d}" title="${titleText}" style="width:52px; min-width:52px; max-width:52px; background:${bg}; color:${color}; font-weight:700; border-bottom:1px solid #e2e8f0; text-align:center; cursor:pointer;">${sym}</td>`;

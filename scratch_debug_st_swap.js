@@ -1,0 +1,69 @@
+const fs = require('fs');
+const solverCode = fs.readFileSync('solver.js', 'utf-8');
+const vm = require('vm');
+const sandbox = { console, require, module: {}, exports: {}, window: {} };
+sandbox.window = sandbox;
+vm.createContext(sandbox);
+vm.runInContext(solverCode, sandbox);
+
+const staffList = [];
+for (let i = 1; i <= 36; i++) {
+    const floor = (i <= 4) ? '1F' : ((i <= 8) ? '2F' : ((i <= 12) ? '3F' : ((i <= 16) ? '南' : '')));
+    const canSched = (i === 1 || i === 2 || i === 5 || i === 6 || i === 9 || i === 10 || i === 13 || i === 14);
+    const isSectionChief = (i === 1);
+    const isSubChief = (i === 5 || i === 9 || i === 13);
+    const isFullTime = (i === 3 || i === 8 || i === 12 || i === 16);
+    const isHalf = (i === 2);
+    staffList.push({
+        id: i,
+        name: 'ST ' + String(i).padStart(2, '0'),
+        isUnused: (i > 16),
+        floor: floor,
+        section: '',
+        can8: false,
+        noEarly: false,
+        noLate: true,
+        noEve: true,
+        canSched: canSched,
+        isSectionChief: isSectionChief,
+        isChief: false,
+        isSubChief: isSubChief,
+        isHalf: isHalf,
+        isZeroCount: false,
+        isFirstYear: false,
+        lifeSection: '',
+        haSection: '',
+        jobTitle: '',
+        isFullTime: isFullTime,
+        allow6Consec: false,
+        isSatSunOff: false,
+        isSunOff: false,
+        prevName: '',
+        remarks: '',
+        prevDays: ['', '', '', '', ''],
+        days: new Array(28).fill('')
+    });
+}
+
+const scheduler = new sandbox.ShiftScheduler(staffList, { isST: true, deptId: 'st', standardHolidays: 8, numDays: 28 });
+scheduler.solveST({ assignSpecial: true });
+
+// なぜスワップで isStaffHardValid が false になったか検証
+const highD = 2; // 実数3.0の日
+const lowD = 3;  // 実数1.5の日
+
+// highDに出勤、lowDに休みのスタッフ
+for (let s = 0; s < 4; s++) {
+    const symH = scheduler.grid[s][highD].symbol;
+    const symL = scheduler.grid[s][lowD].symbol;
+    console.log(`Staff ${s} (${staffList[s].name}): highD=${symH}, lowD=${symL}`);
+    if (sandbox.isWorkSymbol(symH) && symL === '休') {
+        scheduler.grid[s][highD] = { symbol: '休', isFixed: false };
+        scheduler.grid[s][lowD] = { symbol: symH, isFixed: false };
+        const valid = scheduler.isStaffHardValid(s);
+        console.log(`  -> Swapping staff ${s}: isStaffHardValid = ${valid}`);
+        // 元に戻す
+        scheduler.grid[s][highD] = { symbol: symH, isFixed: false };
+        scheduler.grid[s][lowD] = { symbol: symL, isFixed: false };
+    }
+}
