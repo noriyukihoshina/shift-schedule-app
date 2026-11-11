@@ -1425,7 +1425,13 @@ tr.drag-over-row {
 
 /* ★ 添付1: 4/28と出勤集計の間にはさらに太い線が必要 */
 .border-thickest-right {
-    border-right: 3.5px solid #1e293b !important;
+    border-right: 2.5px solid #334155 !important;
+}
+
+/* ★ 自動配分リフ（通常文字・黒字・編集自由） */
+.auto-ref-cell {
+    color: #0f172a !important;
+    font-weight: 500 !important;
 }
 
 /* ★ 添付3: 公休9等の網掛け警告 */
@@ -1443,15 +1449,15 @@ td.st-floor-divider-cell {
     border-bottom: 3.5px solid #1e293b !important;
 }
 
-/* ★ 添付1: 4/28と出勤集計の間にはさらに太い線が必要 (4.5px極太線) */
+/* ★ 添付1: 最終日と出勤集計の間の縦罫線（ヘッダーとデータ行で線の太さを上下完全に揃える） */
 .border-thickest-right {
-    border-right: 4.5px solid #0f172a !important;
+    border-right: 2.5px solid #334155 !important;
 }
 th[title="出勤日数"],
 td.stat-work-col,
 th.border-thick-left,
 td.border-thick-left {
-    border-left: 4.5px solid #0f172a !important;
+    border-left: none !important;
 }
 
 /* ★ 添付4: マスターテーブル各フロア間の横境界線を最右端まで太線貫通 */

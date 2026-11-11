@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>勤務予定表 自動作成システム - マスターテーブル</title>
-    <link rel="stylesheet" href="style.css?v=1794325176">
+    <link rel="stylesheet" href="style.css?v=1794405993">
 </head>
 <body class="theme-master">
 
@@ -242,6 +242,9 @@
                         <span id="outputTitleDisplay" style="font-weight: 800; color: #1e293b; font-size: 1.05rem;">✏️ 修正作業エリア（仮自動生成・微修正）</span>
                     </div>
                     <div class="action-group" style="display: flex; gap: 8px; flex-wrap: wrap; align-items: center;">
+                                                <button class="btn btn-success" id="masterBalanceWeekdaysBtn" style="background: #059669; border-color: #047857; color: white; font-weight: 700; font-size: 0.82rem; padding: 5px 12px; display: inline-flex; align-items: center; gap: 4px;" title="実務で発生する平日出勤人数・実数の上下ブレ（最大8.5名）を、各階の制約を守りながら各階の公休を自動微修正（スワップ）してブレ幅を最小化（平準化）します">
+                            ⚡ 平日出勤ブレを最少化
+                        </button>
                         <button class="btn btn-primary" id="copyForExcelBtn" style="font-size: 0.82rem; padding: 5px 12px; font-weight: 700;" title="警告やブロックなしでExcelに直接貼り付け可能！事前希望枠の赤字太字・罫線・自動計算数式を保持してクリップボードにコピーします">
                             📋 Excelへ一発貼り付け用コピー（赤字・数式付き）
                         </button>
@@ -677,8 +680,8 @@
             theme: 'theme-master'
         };
     </script>
-    <script src="solver.js?v=20261029_rev90"></script>
-    <script src="app.js?v=1794325176"></script>
+    <script src="solver.js?v=1794405993"></script>
+    <script src="app.js?v=1794405993"></script>
 </body>
 </html>
 

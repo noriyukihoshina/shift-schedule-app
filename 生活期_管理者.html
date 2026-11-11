@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>勤務予定表 自動作成システム - 生活期＋管理者</title>
-    <link rel="stylesheet" href="style.css?v=1794325176">
+    <link rel="stylesheet" href="style.css?v=1794405993">
 </head>
 <body>
 
@@ -236,9 +236,6 @@
                         <button class="btn btn-outline" id="exportExcelBtn" style="font-size: 0.82rem; padding: 5px 12px; font-weight: 600;" title="警告やブロックなしで開ける本物のExcel形式(.xlsx)で勤務表をダウンロード（A3横向き印刷設定・動的数式付き）">
                             📊 スプレッドシート保存 (.xlsx)
                         </button>
-                        <button class="btn btn-success" id="outputAssignSpecialBtn" style="background: #059669; border-color: #059669; color: white; font-weight: 700; font-size: 0.82rem; padding: 5px 12px;" title="基本勤務表の「○」から、早3名・遅1名・E2名・8時1名を割り当てて「最終チェック&完成」へ進みます">
-                            ✨ 特殊勤務を入れる
-                        </button>
                     </div>
                 </div>
 
@@ -297,7 +294,7 @@
 
                 <!-- 3行目: ガイドライン・注記 -->
                 <div style="font-size: 0.8rem; color: #64748b; padding-top: 4px;">
-                    💡 仮自動生成された基本勤務表です。Excelに貼り付けて手動微修正、またはUI上で直接編集できます（※この段階では特殊勤務が入っていなくてもエラーになりません）。完了したら「✨ 特殊勤務を入れる」を押してください。
+                    💡 自動生成された生活期勤務表です。Excelに貼り付けて手動微修正、またはUI上で直接編集・確認が可能です。
                 </div>
             </div>
 
@@ -398,7 +395,7 @@
 
                 <!-- 3行目: ガイドライン・注記 -->
                 <div style="font-size: 0.8rem; color: #64748b; padding-top: 4px;">
-                    💡 特殊勤務（早・遅・E・8時）が割り当てられた完成勤務表です。Excelにコピペや修正ファイル取込、UI直接編集、制約チェック（特殊勤務の配置過不足も含む）、Excel保存・印刷が可能です。
+                    💡 生活期の完成勤務表です。Excelにコピペや修正ファイル取込、UI直接編集、制約チェック（特殊勤務の配置過不足も含む）、Excel保存・印刷が可能です。
                 </div>
             </div>
 
@@ -519,9 +516,6 @@
                 <button class="btn btn-warning" id="forceSolveBtn" style="display: none; background: #ea580c; border-color: #ea580c; color: white; font-weight: 700;">
                     ⚡ 無視して自動生成する
                 </button>
-                <button class="btn btn-success" id="forceAssignSpecialBtn" style="display: none; background: #059669; border-color: #059669; color: white; font-weight: 700;">
-                    ✨ 無視して特殊勤務を入れる
-                </button>
             </div>
         </div>
     </div>
@@ -623,7 +617,7 @@
             password: '66666'
         };
     </script>
-    <script src="solver.js?v=20261029_rev90"></script>
-    <script src="app.js?v=1794325176"></script>
+    <script src="solver.js?v=1794405993"></script>
+    <script src="app.js?v=1794405993"></script>
 </body>
 </html>
