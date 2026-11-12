@@ -493,8 +493,8 @@ function validateInitialState(staffList, options = {}) {
                         const sym = sub.days[d];
                         if (!isWishLeaveSymbol(sym) && sym !== SYMBOLS.TRIP && !isExcludeSymbol(sym)) {
                             const sec = sub.section || '';
-                            if (sec === 'PT A' || sec === 'OT A') subAAvailable++;
-                            else if (sec === 'PT B' || sec === 'OT B') subBAvailable++;
+                            if (sec === 'PT A' || sec === 'OT A' || sec.includes('A') || sec.includes('2')) subAAvailable++;
+                            else if (sec === 'PT B' || sec === 'OT B' || sec.includes('B') || sec.includes('3')) subBAvailable++;
                         }
                     });
 
@@ -2146,7 +2146,13 @@ class ShiftScheduler {
         // ステップ3: ソフト制約の最適化（単発勤務の解消、人数平準化）
         this.optimizeSoftConstraints();
 
-        // ★ ユーザー指示: 週休2日違反・単発勤務等のスマート自動微修正
+        // ★ 係長不在日の主任・副主任出勤保証リペア
+        this.ensureRoleCoverage();
+
+        // ★ スケ可スタッフ毎日2名以上出勤保証リペア
+        this.ensureSchedCoverage();
+
+        // ★ ユーザー指示: 週休2日違反・単発勤務・連勤違反等のスマート自動微修正
         this.repairScheduleViolations();
 
         // 基本制約の検証
@@ -3195,8 +3201,8 @@ class ShiftScheduler {
             if (st.isChief) chIndices.push(s);
             if (st.isSubChief) {
                 const sec = st.section || '';
-                if (sec === 'PT A' || sec === 'OT A') subAIndices.push(s);
-                else if (sec === 'PT B' || sec === 'OT B') subBIndices.push(s);
+                if (sec === 'PT A' || sec === 'OT A' || sec.includes('A') || sec.includes('2')) subAIndices.push(s);
+                else if (sec === 'PT B' || sec === 'OT B' || sec.includes('B') || sec.includes('3')) subBIndices.push(s);
             }
         }
         if (this.isST) return; // ST単独では役職者必須制約なし
@@ -3272,6 +3278,57 @@ class ShiftScheduler {
             }
             if (!subBIndices.some(s => isWorkingOnDay(s, d))) {
                 tryBringInStaffOnDay(subBIndices, d);
+            }
+        }
+    }
+
+    /**
+     * スケ可スタッフ（canSched）が毎日日勤（○）で2名以上出勤しているかを全日で点検し、
+     * 不足日があればスケ可スタッフの他日の非固定公休をスワップして自動充足する
+     */
+    ensureSchedCoverage() {
+        if (this.isST || this.isLife) return;
+        const schedIndices = [];
+        for (let s = 0; s < this.numStaff; s++) {
+            if (!this.staffList[s].isUnused && this.staffList[s].canSched) {
+                schedIndices.push(s);
+            }
+        }
+        if (schedIndices.length < 2) return;
+
+        for (let d = 0; d < this.numDays; d++) {
+            let curCount = 0;
+            for (const s of schedIndices) {
+                const sym = this.grid[s][d].symbol;
+                if (sym === SYMBOLS.WORK || sym === '○') curCount++;
+            }
+            if (curCount < 2) {
+                for (const s of schedIndices) {
+                    if (curCount >= 2) break;
+                    if (this.grid[s][d].isFixed || this.grid[s][d].isAfterPreSpecial || this.grid[s][d].symbol !== SYMBOLS.OFF) continue;
+
+                    for (let otherD = 0; otherD < this.numDays; otherD++) {
+                        if (otherD === d || this.grid[s][otherD].isFixed || this.grid[s][otherD].symbol !== SYMBOLS.WORK) continue;
+
+                        let otherSchedCount = 0;
+                        for (const os of schedIndices) {
+                            const osSym = this.grid[os][otherD].symbol;
+                            if (osSym === SYMBOLS.WORK || osSym === '○') otherSchedCount++;
+                        }
+                        if (otherSchedCount <= 2) continue;
+
+                        this.setSymbol(s, d, SYMBOLS.WORK, false);
+                        this.setSymbol(s, otherD, SYMBOLS.OFF, false);
+
+                        if (this.isStaffHardValid(s) && this.isGlobalAttributesValid()) {
+                            curCount++;
+                            break;
+                        } else {
+                            this.setSymbol(s, d, SYMBOLS.OFF, false);
+                            this.setSymbol(s, otherD, SYMBOLS.WORK, false);
+                        }
+                    }
+                }
             }
         }
     }
@@ -3399,8 +3456,9 @@ class ShiftScheduler {
                                 const subIdx = this.staffList.indexOf(sub);
                                 const subSym = this.grid[subIdx][d].symbol;
                                 if (!isHolidaySymbol(subSym) && subSym !== SYMBOLS.TRIP && !isExcludeSymbol(subSym)) {
-                                    if (sub.section === 'PT A' || sub.section === 'OT A') subAAvail = true;
-                                    else if (sub.section === 'PT B' || sub.section === 'OT B') subBAvail = true;
+                                    const sec = sub.section || '';
+                                    if (sec === 'PT A' || sec === 'OT A' || sec.includes('A') || sec.includes('2')) subAAvail = true;
+                                    else if (sec === 'PT B' || sec === 'OT B' || sec.includes('B') || sec.includes('3')) subBAvail = true;
                                 }
                             });
                             if (!(subAAvail && subBAvail)) return false;
@@ -4870,12 +4928,13 @@ class ShiftScheduler {
      * ユーザー指示: 「休〇休」は1勤です。可能な限り作らない。公休をひとつずらせば済む話です。
      * 単発勤務（前日も翌日も休日）を検知し、前後の公休をずらすなどして2連勤または連休に変換！
      */
-                    eliminateSingleDayWork() {
+    eliminateSingleDayWork() {
         const dates = this.dates || [];
         for (let s = 0; s < this.numStaff; s++) {
-            if (this.staffList[s].isUnused) continue;
+            if (this.staffList[s].isUnused || this.staffList[s].isSectionChief) continue;
 
             for (let pass = 0; pass < 3; pass++) {
+                let fixedAnyInPass = false;
                 for (let d = 0; d < this.numDays; d++) {
                     const sym = this.grid[s][d].symbol;
                     if (sym !== SYMBOLS.WORK || this.grid[s][d].isFixed) continue;
@@ -4890,7 +4949,14 @@ class ShiftScheduler {
                         if (d + 2 < this.numDays && !this.grid[s][d + 1].isFixed && this.grid[s][d + 1].symbol === SYMBOLS.OFF && !this.grid[s][d + 2].isFixed && this.grid[s][d + 2].symbol === SYMBOLS.WORK) {
                             this.grid[s][d + 1].symbol = SYMBOLS.WORK;
                             this.grid[s][d + 2].symbol = SYMBOLS.OFF;
-                            continue;
+                            if (this.isStaffHardValid(s)) {
+                                fixedAnyInPass = true;
+                                continue;
+                            } else {
+                                // 連勤・週休違反になるため安全にロールバック！
+                                this.grid[s][d + 1].symbol = SYMBOLS.OFF;
+                                this.grid[s][d + 2].symbol = SYMBOLS.WORK;
+                            }
                         }
 
                         // パターン2: 前々日(d-2)が○なら、公休(d-1)をd-2にずらす！
@@ -4898,19 +4964,33 @@ class ShiftScheduler {
                         if (d - 2 >= 0 && !this.grid[s][d - 1].isFixed && this.grid[s][d - 1].symbol === SYMBOLS.OFF && !this.grid[s][d - 2].isFixed && this.grid[s][d - 2].symbol === SYMBOLS.WORK) {
                             this.grid[s][d - 1].symbol = SYMBOLS.WORK;
                             this.grid[s][d - 2].symbol = SYMBOLS.OFF;
-                            continue;
+                            if (this.isStaffHardValid(s)) {
+                                fixedAnyInPass = true;
+                                continue;
+                            } else {
+                                // 連勤・週休違反になるため安全にロールバック！
+                                this.grid[s][d - 1].symbol = SYMBOLS.OFF;
+                                this.grid[s][d - 2].symbol = SYMBOLS.WORK;
+                            }
                         }
 
                         // パターン3: d+1(休)の次の日が休日で連休になっている場合、d(○)を休みにし、d+1(休)を○にする
                         // [休, ○(d), 休(d+1), 休(d+2)] => [休, 休(d), ○(d+1), 休(d+2)]
-                        // または d(○)を休みにし、連勤中の他の未固定公休を出勤にする
                         if (d + 1 < this.numDays && !this.grid[s][d + 1].isFixed && this.grid[s][d + 1].symbol === SYMBOLS.OFF) {
                             this.grid[s][d].symbol = SYMBOLS.OFF;
                             this.grid[s][d + 1].symbol = SYMBOLS.WORK;
-                            continue;
+                            if (this.isStaffHardValid(s)) {
+                                fixedAnyInPass = true;
+                                continue;
+                            } else {
+                                // 連勤・週休違反になるため安全にロールバック！
+                                this.grid[s][d].symbol = SYMBOLS.WORK;
+                                this.grid[s][d + 1].symbol = SYMBOLS.OFF;
+                            }
                         }
                     }
                 }
+                if (!fixedAnyInPass) break;
             }
         }
     }
@@ -5009,6 +5089,17 @@ class ShiftScheduler {
                         if (!this.staffList[s].can8) continue;
                         if (this.isSouth && this.getSubFloor(s) !== '南3' && this.getSubFloor(s) !== '南2') continue;
                         if (this.grid[s][d].symbol === SYMBOLS.WORK && !this.grid[s][d].isFixed) {
+                            // ★ スケ可保護: このスタッフを8時に変更しても、当日のスケ可かつ日勤○が2名以上残るか
+                            if (this.staffList[s].canSched) {
+                                let remSchedWork = 0;
+                                for (let os = 0; os < this.numStaff; os++) {
+                                    if (os === s || this.staffList[os].isUnused) continue;
+                                    if (this.staffList[os].canSched && this.grid[os][d].symbol === SYMBOLS.WORK) remSchedWork++;
+                                }
+                                const totalSchedStaff = this.staffList.filter(st => !st.isUnused && st.canSched).length;
+                                if (totalSchedStaff >= 2 && remSchedWork < 2) continue;
+                            }
+
                             let sH8 = 0;
                             for (let cd = 0; cd < this.numDays; cd++) {
                                 if (this.grid[s][cd].symbol === SYMBOLS.H8) sH8++;
@@ -5062,7 +5153,7 @@ class ShiftScheduler {
                                                 // 一時スワップ
                                                 this.setSymbol(s, od, SYMBOLS.WORK, false);
                                                 this.setSymbol(s, wd, SYMBOLS.OFF, false);
-                                                if (this.isStaffHardValid(s)) {
+                                                if (this.isStaffHardValid(s) && this.isGlobalAttributesValid()) {
                                                     fixedWeek = true;
                                                     break;
                                                 }
@@ -5085,6 +5176,65 @@ class ShiftScheduler {
 
         // --- 4. 単発勤務「休 ○ 休」の再撲滅 ---
         this.eliminateSingleDayWork();
+
+        // --- 5. 連勤違反（公休間隔上限超過・上限5連勤違反）のスマート自動リペア ---
+        // ユーザー指示:「公休をひとつずらせば済む話です。組んだ後に微修正するシステムは組めないの？」
+        for (let pass = 0; pass < 3; pass++) {
+            let fixedConsec = false;
+            for (let s = 0; s < this.numStaff; s++) {
+                if (this.staffList[s].isUnused || this.staffList[s].isSectionChief) continue;
+                if (!this.isStaffHardValid(s)) {
+                    const sequence = [];
+                    for (let p = 0; p < 5; p++) {
+                        sequence.push((this.staffList[s].prevDays && this.staffList[s].prevDays[p]) || '');
+                    }
+                    for (let d = 0; d < this.numDays; d++) sequence.push(this.grid[s][d].symbol);
+
+                    let streak = 0;
+                    let vEndSeq = -1;
+                    const maxAllowed = this.staffList[s].allow6Consec ? 6 : 5;
+                    for (let idx = 0; idx < sequence.length; idx++) {
+                        if (!isPurePublicOffSymbol(sequence[idx])) {
+                            streak++;
+                            if (streak > maxAllowed) {
+                                vEndSeq = idx;
+                                break;
+                            }
+                        } else {
+                            streak = 0;
+                        }
+                    }
+
+                    if (vEndSeq >= 5) {
+                        const vEndD = vEndSeq - 5;
+                        // 連勤期間内の非固定○スタッフを休にする候補日
+                        for (let targetD = vEndD; targetD >= Math.max(0, vEndD - maxAllowed); targetD--) {
+                            if (this.grid[s][targetD].isFixed || this.grid[s][targetD].symbol !== SYMBOLS.WORK) continue;
+
+                            // 別の週や連勤でない日の非固定休を探してスワップ
+                            for (let holD = 0; holD < this.numDays; holD++) {
+                                if (holD === targetD || this.grid[s][holD].isFixed || this.grid[s][holD].symbol !== SYMBOLS.OFF) continue;
+                                if (holD > 0 && isRestrictedSpecial(this.grid[s][holD - 1].symbol)) continue;
+
+                                this.setSymbol(s, targetD, SYMBOLS.OFF, false);
+                                this.setSymbol(s, holD, SYMBOLS.WORK, false);
+
+                                if (this.isStaffHardValid(s) && this.isGlobalAttributesValid()) {
+                                    fixedConsec = true;
+                                    break;
+                                } else {
+                                    // ロールバック
+                                    this.setSymbol(s, targetD, SYMBOLS.WORK, false);
+                                    this.setSymbol(s, holD, SYMBOLS.OFF, false);
+                                }
+                            }
+                            if (fixedConsec) break;
+                        }
+                    }
+                }
+            }
+            if (!fixedConsec) break;
+        }
     }
 
     balanceDailyWorkforce() {
@@ -5307,8 +5457,9 @@ class ShiftScheduler {
             if (st.isSectionChief) scIndices.push(s);
             if (st.isChief) chIndices.push(s);
             if (st.isSubChief) {
-                if (st.section === 'PT A' || st.section === 'OT A') subTeamAIndices.push(s);
-                if (st.section === 'PT B' || st.section === 'OT B') subTeamBIndices.push(s);
+                const sec = st.section || '';
+                if (sec === 'PT A' || sec === 'OT A' || sec.includes('A') || sec.includes('2')) subTeamAIndices.push(s);
+                else if (sec === 'PT B' || sec === 'OT B' || sec.includes('B') || sec.includes('3')) subTeamBIndices.push(s);
             }
         }
 
@@ -5544,8 +5695,9 @@ class ShiftScheduler {
                             const subSIdx = this.staffList.indexOf(sub);
                             const sym = this.grid[subSIdx][d].symbol;
                             if (!isHolidaySymbol(sym) && sym !== SYMBOLS.TRIP && !isExcludeSymbol(sym)) {
-                                if (sub.section === 'PT A' || sub.section === 'OT A') subAWorking = true;
-                                else if (sub.section === 'PT B' || sub.section === 'OT B') subBWorking = true;
+                                const sec = sub.section || '';
+                                if (sec === 'PT A' || sec === 'OT A' || sec.includes('A') || sec.includes('2')) subAWorking = true;
+                                else if (sec === 'PT B' || sec === 'OT B' || sec.includes('B') || sec.includes('3')) subBWorking = true;
                             }
                         });
                         if (!(subAWorking && subBWorking)) {
@@ -6220,8 +6372,9 @@ function validateScheduleGrid(grid, staffList, options = {}) {
                     subChStaffFinal.forEach(sub => {
                         const sym = getSym(staffList.indexOf(sub), d);
                         if (!isHolidaySymbol(sym) && sym !== SYMBOLS.TRIP && !isExcludeSymbol(sym)) {
-                            if (sub.section === 'PT A' || sub.section === 'OT A') subAWorking = true;
-                            else if (sub.section === 'PT B' || sub.section === 'OT B') subBWorking = true;
+                            const sec = sub.section || '';
+                            if (sec === 'PT A' || sec === 'OT A' || sec.includes('A') || sec.includes('2')) subAWorking = true;
+                            else if (sec === 'PT B' || sec === 'OT B' || sec.includes('B') || sec.includes('3')) subBWorking = true;
                         }
                     });
 

@@ -3511,8 +3511,15 @@ document.addEventListener('DOMContentLoaded', () => {
 
         const outTitle = document.getElementById('outputTitleDisplay');
         if (outTitle) outTitle.textContent = `✏️ ${title}（修正作業エリア）`;
+        const isMasterView = isMaster || !!document.getElementById('masterTermSelect');
         const checkTitle = document.getElementById('checkTitleDisplay');
-        if (checkTitle && !isMaster) checkTitle.textContent = `🔍 ${title}（最終チェック&完成）`;
+        if (checkTitle) {
+            if (isMasterView) {
+                checkTitle.textContent = `🏢 ${title}（全フロア統合サマリー＆勤務詳細集約）`;
+            } else {
+                checkTitle.textContent = `🔍 ${title}（最終チェック&完成）`;
+            }
+        }
 
         if (typeof updateRefreshBadge === 'function') {
             updateRefreshBadge(dates);
@@ -4093,31 +4100,56 @@ document.addEventListener('DOMContentLoaded', () => {
                             subtitle: '事前入力枠に制約違反や物理的衝突があります（該当セルを青い網掛けで表示中）。',
                             desc: '内容をご確認の上修正するか、あえて無視して基本勤務表の自動生成を進めることができます。',
                             onForceSolve: () => {
-                                // エラーを無視して基本勤務表を強制生成！
-                                const forceResult = scheduler.solveBaseSchedule({ force: true });
-                                if (forceResult.grid) {
-                                    for (let s = 0; s < NUM_STAFF; s++) {
-                                        if (!forceResult.grid[s]) continue;
-                                        for (let d = 0; d < NUM_DAYS; d++) {
-                                            const cell = forceResult.grid[s][d];
-                                            if (!cell) continue;
-                                            const sym = cell.symbol || cell;
-                                            const isRef = SYMBOLS.REF_SUMMER.includes(sym) || SYMBOLS.REF_WINTER.includes(sym);
-                                            if (isRef && autoAssignedRefKeys.has(`${curStartDate}:${s},${d}`)) {
-                                                cell.isFixed = false;
-                                                cell.isAutoAssignedRef = true;
+                                try {
+                                    // エラーを無視して基本勤務表を安全に強制生成！
+                                    const freshScheduler = new ShiftScheduler(staffList, {
+                                        standardHolidays: stdHolidayVal,
+                                        dates: term.dates,
+                                        dayOffsets: [...dayOffsets],
+                                        isST: isST,
+                                        isSouth: isSouth,
+                                        isLife: isLife,
+                                        lifeDailyWork: getLinkedLifeDailyWork(),
+                                        stChiefWorkingDays: stCoverage.chiefDays,
+                                        stSubChiefWorkingDays: stCoverage.subChiefDays,
+                                        stDailyWork: getLinkedSTDailyWork(),
+                                        stDailyHeadCount: getLinkedSTDailyHeadCount(),
+                                        stDailyFtWork: getLinkedSTDailyFtWork(),
+                                        stDailyEarly: getLinkedSTDailyEarly(),
+                                        stDailyLate: getLinkedSTDailyLate(),
+                                        stDailyEve: getLinkedSTDailyEve(),
+                                        stFloorFtCount: getLinkedSTFloorFtCount()
+                                    });
+                                    const forceResult = freshScheduler.solveBaseSchedule({ force: true });
+                                    if (forceResult && forceResult.grid) {
+                                        for (let s = 0; s < NUM_STAFF; s++) {
+                                            if (!forceResult.grid[s]) continue;
+                                            for (let d = 0; d < NUM_DAYS; d++) {
+                                                const cell = forceResult.grid[s][d];
+                                                if (!cell) continue;
+                                                const sym = cell.symbol || cell;
+                                                const isRef = SYMBOLS.REF_SUMMER.includes(sym) || SYMBOLS.REF_WINTER.includes(sym);
+                                                if (isRef && autoAssignedRefKeys.has(`${curStartDate}:${s},${d}`)) {
+                                                    cell.isFixed = false;
+                                                    cell.isAutoAssignedRef = true;
+                                                }
                                             }
                                         }
+                                        lastScheduler = freshScheduler;
+                                        lastSolveResult = forceResult;
+                                        renderOutputTable(forceResult.grid, forceResult.stats);
+                                        renderStatsDashboard(forceResult.stats);
+                                        switchTab('outputTab');
+                                        checkWorkAreaConstraints(false);
+                                        saveCurrentTermToStorage(); // ★ 強制生成データをブラウザに自動保存
+                                        showToast('⚡ エラーを無視して基本勤務表を生成しました（修正作業エリアで微調整してください）');
+                                    } else {
+                                        showToast('⚠️ 強制生成に失敗しました。希望枠を再度ご確認ください。');
                                     }
+                                } catch (forceErr) {
+                                    console.error('onForceSolve error:', forceErr);
+                                    showToast(`⚠️ 強制生成中にエラーが発生しました: ${forceErr.message}`);
                                 }
-                                lastScheduler = scheduler;
-                                lastSolveResult = forceResult;
-                                renderOutputTable(forceResult.grid, forceResult.stats);
-                                renderStatsDashboard(forceResult.stats);
-                                switchTab('outputTab');
-                                checkWorkAreaConstraints(false);
-                                saveCurrentTermToStorage(); // ★ 強制生成データをブラウザに自動保存
-                                showToast('⚡ エラーを無視して基本勤務表を生成しました（修正作業エリアで微調整してください）');
                             }
                         });
                     }
@@ -5563,7 +5595,7 @@ document.addEventListener('DOMContentLoaded', () => {
     
     // ★ ユーザー指示: マスターテーブル用 全フロア平日出勤ブレ最少化システム（自動平準化微修正）
     function handleMasterBalanceWeekdays() {
-        const termSel = document.getElementById('termSelect') || document.getElementById('masterTermSelect');
+        const termSel = document.getElementById('masterTermSelect') || document.getElementById('termSelect');
         const curStartDate = (termSel && termSel.value) ? termSel.value : (document.getElementById('termStartDate')?.value || currentWorkingStartDate || '2026-04-01');
         const term = getTermInfo(curStartDate);
         const numDays = term.dates.length;
@@ -5782,7 +5814,7 @@ function renderMasterIntegrationView() {
         const checkTfoot = document.getElementById('checkTableFoot');
         if (!checkTbody) return;
 
-        const termSel = document.getElementById('termSelect') || document.getElementById('masterTermSelect');
+        const termSel = document.getElementById('masterTermSelect') || document.getElementById('termSelect');
         const curStartDate = (termSel && termSel.value) ? termSel.value : (document.getElementById('termStartDate')?.value || currentWorkingStartDate || '2026-04-01');
         const term = getTermInfo(curStartDate);
         const numDays = term.dates.length;
@@ -9822,7 +9854,7 @@ function renderMasterIntegrationView() {
         const masterSel = document.getElementById('masterTermSelect');
         if (!masterSel) return;
 
-        const curStart = currentWorkingStartDate || localStorage.getItem('shift_schedule_current_start_date') || '2026-04-01';
+        const curStart = localStorage.getItem(STORAGE_KEY_GLOBAL_CURRENT_TERM) || currentWorkingStartDate || localStorage.getItem('shift_schedule_current_start_date') || '2026-04-01';
 
         masterSel.innerHTML = '';
         GLOBAL_TERMS.forEach(term => {
@@ -9852,7 +9884,9 @@ function renderMasterIntegrationView() {
             if (!newStart) return;
 
             currentWorkingStartDate = newStart;
+            localStorage.setItem(STORAGE_KEY_GLOBAL_CURRENT_TERM, newStart);
             localStorage.setItem('shift_schedule_current_start_date', newStart);
+            localStorage.setItem(STORAGE_KEY_LAST_ACTIVE, newStart);
 
             // hidden input も更新
             const dateInput = document.getElementById('termStartDate');

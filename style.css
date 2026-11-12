@@ -1423,9 +1423,9 @@ tr.drag-over-row {
     border-top: 3.5px solid #1e293b !important;
 }
 
-/* ★ 添付1: 4/28と出勤集計の間にはさらに太い線が必要 */
+/* ★ ユーザー指示: 最終日付と出勤集計の間の縦罫線の太さをその下に伸びる線の太さ（2px #475569）と完全に統一 */
 .border-thickest-right {
-    border-right: 2.5px solid #334155 !important;
+    border-right: 2px solid #475569 !important;
 }
 
 /* ★ 自動配分リフ（通常文字・黒字・編集自由） */
@@ -1449,9 +1449,9 @@ td.st-floor-divider-cell {
     border-bottom: 3.5px solid #1e293b !important;
 }
 
-/* ★ 添付1: 最終日と出勤集計の間の縦罫線（ヘッダーとデータ行で線の太さを上下完全に揃える） */
+/* ★ ユーザー指示: 最終日と出勤集計の間の縦罫線（ヘッダーとデータ行で線の太さを上下完全に揃える: 2px #475569） */
 .border-thickest-right {
-    border-right: 2.5px solid #334155 !important;
+    border-right: 2px solid #475569 !important;
 }
 th[title="出勤日数"],
 td.stat-work-col,
