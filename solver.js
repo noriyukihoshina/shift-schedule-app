@@ -1764,10 +1764,17 @@ class ShiftScheduler {
         const stdHols = this.options.standardHolidays || 8;
         const dates = this.dates || [];
 
-        // 1. 各スタッフの事前希望枠を初期設定
+        // 1. 各スタッフの事前希望枠を初期設定（土日固定・日曜固定を事前反映）
         for (let s = 0; s < this.numStaff; s++) {
             const staff = this.staffList[s];
             if (staff.isUnused) continue;
+
+            const sec = staff.lifeSection || '';
+            const ha = staff.haSection || '';
+            // Group A（土日休み固定）: 訪問, 管理, Cl1, ハ1, ハ2
+            const isPatA = !!staff.isSatSunOff || (!staff.isSunOff && (sec === '訪問' || sec === '管理' || sec === 'Cl1' || ha === 'ハ1' || ha === 'ハ2'));
+            // Group B（日曜休み固定＋平日分散公休）: 通所, Cl2, ハ3, ハ南
+            const isPatB = !isPatA && (!!staff.isSunOff || (sec === '通所' || sec === 'Cl2' || ha === 'ハ3' || ha === 'ハ南' || ha === 'ハ4'));
 
             for (let d = 0; d < this.numDays; d++) {
                 const wish = (staff.days && staff.days[d]) ? staff.days[d] : '';
@@ -1778,340 +1785,46 @@ class ShiftScheduler {
                         isOriginalWish: true
                     };
                 } else {
+                    const di = dates[d];
+                    const isSun = di ? (di.wIdx === 6) : (d % 7 === 6);
+                    const isSat = di ? (di.wIdx === 5) : (d % 7 === 5);
+
+                    if (isPatA && (isSat || isSun)) {
+                        this.grid[s][d] = { symbol: SYMBOLS.OFF, isFixed: true };
+                    } else if (isPatB && isSun) {
+                        this.grid[s][d] = { symbol: SYMBOLS.OFF, isFixed: true };
+                    } else {
+                        this.grid[s][d] = { symbol: '', isFixed: false };
+                    }
+                }
+            }
+        }
+
+        // 2. 全スタッフの基本勤務表を solveStaffScheduleWeekly（厳格CSPソルバー）で生成！
+        for (let s = 0; s < this.numStaff; s++) {
+            if (this.staffList[s].isUnused) continue;
+            const maxConsec = this.staffList[s].allow6Consec ? 6 : 5;
+            const solved = this.solveStaffScheduleWeekly(s, stdHols, maxConsec);
+            if (solved) {
+                for (let d = 0; d < this.numDays; d++) {
+                    const curFixed = this.grid[s][d].isFixed;
+                    const origWish = this.grid[s][d].isOriginalWish;
                     this.grid[s][d] = {
-                        symbol: '',
-                        isFixed: false
+                        symbol: solved[d],
+                        isFixed: origWish ? true : false,
+                        isOriginalWish: origWish
                     };
                 }
             }
         }
 
-        // 2. スタッフごとの勤務パターン分類
-        for (let s = 0; s < this.numStaff; s++) {
-            const staff = this.staffList[s];
-            if (staff.isUnused) continue;
-
-            const sec = staff.lifeSection || '';
-            const ha = staff.haSection || '';
-
-            // Group A（土日休み固定）: 土日休トグルON、または訪問, 管理, Cl1, ハ1, ハ2
-            const isPatternA = !!staff.isSatSunOff || (!staff.isSunOff && (sec === '訪問' || sec === '管理' || sec === 'Cl1' || ha === 'ハ1' || ha === 'ハ2'));
-            // Group B（日曜休み固定＋平日分散公休）: 日休トグルON、または通所, Cl2, ハ3, ハ南
-            const isPatternB = !isPatternA && (!!staff.isSunOff || (sec === '通所' || sec === 'Cl2' || ha === 'ハ3' || ha === 'ハ南' || ha === 'ハ4'));
-
-            if (isPatternA) {
-                // 土日休み固定（土日休トグルON / 訪問等）
-                for (let d = 0; d < this.numDays; d++) {
-                    const di = dates[d];
-                    const isWeekend = di ? (di.wIdx === 5 || di.wIdx === 6) : ((d % 7 === 5) || (d % 7 === 6));
-                    if (isWeekend) {
-                        // 土日は事前希望がなければ公休「休」。事前希望があれば優先
-                        if (!this.grid[s][d].isFixed || this.grid[s][d].symbol === '') {
-                            this.grid[s][d].symbol = SYMBOLS.OFF;
-                        }
-                    } else {
-                        // 平日は事前希望がなければ通常勤務「○」
-                        if (this.grid[s][d].symbol === '') {
-                            this.grid[s][d].symbol = SYMBOLS.WORK;
-                        }
-                    }
-                }
-
-                // ★ ユーザー指示: リフが入っても公休8日は別枠で維持！土日にリフや有休が入って公休「休」が8日未満なら平日に公休を追加
-                let curOffA = 0;
-                for (let d = 0; d < this.numDays; d++) {
-                    if (this.grid[s][d].symbol === SYMBOLS.OFF) curOffA += 1.0;
-                    else if (this.grid[s][d].symbol === '○/休' || this.grid[s][d].symbol === '休/○' || this.grid[s][d].symbol === '〇/休' || this.grid[s][d].symbol === '休/〇') curOffA += 0.5;
-                }
-                while (curOffA < stdHols) {
-                    // 平日の中で非固定の「○」を1日選んで公休「休」にする（月曜または金曜優先で3連休化）
-                    let candD = -1;
-                    for (let d = 0; d < this.numDays; d++) {
-                        const di = dates[d];
-                        const isWeekend = di ? (di.wIdx === 5 || di.wIdx === 6) : ((d % 7 === 5) || (d % 7 === 6));
-                        if (!isWeekend && !this.grid[s][d].isFixed && this.grid[s][d].symbol === SYMBOLS.WORK) {
-                            if (candD === -1 || di.wIdx === 0 || di.wIdx === 4) {
-                                candD = d;
-                                if (di.wIdx === 0 || di.wIdx === 4) break;
-                            }
-                        }
-                    }
-                    if (candD !== -1) {
-                        this.grid[s][candD].symbol = SYMBOLS.OFF;
-                        curOffA++;
-                    } else {
-                        break;
-                    }
-                }
-            } else if (isPatternB) {
-                // 日曜日休み固定（日休トグルON / 通所・Cl2等）
-                for (let d = 0; d < this.numDays; d++) {
-                    const di = dates[d];
-                    const isSunday = di ? (di.wIdx === 6) : (d % 7 === 6);
-                    if (isSunday) {
-                        // 日曜日は事前希望がなければ公休「休」。事前希望があれば優先
-                        if (!this.grid[s][d].isFixed || this.grid[s][d].symbol === '') {
-                            this.grid[s][d].symbol = SYMBOLS.OFF;
-                        }
-                    }
-                }
-            }
-        }
-
-        // 3. Pattern B スタッフのリストアップ（CL2を優先、通所スタッフ等を均等分散）
-        const cl2Staff = [];
-        const otherPatternBStaff = [];
-
-        for (let s = 0; s < this.numStaff; s++) {
-            const staff = this.staffList[s];
-            if (staff.isUnused) continue;
-            const sec = staff.lifeSection || '';
-            const ha = staff.haSection || '';
-            const isPatA = !!staff.isSatSunOff || (!staff.isSunOff && (sec === '訪問' || sec === '管理' || sec === 'Cl1' || ha === 'ハ1' || ha === 'ハ2'));
-            const isPatB = !isPatA && (!!staff.isSunOff || (sec === '通所' || sec === 'Cl2' || ha === 'ハ3' || ha === 'ハ南' || ha === 'ハ4'));
-
-            if (isPatB) {
-                if (sec === 'Cl2' || staff.name.includes('クラーク通所') || staff.name.includes('Cl2')) {
-                    cl2Staff.push(s);
-                } else {
-                    otherPatternBStaff.push(s);
-                }
-            }
-        }
-
-        // ★ ユーザー指示: CL2（クラーク通所2名）は日曜日以外の平日公休が同じ日に重ならないように直交・交互配置！
-        const cl2OffDays = [new Set(), new Set()];
-        if (cl2Staff.length >= 2) {
-            const s1 = cl2Staff[0];
-            const s2 = cl2Staff[1];
-            // 各週（日〜土）ごとに平日公休を1日ずつ、s1とs2で異なる曜日に選定
-            for (let w = 0; w < this.weekSpans.length; w++) {
-                const wSpan = this.weekSpans[w];
-                const weekdays = wSpan.filter(d => {
-                    const di = dates[d];
-                    return di ? (di.wIdx !== 6) : (d % 7 !== 6);
-                });
-                if (weekdays.length >= 2) {
-                    // s1には前半平日（例: 火曜/水曜）、s2には後半平日（例: 木曜/金曜）
-                    const d1 = weekdays[w % weekdays.length];
-                    const d2 = weekdays[(w + 2) % weekdays.length];
-                    if (!this.grid[s1][d1].isFixed && this.grid[s1][d1].symbol === '') {
-                        this.grid[s1][d1].symbol = SYMBOLS.OFF;
-                        cl2OffDays[0].add(d1);
-                    }
-                    if (!this.grid[s2][d2].isFixed && this.grid[s2][d2].symbol === '') {
-                        this.grid[s2][d2].symbol = SYMBOLS.OFF;
-                        cl2OffDays[1].add(d2);
-                    }
-                }
-            }
-        }
-
-        // Pattern B 全体の平日公休分散配置（日別の通所出勤人数・実数が月〜土で均等になるように配置）
-        const allPatB = [...cl2Staff, ...otherPatternBStaff];
-        const dailyPatBOff = new Array(this.numDays).fill(0);
-        for (let d = 0; d < this.numDays; d++) {
-            for (const s of allPatB) {
-                if (isHolidaySymbol(this.grid[s][d].symbol)) dailyPatBOff[d]++;
-            }
-        }
-
-        allPatB.forEach((s, pIdx) => {
-            const staff = this.staffList[s];
-
-            // 主要4週スパン（d=0〜3, d=4〜10, d=11〜17, d=18〜24）
-            const majorSpans = [
-                this.weekSpans[0] || [0, 1, 2, 3],
-                (this.weekSpans[1] || [4, 5, 6, 7, 8, 9, 10]).filter(d => dates[d] && dates[d].wIdx !== 6),
-                (this.weekSpans[2] || [11, 12, 13, 14, 15, 16, 17]).filter(d => dates[d] && dates[d].wIdx !== 6),
-                (this.weekSpans[3] || [18, 19, 20, 21, 22, 23, 24]).filter(d => dates[d] && dates[d].wIdx !== 6)
-            ];
-
-            majorSpans.forEach((wSpan, wIdx) => {
-                let hasWeekdayOff = false;
-                for (const d of wSpan) {
-                    if (isPurePublicOffSymbol(this.grid[s][d].symbol)) { hasWeekdayOff = true; break; }
-                }
-
-                if (!hasWeekdayOff) {
-                    const weekdayCandidates = [];
-                    for (const d of wSpan) {
-                        const di = dates[d];
-                        const isSunday = di ? (di.wIdx === 6) : (d % 7 === 6);
-                        if (!isSunday && this.grid[s][d].symbol === '' && !this.grid[s][d].isFixed) {
-                            if (cl2Staff.includes(s)) {
-                                const otherCl2 = cl2Staff.find(other => other !== s);
-                                if (otherCl2 && isHolidaySymbol(this.grid[otherCl2][d].symbol)) continue;
-                            }
-                            let score = dailyPatBOff[d] * 200 + ((pIdx * 3 + wIdx + d) % 7);
-
-                            // ★ ユーザー指示: 母数が少ない通所の出勤人数・実数のブレを極小化するため、月〜土で出勤数が最も多い日に優先的に公休を配分
-                            const prevSym = (d > 0) ? this.grid[s][d - 1].symbol : (staff.prevDays ? staff.prevDays[4] : '');
-                            const nextSym = (d + 1 < this.numDays) ? this.grid[s][d + 1].symbol : '';
-                            // 3連休以上になる場合のみ回避ペナルティ（2連休は平準化のために許容）
-                            const prevPrevSym = (d > 1) ? this.grid[s][d - 2].symbol : '';
-                            const nextNextSym = (d + 2 < this.numDays) ? this.grid[s][d + 2].symbol : '';
-                            if ((isHolidaySymbol(prevSym) && isHolidaySymbol(prevPrevSym)) || (isHolidaySymbol(nextSym) && isHolidaySymbol(nextNextSym))) {
-                                score += 300; // 3連休以上は回避
-                            }
-
-                            // 第1週目で前ターム末からの連勤がある場合、前半日(d <= 3)を最優先
-                            if (wIdx === 0 && d <= 3) {
-                                let prevConsec = 0;
-                                if (staff.prevDays) {
-                                    for (let p = 4; p >= 0; p--) {
-                                        if (isWorkSymbol(staff.prevDays[p])) prevConsec++;
-                                        else break;
-                                    }
-                                }
-                                if (prevConsec >= 2) score -= 60;
-                            }
-                            weekdayCandidates.push({ d, score });
-                        }
-                    }
-
-                    if (weekdayCandidates.length > 0) {
-                        weekdayCandidates.sort((a, b) => a.score - b.score);
-                        const chosenD = weekdayCandidates[0].d;
-                        this.grid[s][chosenD].symbol = SYMBOLS.OFF;
-                        dailyPatBOff[chosenD]++;
-                    }
-                }
-            });
-
-            // ★ 公休日数8日（stdHols）の厳格死守！
-            let curOff = 0;
-            for (let d = 0; d < this.numDays; d++) {
-                if (this.grid[s][d].symbol === SYMBOLS.OFF) curOff += 1.0;
-                else if (this.grid[s][d].symbol === '○/休' || this.grid[s][d].symbol === '休/○' || this.grid[s][d].symbol === '〇/休' || this.grid[s][d].symbol === '休/〇') curOff += 0.5;
-            }
-
-            // 不足分がある場合（8日未満）
-            while (curOff < stdHols) {
-                const cands = [];
-                for (let d = 0; d < this.numDays; d++) {
-                    const di = dates[d];
-                    const isSun = di ? (di.wIdx === 6) : (d % 7 === 6);
-                    if (!isSun && this.grid[s][d].symbol === '' && !this.grid[s][d].isFixed) {
-                        cands.push({ d, offCount: dailyPatBOff[d] });
-                    }
-                }
-                if (cands.length === 0) break;
-                cands.sort((a, b) => a.offCount - b.offCount);
-                this.grid[s][cands[0].d].symbol = SYMBOLS.OFF;
-                dailyPatBOff[cands[0].d]++;
-                curOff++;
-            }
-
-            // ★ 超過分がある場合（8日超過・9日バグの完全解消！）
-            while (curOff > stdHols) {
-                const cands = [];
-                for (let d = 0; d < this.numDays; d++) {
-                    const di = dates[d];
-                    const isSun = di ? (di.wIdx === 6) : (d % 7 === 6);
-                    if (!isSun && !this.grid[s][d].isFixed && this.grid[s][d].symbol === SYMBOLS.OFF) {
-                        let prevC = 0;
-                        if (staff.prevDays) {
-                            for (let p = 4; p >= 0; p--) {
-                                if (isWorkSymbol(staff.prevDays[p])) prevC++;
-                                else break;
-                            }
-                        }
-                        if (prevC >= 2 && d <= 3) continue;
-
-                        this.grid[s][d].symbol = SYMBOLS.WORK;
-                        const valid = this.isStaffHardValid(s);
-                        this.grid[s][d].symbol = SYMBOLS.OFF;
-                        if (valid) {
-                            cands.push({ d, offCount: dailyPatBOff[d] });
-                        }
-                    }
-                }
-                if (cands.length === 0) break;
-                cands.sort((a, b) => b.offCount - a.offCount);
-                this.grid[s][cands[0].d].symbol = SYMBOLS.WORK;
-                dailyPatBOff[cands[0].d]--;
-                curOff--;
-            }
-
-            // 残りの空き枠を通常勤務「○」に確定
-            for (let d = 0; d < this.numDays; d++) {
-                if (this.grid[s][d].symbol === '') {
-                    this.grid[s][d].symbol = SYMBOLS.WORK;
-                }
-            }
-        });
-
-        // 4. 空き枠の全スタッフ確定（念のため全体チェック）
-        for (let s = 0; s < this.numStaff; s++) {
-            if (this.staffList[s].isUnused) continue;
-            for (let d = 0; d < this.numDays; d++) {
-                if (this.grid[s][d].symbol === '') {
-                    this.grid[s][d].symbol = SYMBOLS.WORK;
-                }
-            }
-        }
-
-        // ★ ユーザー指示（ハード制約）: 生活期テーブル 公休から公休の間は最大で6（7日連続公休なしはNG。リフや有休は公休に含めない）
-        for (let s = 0; s < this.numStaff; s++) {
-            const staff = this.staffList[s];
-            if (staff.isUnused) continue;
-
-            for (let pass = 0; pass < 3; pass++) {
-                let pureOffStreak = 0;
-                if (staff.prevDays) {
-                    for (let p = 4; p >= 0; p--) {
-                        if (!isPurePublicOffSymbol(staff.prevDays[p])) pureOffStreak++;
-                        else break;
-                    }
-                }
-
-                for (let d = 0; d < this.numDays; d++) {
-                    const sym = this.grid[s][d].symbol;
-                    if (!isPurePublicOffSymbol(sym)) {
-                        pureOffStreak++;
-                        if (pureOffStreak > 6) {
-                            // 公休間隔が6日を超過！直前6日間のうち未固定の「○」を公休「休」にスワップ
-                            let candD = -1;
-                            for (let backD = d; backD >= Math.max(0, d - 5); backD--) {
-                                if (!this.grid[s][backD].isFixed && this.grid[s][backD].symbol === SYMBOLS.WORK) {
-                                    candD = backD;
-                                    break;
-                                }
-                            }
-                            if (candD !== -1) {
-                                this.grid[s][candD].symbol = SYMBOLS.OFF;
-                                pureOffStreak = d - candD;
-
-                                // 公休日数（8日）を保つため、すでに連休（2連休以上）になっている他の未固定「休」を「○」に還元
-                                for (let otherD = 0; otherD < this.numDays; otherD++) {
-                                    if (otherD !== candD && !this.grid[s][otherD].isFixed && this.grid[s][otherD].symbol === SYMBOLS.OFF) {
-                                        const prevOff = (otherD > 0 && isPurePublicOffSymbol(this.grid[s][otherD - 1].symbol));
-                                        const nextOff = (otherD + 1 < this.numDays && isPurePublicOffSymbol(this.grid[s][otherD + 1].symbol));
-                                        if (prevOff || nextOff) {
-                                            this.grid[s][otherD].symbol = SYMBOLS.WORK;
-                                            break;
-                                        }
-                                    }
-                                }
-                            }
-                        }
-                    } else {
-                        pureOffStreak = 0;
-                    }
-                }
-            }
-        }
-
-        // 5. 訪問スタッフから月〜金（平日）に毎日1名「8時」勤務を選出！
-        // ★ ユーザー指示: 8時可トグルがONの訪問スタッフのみを候補として選出！OFFの人には絶対に振らない
+        // 3. 訪問スタッフから月〜金（国民の祝日を含む平日扱い稼働日）に毎日1名「8時」勤務を選出！
         const h8StaffList = [];
         for (let s = 0; s < this.numStaff; s++) {
             const staff = this.staffList[s];
             if (staff.isUnused || staff.isSectionChief) continue;
             const sec = staff.lifeSection || '';
-            const isVisit = (sec === '訪問');
-            if (isVisit && staff.can8) {
+            if (sec === '訪問' && staff.can8) {
                 h8StaffList.push(s);
             }
         }
@@ -2134,14 +1847,11 @@ class ShiftScheduler {
 
             const cands = [];
             for (const s of h8StaffList) {
-                if (this.grid[s][d].symbol === SYMBOLS.WORK && !this.grid[s][d].isFixed) {
+                if ((this.grid[s][d].symbol === SYMBOLS.WORK || this.grid[s][d].symbol === '○') && !this.grid[s][d].isFixed) {
                     let score = h8AssignedCounts[s] * 1000;
-                    // ★ ユーザー指示: 8時を2日連続は可能な限り回避（努力義務）
-                    const prevSym8 = (d > 0) ? this.grid[s][d - 1].symbol : ((this.staffList[s].prevDays && this.staffList[s].prevDays[4]) ? this.staffList[s].prevDays[4] : '');
+                    const prevSym8 = (d > 0) ? this.grid[s][d - 1].symbol : '';
                     const nextSym8 = (d + 1 < this.numDays) ? this.grid[s][d + 1].symbol : '';
-                    if (prevSym8 === SYMBOLS.H8 || nextSym8 === SYMBOLS.H8) {
-                        score += 500000;
-                    }
+                    if (prevSym8 === SYMBOLS.H8 || nextSym8 === SYMBOLS.H8) score += 500000;
                     cands.push({ s, score });
                 }
             }
@@ -2153,47 +1863,14 @@ class ShiftScheduler {
             }
         }
 
-        // 6. 「休 ○ 休」（単発1勤）の撲滅リペア
-        this.eliminateSingleDayWork();
-
-        // ★ 生活期向けスマート自動リペア（連勤超過・週休不足・単発勤務の自動解消）
-        this.repairScheduleViolations();
-
-        // 7. ★ 訪問8時の平日完全充足リペア（平日で8時が0名の日を100%根絶！）
-        for (let d = 0; d < this.numDays; d++) {
-            const di = dates[d];
-            const isWeekend = di ? (di.wIdx === 5 || di.wIdx === 6) : ((d % 7 === 5) || (d % 7 === 6));
-            if (isWeekend) continue; // 土日は8時なし
-
-            let curH8Count = 0;
-            for (let s = 0; s < this.numStaff; s++) {
-                if (this.grid[s][d].symbol === SYMBOLS.H8) curH8Count++;
-            }
-
-            if (curH8Count === 0) {
-                // 出勤中の8時可スタッフから選出
-                const cands = [];
-                for (const s of h8StaffList) {
-                    if (this.grid[s][d].symbol === SYMBOLS.WORK && !this.grid[s][d].isFixed) {
-                        let score = h8AssignedCounts[s] * 1000;
-                        const prevSym8 = (d > 0) ? this.grid[s][d - 1].symbol : ((this.staffList[s].prevDays && this.staffList[s].prevDays[4]) ? this.staffList[s].prevDays[4] : '');
-                        const nextSym8 = (d + 1 < this.numDays) ? this.grid[s][d + 1].symbol : '';
-                        if (prevSym8 === SYMBOLS.H8 || nextSym8 === SYMBOLS.H8) {
-                            score += 500000;
-                        }
-                        cands.push({ s, score });
-                    }
-                }
-                if (cands.length > 0) {
-                    cands.sort((a, b) => a.score - b.score);
-                    const pick = cands[0].s;
-                    this.grid[pick][d].symbol = SYMBOLS.H8;
-                    h8AssignedCounts[pick]++;
-                }
-            }
+        // 4. Cl2 スタッフのリストアップ
+        const cl2Staff = [];
+        for (let s = 0; s < this.numStaff; s++) {
+            if (this.staffList[s].isUnused) continue;
+            if (this.staffList[s].lifeSection === 'Cl2') cl2Staff.push(s);
         }
 
-        // 8. ★ ユーザー指示: 訪問・通所の出勤人数・実数厳格平準化（母数が少ないためブレを極小化！）
+        // 5. 通所出勤実数の厳格平準化（月〜土の通所出勤ブレを極小化）
         this.balanceLifeWorkforceDirectly(cl2Staff);
 
         return {
