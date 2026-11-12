@@ -1930,8 +1930,20 @@ class ShiftScheduler {
                                 if (otherCl2 && isHolidaySymbol(this.grid[otherCl2][d].symbol)) continue;
                             }
                             let score = dailyPatBOff[d] * 100 + ((pIdx * 3 + wIdx + d) % 7);
-                            // 土曜日は日曜日と合わせて土日2連休になるため5連勤後2連休要件に極めて有効
-                            if (di && di.wIdx === 5) score -= 80;
+
+                            // ★ ユーザー指示: 安易な連休（休休）を回避し、公休を1日ずつ均等に分散させる！
+                            // 前日または翌日が既に公休（休）またはリフレッシュ休暇の場合はペナルティで連休を回避
+                            const prevSym = (d > 0) ? this.grid[s][d - 1].symbol : (staff.prevDays ? staff.prevDays[4] : '');
+                            const nextSym = (d + 1 < this.numDays) ? this.grid[s][d + 1].symbol : '';
+                            if (isHolidaySymbol(prevSym) || isHolidaySymbol(nextSym)) {
+                                score += 300; // 連休回避ペナルティ（努力義務・制約遵守）
+                            } else {
+                                // 1日ずつ分散して取得しやすいよう平日の真ん中（火・水・木）を優先
+                                if (di && (di.wIdx === 1 || di.wIdx === 2 || di.wIdx === 3)) {
+                                    score -= 50;
+                                }
+                            }
+
                             // 第1週目で前ターム末からの連勤がある場合、前半日(d <= 3)を最優先
                             if (wIdx === 0 && d <= 3) {
                                 let prevConsec = 0;
@@ -2161,8 +2173,9 @@ class ShiftScheduler {
         this.ensureSchedCoverage();
         this.ensureFullTimeCoverage();
 
-        // ★ 平日出勤実数のブレ極小化（最終仕上げ）
+        // ★ 平日出勤実数および土日祝出勤実数のブレ極小化（最終仕上げ）
         this.balanceWeekdaysDirectly();
+        this.balanceWeekendsDirectly();
 
         // 基本制約の検証
         let baseErrors = this.verifyBaseHardConstraints();
@@ -2262,8 +2275,9 @@ class ShiftScheduler {
         this.ensureSchedCoverage();
         this.ensureFullTimeCoverage();
 
-        // ★ 平日出勤実数のブレ極小化（最終仕上げ）
+        // ★ 平日出勤実数および土日祝出勤実数のブレ極小化（最終仕上げ）
         this.balanceWeekdaysDirectly();
+        this.balanceWeekendsDirectly();
 
         // 最終全ハード制約の検証
         let finalErrors = this.verifyAllHardConstraints();
@@ -4279,8 +4293,16 @@ class ShiftScheduler {
                 // 回数ペナルティ: 指数関数的にペナルティを爆発させ、全員に完全均等（3〜4回）に分散！
                 const countPenalty = Math.pow(counts[s], 3) * 150000;
 
-                // スコア: 個人回数最優先均等化 + チーム均等（A対B 14回対14回） + 直近ローテーション間隔
-                let score = countPenalty + teamPenalty - (d - lastAssignedDay[s]);
+                // ★ ユーザー指示: 8時を2日連続は可能な限り回避（努力義務）
+                let consec8Penalty = 0;
+                const prevSym8 = (d > 0) ? this.grid[s][d - 1].symbol : ((this.staffList[s].prevDays && this.staffList[s].prevDays[4]) ? this.staffList[s].prevDays[4] : '');
+                const nextSym8 = (d + 1 < this.numDays) ? this.grid[s][d + 1].symbol : '';
+                if (prevSym8 === SYMBOLS.H8 || nextSym8 === SYMBOLS.H8 || lastAssignedDay[s] === d - 1) {
+                    consec8Penalty = 500000; // 努力義務: 強いペナルティで他スタッフを優先
+                }
+
+                // スコア: 個人回数最優先均等化 + チーム均等（A対B 14回対14回） + 直近ローテーション間隔 + 2日連続回避
+                let score = countPenalty + teamPenalty + consec8Penalty - (d - lastAssignedDay[s]);
                 candidates.push({ staffIndex: s, score, team });
             }
 
@@ -5433,8 +5455,9 @@ class ShiftScheduler {
             }
         }
 
-        // ★ 平日同士の直接平準化（出勤実数ブレ幅を極小化）
+        // ★ 平日同士および土日祝同士の直接平準化（出勤実数ブレ幅を極小化）
         this.balanceWeekdaysDirectly();
+        this.balanceWeekendsDirectly();
     }
 
     /**
@@ -5500,6 +5523,93 @@ class ShiftScheduler {
 
                             const valid = this.isStaffHardValid(s) && this.isGlobalAttributesValid();
                             // スワップ後に特殊勤務翌日休違反が一切生じていないこと（厳格チェック）
+                            let specialValid = true;
+                            for (let d = 0; d < this.numDays - 1; d++) {
+                                if (isRestrictedSpecial(this.grid[s][d].symbol) && !isHolidaySymbol(this.grid[s][d + 1].symbol)) {
+                                    specialValid = false;
+                                    break;
+                                }
+                            }
+
+                            if (valid && specialValid) {
+                                swapped = true;
+                                break;
+                            } else {
+                                this.setSymbol(s, maxDay, SYMBOLS.WORK, false);
+                                this.setSymbol(s, minDay, SYMBOLS.OFF, false);
+                            }
+                        }
+                    }
+                    if (swapped) break;
+                }
+                if (swapped) break;
+            }
+
+            if (!swapped) break;
+        }
+    }
+
+    /**
+     * 土日祝日同士の出勤実数直接スワップによるブレ極小化（土日-2均等化）
+     */
+    balanceWeekendsDirectly() {
+        const isWeekendOrHoliday = (d) => {
+            if (this.dates && this.dates[d]) {
+                const dt = this.dates[d];
+                if (dt.isSun || dt.isSat || dt.isHoliday) return true;
+            }
+            return false;
+        };
+
+        const weekends = [];
+        for (let d = 0; d < this.numDays; d++) {
+            if (isWeekendOrHoliday(d)) weekends.push(d);
+        }
+        if (weekends.length < 2) return;
+
+        for (let iter = 0; iter < 100; iter++) {
+            const daily = weekends.map(d => ({
+                day: d,
+                load: this.getDailyEffectiveRealLoad(d)
+            }));
+            daily.sort((a, b) => b.load - a.load);
+
+            const maxItem = daily[0];
+            const minItem = daily[daily.length - 1];
+
+            if (maxItem.load - minItem.load <= 1.01) break;
+
+            let swapped = false;
+
+            for (let hIdx = 0; hIdx < Math.min(5, daily.length); hIdx++) {
+                const maxDay = daily[hIdx].day;
+                const maxLoad = daily[hIdx].load;
+
+                for (let lIdx = daily.length - 1; lIdx >= Math.max(0, daily.length - 5); lIdx--) {
+                    const minDay = daily[lIdx].day;
+                    const minLoad = daily[lIdx].load;
+                    const gap = maxLoad - minLoad;
+                    if (gap <= 1.01) continue;
+
+                    for (let s = 0; s < this.numStaff; s++) {
+                        const st = this.staffList[s];
+                        if (st.isUnused || st.isSectionChief) continue;
+
+                        const w = st.isHalf ? 0.5 : 1.0;
+                        if (gap <= w) continue;
+
+                        // minDay を WORK にする前の安全チェック（前日が特殊勤務なら WORK にできない）
+                        const prevOfMin = (minDay > 0) ? this.grid[s][minDay - 1].symbol : (st.prevDays && st.prevDays[4]);
+                        if (isRestrictedSpecial(prevOfMin)) continue;
+                        if (this.grid[s][minDay].isAfterPreSpecial) continue;
+
+                        if (!this.grid[s][maxDay].isFixed && this.grid[s][maxDay].symbol === SYMBOLS.WORK &&
+                            !this.grid[s][minDay].isFixed && this.grid[s][minDay].symbol === SYMBOLS.OFF) {
+
+                            this.setSymbol(s, maxDay, SYMBOLS.OFF, false);
+                            this.setSymbol(s, minDay, SYMBOLS.WORK, false);
+
+                            const valid = this.isStaffHardValid(s) && this.isGlobalAttributesValid();
                             let specialValid = true;
                             for (let d = 0; d < this.numDays - 1; d++) {
                                 if (isRestrictedSpecial(this.grid[s][d].symbol) && !isHolidaySymbol(this.grid[s][d + 1].symbol)) {
