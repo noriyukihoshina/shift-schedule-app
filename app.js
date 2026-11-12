@@ -5948,20 +5948,6 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     }
 
-        if (totalSwaps > 0) {
-            // 各フロアの変更データをLocalStorageおよびクラウドへ保存
-            floors.forEach(fl => {
-                fl.rawData.outputGrid = fl.grid;
-                localStorage.setItem(`shift_schedule_${fl.id}_term_${curStartDate}`, JSON.stringify(fl.rawData));
-            });
-            renderMasterIntegrationView();
-            playNotificationSound();
-            showToast(`⚡ 全フロア平日出勤ブレを最少化しました！（${totalSwaps}箇所の微調整で平準化完了）`);
-        } else {
-            showToast('ℹ️ 現在の各階勤務表は既に平日出勤が高度に平準化されています（微修正不要）。');
-        }
-    }
-
 function renderMasterIntegrationView() {
         const checkThead = document.getElementById('checkTableHead');
         const checkTbody = document.getElementById('checkTableBody');
