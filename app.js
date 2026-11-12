@@ -4192,6 +4192,37 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     // 第2段階: 特殊勤務を入れるボタン（早3名・遅1名・E2名・8時1名を割り当てて最終完成）
+
+    // ★ 修正作業エリア（#outputTableBody）の現在のセル内容を100%吸い上げてグリッド化する関数
+    function extractCurrentOutputGrid() {
+        const tbody = document.getElementById('outputTableBody');
+        if (!tbody) return null;
+        const rows = tbody.querySelectorAll('tr');
+        if (!rows || rows.length === 0) return null;
+
+        const grid = [];
+        for (let s = 0; s < NUM_STAFF; s++) {
+            grid.push(new Array(NUM_DAYS).fill(null).map(() => ({ symbol: '', isFixed: false })));
+        }
+
+        const cells = tbody.querySelectorAll('td.day-cell[data-s][data-d]');
+        if (cells.length === 0) return null;
+
+        cells.forEach(td => {
+            const s = parseInt(td.dataset.s, 10);
+            const d = parseInt(td.dataset.d, 10);
+            if (!isNaN(s) && !isNaN(d) && s >= 0 && s < NUM_STAFF && d >= 0 && d < NUM_DAYS) {
+                const sym = td.textContent.trim();
+                const isFixed = td.classList.contains('fixed-cell');
+                grid[s][d] = {
+                    symbol: sym,
+                    isFixed: isFixed
+                };
+            }
+        });
+        return grid;
+    }
+
     function handleAssignSpecialDuties() {
         pushHistory(); // ★ 特殊勤務割り当て前の状態を記録し、「↩ 戻る」で元に戻せるようにする
         const btns = [document.getElementById('assignSpecialBtn'), document.getElementById('outputAssignSpecialBtn')];
@@ -4252,35 +4283,14 @@ document.addEventListener('DOMContentLoaded', () => {
                     lastScheduler.stDailyEve = getLinkedSTDailyEve();
                 }
 
-                // ★ もし古いバージョンで生成された勤務表に極端な実数偏り（例: 最終週の日曜だけ25.5名に落ち込む等、実数負荷の最大-最小差が3.0を超える状態）が
-                // 残っている場合は、最新の平準化エンジンで基本勤務表を一度クリーンに再構築してから特殊勤務を割り当てる
-                const loads = [];
-                for (let d = 0; d < NUM_DAYS; d++) {
-                    loads.push(lastScheduler.getDailyEffectiveRealLoad(d));
-                }
-                const loadDiff = Math.max(...loads) - Math.min(...loads);
-                if (loadDiff > 3.0) {
-                    const stdHolidayVal = parseFloat(document.getElementById('standardHolidaySelect')?.value || '8.0');
-                    const freshScheduler = new ShiftScheduler(staffList, {
-                        standardHolidays: stdHolidayVal,
-                        dates: getTermInfo().dates,
-                        dayOffsets: [...dayOffsets],
-                        isST: isST,
-                        isSouth: isSouth,
-                        isLife: isLife,
-                        lifeDailyWork: getLinkedLifeDailyWork(),
-                        stDailyWork: getLinkedSTDailyWork(),
-                        stDailyHeadCount: getLinkedSTDailyHeadCount(),
-                        stDailyFtWork: getLinkedSTDailyFtWork(),
-                        stDailyEarly: getLinkedSTDailyEarly(),
-                        stDailyLate: getLinkedSTDailyLate(),
-                        stDailyEve: getLinkedSTDailyEve(),
-                        stFloorFtCount: getLinkedSTFloorFtCount()
-                    });
-                    const reBase = freshScheduler.solveBaseSchedule({ force: true });
-                    if (reBase && reBase.grid) {
-                        lastScheduler = freshScheduler;
-                    }
+                // ★ ユーザーの手修正（修正作業エリアの微調整）を100%厳格保持するため、勝手な自動再生成は完全撤去！
+
+                // ★ 修正作業エリアでユーザーが手動編集・微調整した最新のグリッドを確実に取得して適用！
+                const domGrid = extractCurrentOutputGrid();
+                if (domGrid && domGrid.length > 0) {
+                    lastScheduler.grid = domGrid;
+                } else if (lastSolveResult && lastSolveResult.grid) {
+                    lastScheduler.grid = JSON.parse(JSON.stringify(lastSolveResult.grid));
                 }
 
                 const specialResult = lastScheduler.assignSpecialDutiesToGrid();
@@ -6199,7 +6209,7 @@ document.addEventListener('DOMContentLoaded', () => {
         const term = getTermInfo(curStartDate);
         const numDays = term.dates.length;
 
-        let targetGrid = (lastSolveResult && lastSolveResult.grid) || (lastScheduler && lastScheduler.grid) || currentGrid;
+        let targetGrid = (lastSolveResult && lastSolveResult.grid) || (lastScheduler && lastScheduler.grid) || (typeof extractCurrentOutputGrid === 'function' ? extractCurrentOutputGrid() : []);
         if (!targetGrid || targetGrid.length === 0) {
             showToast('⚠️ 先に「勤務表を自動生成する」を実行してください。');
             return;
@@ -6311,7 +6321,7 @@ document.addEventListener('DOMContentLoaded', () => {
         const term = getTermInfo(curStartDate);
         const numDays = term.dates.length;
 
-        let targetGrid = (lastSolveResult && lastSolveResult.grid) || (lastScheduler && lastScheduler.grid) || currentGrid;
+        let targetGrid = (lastSolveResult && lastSolveResult.grid) || (lastScheduler && lastScheduler.grid) || (typeof extractCurrentOutputGrid === 'function' ? extractCurrentOutputGrid() : []);
         if (!targetGrid || targetGrid.length === 0) {
             showToast('⚠️ 先に「勤務表を自動生成する」を実行してください。');
             return;
@@ -7690,7 +7700,8 @@ function renderMasterIntegrationView() {
                 let tsushoReal = 0, tsushoTotal = 0;
                 staffList.forEach((st, s) => {
                     if (st.isUnused) return;
-                    const cell = (currentGrid && currentGrid[s]) ? currentGrid[s][d] : (stats.grid && stats.grid[s] ? stats.grid[s][d] : null);
+                    const activeGrid = (lastSolveResult && lastSolveResult.grid) || (lastScheduler && lastScheduler.grid) || (stats && stats.grid) || [];
+                    const cell = (activeGrid && activeGrid[s]) ? activeGrid[s][d] : null;
                     const sym = (cell && typeof cell === 'object') ? cell.symbol : (cell || '');
                     if (!sym || isHolidaySymbol(sym) || sym === 'ー') return;
                     const sec = st.lifeSection || '';
