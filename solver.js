@@ -2514,6 +2514,22 @@ class ShiftScheduler {
             return specialResult;
         }
 
+        // ★ ユーザー指示: 修正作業エリアで手動微調整・目視確認が完了した勤務表に対しては、
+        // 公休（休）や出勤（○）の配置を勝手に移動させるスワップ処理を一切実行せず、
+        // 既存の日勤「○」の中からのみ特殊勤務を昇格割り当てする！
+        if (options && options.preserveGrid === true) {
+            this.autoFixOverallocatedEarlyDuties();
+            let finalErrors = this.verifyAllHardConstraints();
+            if (finalErrors.length > 0 && !force) {
+                return { success: false, errors: finalErrors };
+            }
+            return {
+                success: true,
+                grid: this.grid,
+                stats: this.calculateStats()
+            };
+        }
+
         // ★ 係長不在日の主任・副主任（Aチーム1名以上かつBチーム1名以上）出勤保証リペア
         this.ensureRoleCoverage();
         this.ensureSchedCoverage();
@@ -2796,7 +2812,7 @@ class ShiftScheduler {
                         canNextBeOff = true; // 最終日の翌日は期間外
                     } else if (isHolidaySymbol(this.grid[s][d + 1].symbol)) {
                         canNextBeOff = true; // 既に休日！公休日数も実数合計も変わらないためベスト
-                    } else if (!this.grid[s][d + 1].isFixed && this.grid[s][d + 1].symbol === SYMBOLS.WORK && !(this.staffList[s].isSectionChief && this.isWeekdayIndex(d + 1))) {
+                    } else if (!options.preserveGrid && !this.grid[s][d + 1].isFixed && this.grid[s][d + 1].symbol === SYMBOLS.WORK && !(this.staffList[s].isSectionChief && this.isWeekdayIndex(d + 1))) {
                         // 翌日(d+1)を休日に変更できるか検証：
                         let schedOkNext = true;
                         if (this.staffList[s].canSched) {
