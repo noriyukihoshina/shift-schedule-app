@@ -242,8 +242,8 @@
                         <span id="outputTitleDisplay" style="font-weight: 800; color: #1e293b; font-size: 1.05rem;">✏️ 修正作業エリア（仮自動生成・微修正）</span>
                     </div>
                     <div class="action-group" style="display: flex; gap: 8px; flex-wrap: wrap; align-items: center;">
-                                                <button class="btn btn-success" id="masterBalanceWeekdaysBtn" style="background: #059669; border-color: #047857; color: white; font-weight: 700; font-size: 0.82rem; padding: 5px 12px; display: inline-flex; align-items: center; gap: 4px;" title="実務で発生する平日出勤人数・実数の上下ブレ（最大8.5名）を、各階の制約を守りながら各階の公休を自動微修正（スワップ）してブレ幅を最小化（平準化）します">
-                            ⚡ 平日出勤ブレを最少化
+                        <button class="btn btn-success" id="masterBalanceWeekendOffBtn" style="background: #0284c7; border-color: #0369a1; color: white; font-weight: 700; font-size: 0.82rem; padding: 5px 12px; display: inline-flex; align-items: center; gap: 4px;" title="全フロアの土日祝日の出勤・休日バランスを分析し、各階の制約を守りながら土日祝日同士のブレ幅を最小化（平準化）します">
+                            ⚡ 休みのブレを最少化
                         </button>
                         <button class="btn btn-primary" id="copyForExcelBtn" style="font-size: 0.82rem; padding: 5px 12px; font-weight: 700;" title="警告やブロックなしでExcelに直接貼り付け可能！事前希望枠の赤字太字・罫線・自動計算数式を保持してクリップボードにコピーします">
                             📋 Excelへ一発貼り付け用コピー（赤字・数式付き）
@@ -464,8 +464,8 @@
                         <div style="font-size: 0.8rem; color: #047857;">実務で発生する平日出勤人数・実数の上下ブレ（14.5名等）を、各階の制約（連勤・週休2日・特殊勤務翌日休）を守りながら自動スワップして最小化します</div>
                     </div>
                 </div>
-                <button class="btn btn-success" id="masterBalanceWeekdaysBtnStats" style="background: #059669; border-color: #047857; color: white; font-weight: 800; font-size: 0.92rem; padding: 8px 18px; display: inline-flex; align-items: center; gap: 6px; box-shadow: 0 2px 4px rgba(5,150,105,0.25); cursor: pointer;" title="全フロア合算の平日出勤実数ブレを各階の公休スワップで最小化（平準化）します">
-                    ⚡ 平日出勤ブレを最少化
+                <button class="btn btn-success" id="masterBalanceWeekendOffBtnStats" style="background: #0284c7; border-color: #0369a1; color: white; font-weight: 800; font-size: 0.92rem; padding: 8px 18px; display: inline-flex; align-items: center; gap: 6px; box-shadow: 0 2px 4px rgba(2,132,199,0.25); cursor: pointer;" title="全フロア合算の土日祝日出勤・休日ブレを各階の公休スワップで最小化（平準化）します">
+                    ⚡ 休みのブレを最少化
                 </button>
             </div>
             <div class="stats-grid">
