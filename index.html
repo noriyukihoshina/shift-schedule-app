@@ -1,10 +1,10 @@
-﻿<!DOCTYPE html>
+<!DOCTYPE html>
 <html lang="ja">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>勤務予定表 自動作成システム - マスターテーブル</title>
-    <link rel="stylesheet" href="style.css?v=20261112_0905">
+    <link rel="stylesheet" href="style.css?v=20261112_0955">
 </head>
 <body class="theme-master">
 
@@ -359,6 +359,9 @@
                         <span id="checkTitleDisplay" style="font-weight: 800; color: #1e293b; font-size: 1.05rem;">&#x1F3E2; 全フロア統合</span>
                     </div>
                     <div class="action-group" style="display: flex; gap: 8px; flex-wrap: wrap; align-items: center;">
+                        <button class="btn btn-warning" id="masterBalanceWeekdaysBtn" style="font-size: 0.82rem; padding: 5px 14px; font-weight: 800; background: #f59e0b; border-color: #d97706; color: white;" title="全病棟の出勤ブレを最小化します（土日-8均等化 ＆ 平日均等化）">
+                            ⚡ 全体出勤ブレを最少化
+                        </button>
                         <button class="btn btn-primary" id="checkCopyForExcelBtn" style="font-size: 0.82rem; padding: 5px 12px; font-weight: 700;" title="完成勤務表をExcel貼り付け用にコピーします（赤字太字・数式付き）">
                             📋 Excelへ一発貼り付け用コピー（赤字・数式付き）
                         </button>
@@ -455,9 +458,14 @@
             <div class="stats-grid">
                 <!-- 1. 平日の出勤人数（平準化状況 & 平均） -->
                 <div class="stat-card" style="border-top: 4px solid #2563eb;">
-                    <div class="stat-card-title" style="display: flex; align-items: center; justify-content: space-between;">
+                    <div class="stat-card-title" style="display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 6px;">
                         <span>🏢 平日の出勤人数・実数（平準化状況）</span>
-                        <span id="statWeekdayBadge" style="font-size: 0.75rem; background: #eff6ff; color: #1d4ed8; padding: 2px 8px; border-radius: 9999px; font-weight: 700;">- 日間</span>
+                        <div style="display: flex; align-items: center; gap: 8px;">
+                            <button class="btn btn-warning" id="masterBalanceWeekdaysBtnStats" style="font-size: 0.78rem; padding: 3px 10px; font-weight: 800; background: #f59e0b; border-color: #d97706; color: white;" title="全病棟の出勤ブレを最小化します（土日-8均等化 ＆ 平日均等化）">
+                                ⚡ 全体出勤ブレを最少化
+                            </button>
+                            <span id="statWeekdayBadge" style="font-size: 0.75rem; background: #eff6ff; color: #1d4ed8; padding: 2px 8px; border-radius: 9999px; font-weight: 700;">- 日間</span>
+                        </div>
                     </div>
                     <div class="stat-card-value" id="statWeekdayWorkRange" style="font-size: 1.3rem; color: #1e3a8a;">- 〜 - 名</div>
                     <div style="display: flex; justify-content: space-between; align-items: center; margin-top: 6px; padding-top: 6px; border-top: 1px dashed #e2e8f0; font-size: 0.85rem;">
@@ -677,8 +685,8 @@
             theme: 'theme-master'
         };
     </script>
-    <script src="solver.js?v=20261112_0905"></script>
-    <script src="app.js?v=20261112_0905"></script>
+    <script src="solver.js?v=20261112_0955"></script>
+    <script src="app.js?v=20261112_0955"></script>
 </body>
 </html>
 

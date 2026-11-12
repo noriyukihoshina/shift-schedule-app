@@ -1450,11 +1450,15 @@ td.st-floor-divider-cell {
 }
 
 /* ★ ユーザー指示: 最終日と出勤集計の間の縦罫線（ヘッダーとデータ行で線の太さを上下完全に揃える: 2px #475569） */
-.border-thickest-right {
+.border-thickest-right,
+th.border-thickest-right,
+td.border-thickest-right {
     border-right: 2px solid #475569 !important;
 }
 th[title="出勤日数"],
+th[title="出勤"],
 td.stat-work-col,
+th.stat-work-col,
 th.border-thick-left,
 td.border-thick-left {
     border-left: none !important;
