@@ -4750,6 +4750,25 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     // 出力テーブル描画（画像3のメリハリある罫線と「※/※※～※/※※勤務表」タイトルを反映）
+
+    // ★ グリッドから正確な stats（staffStats, daily等）を再計算する安全ヘルパー
+    function calculateGridStats(grid) {
+        if (!grid || !Array.isArray(grid) || grid.length === 0) return null;
+        try {
+            const curStartDate = document.getElementById('termStartDate')?.value || currentWorkingStartDate || '2026-04-01';
+            const term = getTermInfo(curStartDate);
+            let scheduler = lastScheduler;
+            if (!scheduler || typeof scheduler.calculateStats !== 'function') {
+                scheduler = new ShiftScheduler(staffList, term.dates, { floor: currentFloor, isLife: isLife, isST: isST });
+            }
+            scheduler.grid = grid;
+            return scheduler.calculateStats();
+        } catch (e) {
+            console.warn('calculateGridStats warning:', e);
+            return null;
+        }
+    }
+
     function renderOutputTable(grid, stats) {
         const thead = document.getElementById('outputTableHead');
         const tbody = document.getElementById('outputTableBody');
@@ -4758,6 +4777,11 @@ document.addEventListener('DOMContentLoaded', () => {
 
         // ★ TDZ防止: 関数の冒頭で currentGrid を最優先かつ安全に初期化
         const currentGrid = grid || (lastSolveResult && lastSolveResult.grid) || [];
+
+        // ★ stats が渡されていない場合、currentGrid から自動的に完全再計算（公休0バグ・クラッシュを物理防止！）
+        if (!stats || !stats.staffStats) {
+            stats = calculateGridStats(currentGrid);
+        }
 
         // ★ 病棟テーブル描画時、ST所属スタッフ及び生活期ハ応援データを確実に最新化
         if (!isST && !isLife && currentFloor) {
@@ -5266,7 +5290,7 @@ document.addEventListener('DOMContentLoaded', () => {
                     // ③ 通所出勤人数合計 ＝ 通所トグルONの出勤者数 ＋ CLトグルONの出勤者数 ＋ ハ3およびハ南のトグルONの出勤者数合計
                     // ④ 通所実数合計 ＝ 通所トグルONの出勤者実数 ＋ CLトグルONの出勤者実数 ＋ ハ3およびハ南のトグルONの出勤者実数の合計（0.5トグルがONなら0.5で計算）
                     const isVisit = (sec === '訪問');
-                    const isTsusho = (sec === '通所') || (ha === 'ハ3' || ha === 'ハ南' || ha === 'ハ4');
+                    const isTsusho = (sec === '通所') || (sec === 'Cl2') || (ha === 'ハ3' || ha === 'ハ南' || ha === 'ハ4');
 
                     if (isVisit) {
                         vWorkCounts[d]++;
@@ -5792,7 +5816,9 @@ document.addEventListener('DOMContentLoaded', () => {
             const symWork = (cellWork && typeof cellWork === 'object') ? cellWork.symbol : (cellWork || '');
             const symOff = (cellOff && typeof cellOff === 'object') ? cellOff.symbol : (cellOff || '');
 
-            if (symWork !== SYMBOLS.WORK || symOff !== SYMBOLS.OFF) return false;
+            // 出勤記号（○ または STの早番）と公休（休）のスワップ
+            const isValidWork = (symWork === SYMBOLS.WORK || symWork === '〇' || (isST && symWork === '早'));
+            if (!isValidWork || symOff !== SYMBOLS.OFF) return false;
             if (cellWork.isFixed || cellOff.isFixed) return false;
 
             // 特殊勤務翌日休の保護
@@ -6014,7 +6040,9 @@ document.addEventListener('DOMContentLoaded', () => {
             const symWork = (cellWork && typeof cellWork === 'object') ? cellWork.symbol : (cellWork || '');
             const symOff = (cellOff && typeof cellOff === 'object') ? cellOff.symbol : (cellOff || '');
 
-            if (symWork !== SYMBOLS.WORK || symOff !== SYMBOLS.OFF) return false;
+            // 出勤記号（○ または STの早番）と公休（休）のスワップ
+            const isValidWork = (symWork === SYMBOLS.WORK || symWork === '〇' || (isST && symWork === '早'));
+            if (!isValidWork || symOff !== SYMBOLS.OFF) return false;
             if (cellWork.isFixed || cellOff.isFixed) return false;
 
             // 特殊勤務翌日休の保護
@@ -6114,8 +6142,9 @@ document.addEventListener('DOMContentLoaded', () => {
 
                     for (let s = 0; s < staffList.length; s++) {
                         if (canSwapStaff(s, maxD, minD)) {
+                            const origSym = (targetGrid[s][maxD] && targetGrid[s][maxD].symbol) || SYMBOLS.WORK;
                             targetGrid[s][maxD] = { symbol: SYMBOLS.OFF, isFixed: false };
-                            targetGrid[s][minD] = { symbol: SYMBOLS.WORK, isFixed: false };
+                            targetGrid[s][minD] = { symbol: origSym, isFixed: false };
                             totalSwaps++;
                             swapped = true;
                             break;
@@ -6128,13 +6157,18 @@ document.addEventListener('DOMContentLoaded', () => {
             if (!swapped) break;
         }
 
-        if (lastSolveResult) lastSolveResult.grid = targetGrid;
-        if (lastScheduler) lastScheduler.grid = targetGrid;
+        const updatedStats = calculateGridStats(targetGrid);
+        if (lastSolveResult) {
+            lastSolveResult.grid = targetGrid;
+            lastSolveResult.stats = updatedStats;
+        }
+        if (lastScheduler) {
+            lastScheduler.grid = targetGrid;
+        }
 
-        renderOutputTable(targetGrid);
-        if (typeof renderStatsDashboard === 'function') {
-            const stats = calculateCurrentStats(targetGrid);
-            renderStatsDashboard(stats);
+        renderOutputTable(targetGrid, updatedStats);
+        if (typeof renderStatsDashboard === 'function' && updatedStats) {
+            renderStatsDashboard(updatedStats);
         }
         saveCurrentTermToStorage();
 
@@ -6250,10 +6284,18 @@ document.addEventListener('DOMContentLoaded', () => {
             if (!swapped) break;
         }
 
-        renderOutputTable(targetGrid);
-        if (typeof renderStatsDashboard === 'function') {
-            const stats = calculateCurrentStats(targetGrid);
-            renderStatsDashboard(stats);
+        const updatedStats = calculateGridStats(targetGrid);
+        if (lastSolveResult) {
+            lastSolveResult.grid = targetGrid;
+            lastSolveResult.stats = updatedStats;
+        }
+        if (lastScheduler) {
+            lastScheduler.grid = targetGrid;
+        }
+
+        renderOutputTable(targetGrid, updatedStats);
+        if (typeof renderStatsDashboard === 'function' && updatedStats) {
+            renderStatsDashboard(updatedStats);
         }
         saveCurrentTermToStorage();
 
@@ -6281,7 +6323,7 @@ document.addEventListener('DOMContentLoaded', () => {
             if (st.isUnused || st.isSectionChief) return;
             const sec = st.lifeSection || '';
             const ha = st.haSection || '';
-            if (sec === '通所' || ha === 'ハ3' || ha === 'ハ南' || ha === 'ハ4') {
+            if (sec === '通所' || sec === 'Cl2' || ha === 'ハ3' || ha === 'ハ南' || ha === 'ハ4') {
                 tsushoStaff.push(s);
             }
         });
@@ -6356,10 +6398,18 @@ document.addEventListener('DOMContentLoaded', () => {
             if (!swapped) break;
         }
 
-        renderOutputTable(targetGrid);
-        if (typeof renderStatsDashboard === 'function') {
-            const stats = calculateCurrentStats(targetGrid);
-            renderStatsDashboard(stats);
+        const updatedStats = calculateGridStats(targetGrid);
+        if (lastSolveResult) {
+            lastSolveResult.grid = targetGrid;
+            lastSolveResult.stats = updatedStats;
+        }
+        if (lastScheduler) {
+            lastScheduler.grid = targetGrid;
+        }
+
+        renderOutputTable(targetGrid, updatedStats);
+        if (typeof renderStatsDashboard === 'function' && updatedStats) {
+            renderStatsDashboard(updatedStats);
         }
         saveCurrentTermToStorage();
 
@@ -6874,7 +6924,7 @@ function renderMasterIntegrationView() {
 
                 // ★ 勤務の右端に「出勤・公休などのスタッフ毎の集計」を計算
                 let sWork = 0, sOff = 0, sPaid = 0, sRef = 0, sEarly = 0, sLate = 0, sEve = 0, sH8 = 0;
-                const isZero = !!(s.isZeroCount || s.lifeSection === '管理' || s.lifeSection === 'Cl1' || s.lifeSection === 'Cl2');
+                const isZero = !!(s.isZeroCount || s.lifeSection === '管理' || s.lifeSection === 'Cl1');
                 const isHalf = !!s.isHalf;
 
                 for (let d = 0; d < numDays; d++) {
@@ -7649,7 +7699,7 @@ function renderMasterIntegrationView() {
                         visitTotal++;
                         visitReal += (st.isZeroCount || sym === '出張') ? 0.0 : (st.isHalf || sym.includes('/') ? 0.5 : 1.0);
                     }
-                    if (sec === '通所' || ha === 'ハ3' || ha === 'ハ南' || ha === 'ハ4') {
+                    if (sec === '通所' || sec === 'Cl2' || ha === 'ハ3' || ha === 'ハ南' || ha === 'ハ4') {
                         tsushoTotal++;
                         tsushoReal += (ha === 'ハ3' || ha === 'ハ南' || ha === 'ハ4') ? 0.5 : ((st.isZeroCount || sym === '出張') ? 0.0 : (st.isHalf || sym.includes('/') ? 0.5 : 1.0));
                     }
