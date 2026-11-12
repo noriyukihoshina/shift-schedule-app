@@ -2176,6 +2176,9 @@ class ShiftScheduler {
         // ★ 平日出勤実数および土日祝出勤実数のブレ極小化（最終仕上げ）
         this.balanceWeekdaysDirectly();
         this.balanceWeekendsDirectly();
+        this.ensureRoleCoverage();
+        this.ensureSchedCoverage();
+        this.ensureFullTimeCoverage();
 
         // 基本制約の検証
         let baseErrors = this.verifyBaseHardConstraints();
@@ -2278,6 +2281,9 @@ class ShiftScheduler {
         // ★ 平日出勤実数および土日祝出勤実数のブレ極小化（最終仕上げ）
         this.balanceWeekdaysDirectly();
         this.balanceWeekendsDirectly();
+        this.ensureRoleCoverage();
+        this.ensureSchedCoverage();
+        this.ensureFullTimeCoverage();
 
         // 最終全ハード制約の検証
         let finalErrors = this.verifyAllHardConstraints();
@@ -3873,7 +3879,8 @@ class ShiftScheduler {
                     if (isHolidaySymbol(sym)) selfFixedOff = staffRealW;
                     else if (isHalfDuty(sym)) selfFixedOff = 0.5 * staffRealW;
                 }
-                sum += dailyOffCounts[d] + selfFixedOff + offset;
+                // 出勤が-2(offset<0)の日は休日を+2名多く必要とするため -offset を加算
+                sum += dailyOffCounts[d] + selfFixedOff - offset;
             });
             return sum / wSpan.length;
         });
@@ -3926,9 +3933,9 @@ class ShiftScheduler {
 
             for (const d of days) {
                 const currentOff = dailyOffCounts[d];
-                // ★ 全体の実数合計平準化:
+                // ★ 全体の実数合計平準化（出勤が-2の日は休日を+2多く配置）
                 const offset = (self.dayOffsets && self.dayOffsets[d]) ? self.dayOffsets[d] : 0;
-                const effectiveOffAfter = currentOff + staffRealW + offset;
+                const effectiveOffAfter = currentOff + staffRealW - offset;
                 const diffFromIdeal = effectiveOffAfter - expectedAvgEffectiveOffAfterSelf;
                 score -= diffFromIdeal * 65;
                 if (diffFromIdeal > 0) {
@@ -5778,6 +5785,10 @@ class ShiftScheduler {
             }
             const totalSched = this.staffList.filter(s => !s.isUnused && s.canSched).length;
             if (totalSched >= 2 && schedWork < 2) return false;
+
+            // ★ 専従スタッフ（isFullTime）毎日3名以上出勤保護
+            const totalFT = this.staffList.filter(s => !s.isUnused && s.isFullTime).length;
+            if (totalFT >= 3 && ftWork < 3) return false;
 
             // ★ 係長・主任・副主任（Aチーム・Bチーム両方）のグローバル検証
             let scWork = false;

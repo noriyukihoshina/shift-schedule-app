@@ -5792,18 +5792,33 @@ document.addEventListener('DOMContentLoaded', () => {
             const consecValid = (maxConsec <= limitConsec);
             const holidayIntervalValid = (maxHolidayInterval <= 6);
 
-            // 週休2日検証（日〜土の各週で公休2日以上）
+            // 週休2日検証（日〜土の各週で公休2日以上を厳格検証）
             let weekHolidaysValid = true;
-            for (let w = 0; w < numDays; w += 7) {
-                const wEnd = Math.min(w + 7, numDays);
-                let wOffCount = 0;
-                for (let cd = w; cd < wEnd; cd++) {
-                    const cs = fl.grid[s][cd] ? (fl.grid[s][cd].symbol || fl.grid[s][cd]) : '';
-                    if (isHolidaySymbol(cs)) wOffCount++;
+            const weekSpans = (typeof getSunToSatWeekSpans === 'function') ? getSunToSatWeekSpans(term.dates, numDays) : [];
+            if (weekSpans.length > 0) {
+                for (const wSpan of weekSpans) {
+                    let wOffCount = 0;
+                    for (const cd of wSpan) {
+                        const cs = fl.grid[s][cd] ? (fl.grid[s][cd].symbol || fl.grid[s][cd]) : '';
+                        if (isHolidaySymbol(cs)) wOffCount++;
+                    }
+                    if (wOffCount < 2 && wSpan.length >= 6) {
+                        weekHolidaysValid = false;
+                        break;
+                    }
                 }
-                if (wOffCount < 2 && (wEnd - w) >= 6) {
-                    weekHolidaysValid = false;
-                    break;
+            } else {
+                for (let w = 0; w < numDays; w += 7) {
+                    const wEnd = Math.min(w + 7, numDays);
+                    let wOffCount = 0;
+                    for (let cd = w; cd < wEnd; cd++) {
+                        const cs = fl.grid[s][cd] ? (fl.grid[s][cd].symbol || fl.grid[s][cd]) : '';
+                        if (isHolidaySymbol(cs)) wOffCount++;
+                    }
+                    if (wOffCount < 2 && (wEnd - w) >= 6) {
+                        weekHolidaysValid = false;
+                        break;
+                    }
                 }
             }
 
@@ -5982,10 +5997,11 @@ document.addEventListener('DOMContentLoaded', () => {
 
             showModal({
                 title: '⚡ 全フロア出勤ブレ最少化 完了',
-                desc: `制約条件（5連勤上限・公休間隔・週休2日）を100%保持したまま、計 ${totalSwaps} 箇所の微調整スワップを実施しました！\n\n` +
+                desc: `全病棟の制約条件（5連勤上限・公休間隔・週休2日・特殊勤務翌日休・各階ブレ悪化防止）を100%厳格に保持したまま、安全にスワップ可能な計 ${totalSwaps} 箇所の微調整を実施しました！\n\n` +
                       `【平日の出勤実数】: ${finalWkMin.toFixed(1)}名 〜 ${finalWkMax.toFixed(1)}名（ブレ幅: ${weekdayDiff}名）\n` +
-                      `【土日祝の出勤実数】: ${finalWeMin.toFixed(1)}名 〜 ${finalWeMax.toFixed(1)}名（ブレ幅: ${weekendDiff}名）\n` +
-                      `※土日祝日は4フロア合算で平日から約 -8名（-2名/フロア）の基準枠で均等化されています。`,
+                      `【土日祝の出勤実数】: ${finalWeMin.toFixed(1)}名 〜 ${finalWeMax.toFixed(1)}名（ブレ幅: ${weekendDiff}名）\n\n` +
+                      `※土日祝日は4フロア合算で平日平均から約 -8名（各フロア -2名）の基準枠で均等化されています。\n` +
+                      `※これ以上のスワップは制約遵守・各病棟バランス維持のため行わず、安全に完了しました。`,
                 confirmText: 'OK',
                 onConfirm: () => {}
             });
@@ -6106,18 +6122,33 @@ document.addEventListener('DOMContentLoaded', () => {
             const consecValid = (maxConsec <= limitConsec);
             const holidayIntervalValid = (maxHolidayInterval <= 6);
 
-            // 週休2日検証
+            // 週休2日検証（日〜土の各週で公休2日以上を厳格検証）
             let weekHolidaysValid = true;
-            for (let w = 0; w < numDays; w += 7) {
-                const wEnd = Math.min(w + 7, numDays);
-                let wOffCount = 0;
-                for (let cd = w; cd < wEnd; cd++) {
-                    const cs = targetGrid[s][cd] ? (targetGrid[s][cd].symbol || targetGrid[s][cd]) : '';
-                    if (isHolidaySymbol(cs)) wOffCount++;
+            const weekSpans = (typeof getSunToSatWeekSpans === 'function') ? getSunToSatWeekSpans(term.dates, numDays) : [];
+            if (weekSpans.length > 0) {
+                for (const wSpan of weekSpans) {
+                    let wOffCount = 0;
+                    for (const cd of wSpan) {
+                        const cs = targetGrid[s][cd] ? (targetGrid[s][cd].symbol || targetGrid[s][cd]) : '';
+                        if (isHolidaySymbol(cs)) wOffCount++;
+                    }
+                    if (wOffCount < 2 && wSpan.length >= 6) {
+                        weekHolidaysValid = false;
+                        break;
+                    }
                 }
-                if (wOffCount < 2 && (wEnd - w) >= 6) {
-                    weekHolidaysValid = false;
-                    break;
+            } else {
+                for (let w = 0; w < numDays; w += 7) {
+                    const wEnd = Math.min(w + 7, numDays);
+                    let wOffCount = 0;
+                    for (let cd = w; cd < wEnd; cd++) {
+                        const cs = targetGrid[s][cd] ? (targetGrid[s][cd].symbol || targetGrid[s][cd]) : '';
+                        if (isHolidaySymbol(cs)) wOffCount++;
+                    }
+                    if (wOffCount < 2 && (wEnd - w) >= 6) {
+                        weekHolidaysValid = false;
+                        break;
+                    }
                 }
             }
 
@@ -6244,9 +6275,13 @@ document.addEventListener('DOMContentLoaded', () => {
 
             showModal({
                 title: '⚡ 出勤ブレ最少化 完了',
-                desc: `制約条件（5連勤上限・公休間隔・週休2日・スケ可日勤2名）を100%保持したまま、計 ${totalSwaps} 箇所の微調整スワップを実施しました！\n\n` +
+                desc: `病棟の制約条件（5連勤上限・公休間隔・週休2日・スケ可日勤2名・特殊勤務翌日休）を100%厳格に保持したまま、安全にスワップ可能な計 ${totalSwaps} 箇所の微調整を実施しました！\n\n` +
                       `【平日の出勤実数】: ${finalWkMin.toFixed(1)}名 〜 ${finalWkMax.toFixed(1)}名（ブレ幅: ${weekdayDiff}名）\n` +
-                      `【土日祝の出勤実数】: ${finalWeMin.toFixed(1)}名 〜 ${finalWeMax.toFixed(1)}名（ブレ幅: ${weekendDiff}名）`
+                      `【土日祝の出勤実数】: ${finalWeMin.toFixed(1)}名 〜 ${finalWeMax.toFixed(1)}名（ブレ幅: ${weekendDiff}名）\n\n` +
+                      `※土日祝日は平日平均から約 -2名の基準枠で均等化されています。\n` +
+                      `※これ以上のスワップは制約遵守のため行わず、安全に完了しました。`,
+                confirmText: 'OK',
+                onConfirm: () => {}
             });
         } else {
             showToast('ℹ️ この病棟の出勤実数はすでに十分に平準化されています（追加スワップ不要）');
