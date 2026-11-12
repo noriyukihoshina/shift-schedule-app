@@ -5266,7 +5266,7 @@ document.addEventListener('DOMContentLoaded', () => {
                     // ③ 通所出勤人数合計 ＝ 通所トグルONの出勤者数 ＋ CLトグルONの出勤者数 ＋ ハ3およびハ南のトグルONの出勤者数合計
                     // ④ 通所実数合計 ＝ 通所トグルONの出勤者実数 ＋ CLトグルONの出勤者実数 ＋ ハ3およびハ南のトグルONの出勤者実数の合計（0.5トグルがONなら0.5で計算）
                     const isVisit = (sec === '訪問');
-                    const isTsusho = (sec === '通所') || (sec === 'Cl2') || (ha === 'ハ3' || ha === 'ハ南' || ha === 'ハ4');
+                    const isTsusho = (sec === '通所') || (ha === 'ハ3' || ha === 'ハ南' || ha === 'ハ4');
 
                     if (isVisit) {
                         vWorkCounts[d]++;
@@ -6175,7 +6175,7 @@ document.addEventListener('DOMContentLoaded', () => {
         staffList.forEach((st, s) => {
             if (st.isUnused || st.isSectionChief) return;
             const sec = st.lifeSection || '';
-            if (sec === '訪問' || (!st.isSunOff && !st.isSatSunOff && sec !== '通所' && sec !== 'Cl2')) {
+            if (sec === '訪問') {
                 visitStaff.push(s);
             }
         });
@@ -6281,7 +6281,7 @@ document.addEventListener('DOMContentLoaded', () => {
             if (st.isUnused || st.isSectionChief) return;
             const sec = st.lifeSection || '';
             const ha = st.haSection || '';
-            if (sec === '通所' || sec === 'Cl2' || ha === 'ハ3' || ha === 'ハ南' || ha === 'ハ4') {
+            if (sec === '通所' || ha === 'ハ3' || ha === 'ハ南' || ha === 'ハ4') {
                 tsushoStaff.push(s);
             }
         });
@@ -6874,7 +6874,7 @@ function renderMasterIntegrationView() {
 
                 // ★ 勤務の右端に「出勤・公休などのスタッフ毎の集計」を計算
                 let sWork = 0, sOff = 0, sPaid = 0, sRef = 0, sEarly = 0, sLate = 0, sEve = 0, sH8 = 0;
-                const isZero = !!(s.isZeroCount || s.lifeSection === '管理' || s.lifeSection === 'Cl1');
+                const isZero = !!(s.isZeroCount || s.lifeSection === '管理' || s.lifeSection === 'Cl1' || s.lifeSection === 'Cl2');
                 const isHalf = !!s.isHalf;
 
                 for (let d = 0; d < numDays; d++) {
@@ -7649,7 +7649,7 @@ function renderMasterIntegrationView() {
                         visitTotal++;
                         visitReal += (st.isZeroCount || sym === '出張') ? 0.0 : (st.isHalf || sym.includes('/') ? 0.5 : 1.0);
                     }
-                    if (sec === '通所' || sec === 'Cl2' || ha === 'ハ3' || ha === 'ハ南' || ha === 'ハ4') {
+                    if (sec === '通所' || ha === 'ハ3' || ha === 'ハ南' || ha === 'ハ4') {
                         tsushoTotal++;
                         tsushoReal += (ha === 'ハ3' || ha === 'ハ南' || ha === 'ハ4') ? 0.5 : ((st.isZeroCount || sym === '出張') ? 0.0 : (st.isHalf || sym.includes('/') ? 0.5 : 1.0));
                     }

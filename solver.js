@@ -714,7 +714,7 @@ class ShiftScheduler {
         if (amt <= 0) return 0;
         const staff = this.staffList[s];
         // ★ 0トグルON、または生活期の管理・Cl1は実数0としてカウント！
-        if (staff.isZeroCount || staff.lifeSection === '管理' || staff.lifeSection === 'Cl1') {
+        if (staff.isZeroCount || staff.lifeSection === '管理' || staff.lifeSection === 'Cl1' || staff.lifeSection === 'Cl2') {
             return 0;
         }
         // ★ ハ1〜ハ南のトグルON者は自動的に実数0.5換算（0.5トグルの有無はハーフマンには使用しない）
@@ -2110,7 +2110,7 @@ class ShiftScheduler {
             const staff = this.staffList[s];
             if (staff.isUnused || staff.isSectionChief) continue;
             const sec = staff.lifeSection || '';
-            const isVisit = (sec === '訪問' || (!staff.isSunOff && !staff.isSatSunOff && sec !== '通所' && sec !== 'Cl2'));
+            const isVisit = (sec === '訪問');
             if (isVisit && staff.can8) {
                 h8StaffList.push(s);
             }
@@ -2217,7 +2217,8 @@ class ShiftScheduler {
             const sec = staff.lifeSection || '';
             const ha = staff.haSection || '';
             const isPatA = !!staff.isSatSunOff || (!staff.isSunOff && (sec === '訪問' || sec === '管理' || sec === 'Cl1' || ha === 'ハ1' || ha === 'ハ2'));
-            const isPatB = !isPatA && (!!staff.isSunOff || (sec === '通所' || sec === 'Cl2' || ha === 'ハ3' || ha === 'ハ南' || ha === 'ハ4'));
+            // 通所実数平準化は通所スタッフ＋ハ3＋ハ南のみを対象（Cl2は独立枠のため通所実数には含めない）
+            const isPatB = !isPatA && (sec === '通所' || ha === 'ハ3' || ha === 'ハ南' || ha === 'ハ4');
             if (isPatB) patBStaff.push(s);
         }
 
@@ -2315,7 +2316,7 @@ class ShiftScheduler {
             const staff = this.staffList[s];
             if (staff.isUnused || staff.isSectionChief) continue;
             const sec = staff.lifeSection || '';
-            const isVisit = (sec === '訪問' || (!staff.isSunOff && !staff.isSatSunOff && sec !== '通所' && sec !== 'Cl2'));
+            const isVisit = (sec === '訪問');
             if (isVisit) visitStaff.push(s);
         }
 
@@ -6664,8 +6665,8 @@ class ShiftScheduler {
                 if (this.staffList[s].isUnused) continue;
                 const staff = this.staffList[s];
                 const sym = this.grid[s][d].symbol;
-                const isExcludedFromWork = (staff.lifeSection === '管理' || staff.lifeSection === 'Cl1');
-                const sec = staff.lifeSection ? (staff.lifeSection === 'Cl2' ? '通所' : staff.lifeSection) : (staff.section || 'その他');
+                const isExcludedFromWork = (staff.lifeSection === '管理' || staff.lifeSection === 'Cl1' || staff.lifeSection === 'Cl2');
+                const sec = staff.lifeSection || staff.section || 'その他';
                 let staffWorkAmt = 0;
 
                 // ★ ハヤ・オソ・イブは特殊時間と同じ時間で出勤する勤務だが、早・遅・Eとしてのカウントはせず、〇としてカウント！
@@ -6741,7 +6742,7 @@ class ShiftScheduler {
             for (let s = 0; s < this.numStaff; s++) {
                 if (this.staffList[s].isUnused) continue;
                 const staff = this.staffList[s];
-                if (staff.isZeroCount || staff.lifeSection === '管理' || staff.lifeSection === 'Cl1') continue;
+                if (staff.isZeroCount || staff.lifeSection === '管理' || staff.lifeSection === 'Cl1' || staff.lifeSection === 'Cl2') continue;
                 const sym = this.grid[s][d].symbol;
                 let amt = 0;
                 if ([SYMBOLS.EARLY, SYMBOLS.LATE, SYMBOLS.EVE, SYMBOLS.H8, SYMBOLS.WORK, '〇', '◯', SYMBOLS.NO_ALLOW_EARLY, SYMBOLS.NO_ALLOW_LATE, SYMBOLS.NO_ALLOW_EVE].includes(sym) && sym !== '出' && sym !== '出張' && sym !== SYMBOLS.TRIP) {
