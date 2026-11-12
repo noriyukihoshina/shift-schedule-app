@@ -239,25 +239,39 @@ function validateInitialState(staffList, options = {}) {
             }
         }
 
-        // C. 公休間隔・連勤チェック（公休から公休の間は最大6日以内。有休やリフがあってもNG！）
-        // ユーザー制約:「公休から公休の間は6までです。間にリフや有があってもNGです。」
+        // C. 公休間隔・連勤チェック（★労基法・全スタッフ共通ハード制約: 公休から公休の間は最大6日以内。有休やリフがあってもリセット不可！）
+        // ユーザー制約:「公休から公休の間は6までです。間にリフや有があってもNGです。全スタッフ共通の厳守事項です。」
         const maxAllowedConsec = staff.allow6Consec ? 6 : 5;
-        let nonOffStreak = [];
+        const fullInitSeq = [];
+        if (staff.prevDays) {
+            for (let p = 0; p < 5; p++) {
+                let pSym = staff.prevDays[p] || '';
+                if (staff.isSectionChief && (p === 1 || p === 2) && isWorkSymbol(pSym)) pSym = SYMBOLS.OFF;
+                fullInitSeq.push({ d: -5 + p, sym: pSym, isPrev: true });
+            }
+        }
         for (let d = 0; d < numDays; d++) {
-            const sym = staff.days[d];
+            fullInitSeq.push({ d: d, sym: staff.days[d] || '', isPrev: false });
+        }
+
+        let nonPureOffItems = [];
+        for (let i = 0; i < fullInitSeq.length; i++) {
+            const item = fullInitSeq[i];
+            const sym = item.sym;
             if (sym && !isPurePublicOffSymbol(sym)) {
-                nonOffStreak.push(d);
-                if (nonOffStreak.length > maxAllowedConsec) {
-                    const ruleMsg = staff.allow6Consec ? '公休から公休の間は最大6日以内（間に有休やリフがあってもNG）' : '公休から公休の間は最大5日以内（間に有休やリフがあってもNG）';
-                    errors.push(`【スタッフ No.${staff.id} ${staff.name}】${d + 1}日目時点で公休のない連続期間が${nonOffStreak.length}日となっています（${ruleMsg}です）。`);
-                    nonOffStreak.forEach(wDay => {
-                        conflictCells.push({ staffIndex: sIdx, dayIndex: wDay, reason: `公休間隔が上限(${maxAllowedConsec}日)を超えているため公休(休)を挟んでください（有休・リフは公休に含まれません）` });
+                nonPureOffItems.push(item);
+                if (nonPureOffItems.length > 6) {
+                    const sLabel = nonPureOffItems[0].isPrev ? `前${-nonPureOffItems[0].d}日` : `${nonPureOffItems[0].d + 1}日目`;
+                    const eLabel = item.isPrev ? `前${-item.d}日` : `${item.d + 1}日目`;
+                    errors.push(`【スタッフ No.${staff.id} ${staff.name}】${sLabel}〜${eLabel}で公休（休）のない連続期間が${nonPureOffItems.length}日となっています（労基法・全スタッフ共通ハード制約: 公休から公休の間は最大6日以内です。有休やリフは公休にあたりません）。`);
+                    nonPureOffItems.forEach(it => {
+                        if (!it.isPrev) {
+                            conflictCells.push({ staffIndex: sIdx, dayIndex: it.d, reason: `公休間隔が上限(6日)を超えているため公休(休)を挟んでください（有休・リフは公休に含まれません）` });
+                        }
                     });
                 }
             } else if (isPurePublicOffSymbol(sym)) {
-                nonOffStreak = [];
-            } else {
-                nonOffStreak = [];
+                nonPureOffItems = [];
             }
         }
 
@@ -6305,11 +6319,15 @@ class ShiftScheduler {
                 } else if (!isPurePublicOffSymbol(sequence[idx])) {
                     if (streak === 0) startIdx = idx;
                     streak++;
-                    if (streak > maxAllowed) {
+                    if (streak > 6) {
                         const sLabel = startIdx < 5 ? `前${5 - startIdx}日` : this.formatDateLabel(startIdx - 5);
                         const eLabel = idx < 5 ? `前${5 - idx}日` : this.formatDateLabel(idx - 5);
-                        const errReason = (streak > 6) ? `公休から公休の間は最大6日以内制約違反（間に有休やリフがあってもNG）` : `上限${maxAllowed}連勤違反`;
-                        errors.push(`【スタッフ No.${staff.id} ${staff.name}】${sLabel}〜${eLabel}で公休なし${streak}日連続（${errReason}）です。`);
+                        errors.push(`【スタッフ No.${staff.id} ${staff.name}】${sLabel}〜${eLabel}で公休（休）のない連続期間が${streak}日連続（労基法・全スタッフ共通ハード制約: 公休から公休の間は最大6日以内です。有休やリフは公休にあたりません）です。`);
+                        break;
+                    } else if (streak > maxAllowed && isWorkSymbol(sequence[idx])) {
+                        const sLabel = startIdx < 5 ? `前${5 - startIdx}日` : this.formatDateLabel(startIdx - 5);
+                        const eLabel = idx < 5 ? `前${5 - idx}日` : this.formatDateLabel(idx - 5);
+                        errors.push(`【スタッフ No.${staff.id} ${staff.name}】${sLabel}〜${eLabel}で上限${maxAllowed}連勤違反（${streak}日連続勤務）です。`);
                         break;
                     }
                 } else {

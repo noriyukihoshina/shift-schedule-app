@@ -5266,7 +5266,7 @@ document.addEventListener('DOMContentLoaded', () => {
                     // ③ 通所出勤人数合計 ＝ 通所トグルONの出勤者数 ＋ CLトグルONの出勤者数 ＋ ハ3およびハ南のトグルONの出勤者数合計
                     // ④ 通所実数合計 ＝ 通所トグルONの出勤者実数 ＋ CLトグルONの出勤者実数 ＋ ハ3およびハ南のトグルONの出勤者実数の合計（0.5トグルがONなら0.5で計算）
                     const isVisit = (sec === '訪問');
-                    const isTsusho = (sec === '通所') || (sec === 'Cl1' || sec === 'Cl2' || sec === 'Cl') || (ha === 'ハ3' || ha === 'ハ南' || ha === 'ハ4');
+                    const isTsusho = (sec === '通所') || (sec === 'Cl2') || (ha === 'ハ3' || ha === 'ハ南' || ha === 'ハ4');
 
                     if (isVisit) {
                         vWorkCounts[d]++;
@@ -6180,11 +6180,12 @@ document.addEventListener('DOMContentLoaded', () => {
             }
         });
 
+        // ★ ユーザー指示: 訪問は祝日も平日扱い（稼働日）！土日のみ除外
         const weekdays = [];
         for (let d = 0; d < numDays; d++) {
             const di = term.dates[d];
-            const isWknd = di ? (di.wIdx === 5 || di.wIdx === 6 || di.isHoliday) : ((d % 7 === 5) || (d % 7 === 6));
-            if (!isWknd) weekdays.push(d);
+            const isSatSun = di ? (di.wIdx === 5 || di.wIdx === 6) : ((d % 7 === 5) || (d % 7 === 6));
+            if (!isSatSun) weekdays.push(d);
         }
 
         if (visitStaff.length === 0 || weekdays.length < 2) {
@@ -6280,7 +6281,7 @@ document.addEventListener('DOMContentLoaded', () => {
             if (st.isUnused || st.isSectionChief) return;
             const sec = st.lifeSection || '';
             const ha = st.haSection || '';
-            if (sec === '通所' || sec === 'Cl1' || sec === 'Cl2' || sec === 'Cl' || ha === 'ハ3' || ha === 'ハ南' || ha === 'ハ4') {
+            if (sec === '通所' || sec === 'Cl2' || ha === 'ハ3' || ha === 'ハ南' || ha === 'ハ4') {
                 tsushoStaff.push(s);
             }
         });
@@ -7648,17 +7649,18 @@ function renderMasterIntegrationView() {
                         visitTotal++;
                         visitReal += (st.isZeroCount || sym === '出張') ? 0.0 : (st.isHalf || sym.includes('/') ? 0.5 : 1.0);
                     }
-                    if (sec === '通所' || sec === 'Cl1' || sec === 'Cl2' || sec === 'Cl' || ha === 'ハ3' || ha === 'ハ南' || ha === 'ハ4') {
+                    if (sec === '通所' || sec === 'Cl2' || ha === 'ハ3' || ha === 'ハ南' || ha === 'ハ4') {
                         tsushoTotal++;
                         tsushoReal += (ha === 'ハ3' || ha === 'ハ南' || ha === 'ハ4') ? 0.5 : ((st.isZeroCount || sym === '出張') ? 0.0 : (st.isHalf || sym.includes('/') ? 0.5 : 1.0));
                     }
                 });
 
-                // 訪問稼働日（月〜金、祝日除く）
-                if (!isWeekendOrHoliday) {
+                // ★ ユーザー指示: 訪問・通所は祝日も平日扱い（稼働日）！
+                // 訪問稼働日: 月曜日〜金曜日（土日のみ除外、祝日も通常稼働集計）
+                if (di.wIdx !== 5 && di.wIdx !== 6) {
                     weekdayDaily.push({ d, totalWork: visitTotal, realWork: visitReal, label: di.label, weekday: di.weekday });
                 }
-                // 通所稼働日（月〜土、日曜日除く）
+                // 通所稼働日: 月曜日〜土曜日（日曜日のみ休館・除外、祝日も通常稼働集計）
                 if (di.wIdx !== 6) {
                     holidayDaily.push({ d, totalWork: tsushoTotal, realWork: tsushoReal, label: di.label, weekday: di.weekday });
                 }
@@ -7728,7 +7730,7 @@ function renderMasterIntegrationView() {
             if (holidayAvgEl) {
                 holidayAvgEl.innerHTML = `実数 ${rAvg} 名 <span style="font-size:0.78rem; color:#64748b; font-weight:normal;">(出勤計: ${hAvg}名)</span>`;
             }
-            if (sunHolSubInfoEl) sunHolSubInfoEl.textContent = isLife ? `月曜日〜土曜日（計${holidayDaily.length}日間、日曜除く）` : `土曜日・日曜日・国民の祝日（計${holidayDaily.length}日間）`;
+            if (sunHolSubInfoEl) sunHolSubInfoEl.textContent = isLife ? `月〜土（日曜日のみ休館・祝日も通常稼働、計${holidayDaily.length}日間）` : `土曜日・日曜日・国民の祝日（計${holidayDaily.length}日間）`;
         } else {
             if (holidayBadgeEl) holidayBadgeEl.textContent = '0 日間';
             if (holidayRangeEl) holidayRangeEl.textContent = '- 名';
