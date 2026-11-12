@@ -5205,7 +5205,7 @@ class ShiftScheduler {
 
         const sequence = [];
         for (let i = 0; i < 5; i++) {
-            let pSym = staff.prevDays[i] || '';
+            let pSym = (staff.prevDays && staff.prevDays[i]) || '';
             if (staff.isSectionChief && (i === 1 || i === 2) && isWorkSymbol(pSym)) {
                 pSym = SYMBOLS.OFF;
             }

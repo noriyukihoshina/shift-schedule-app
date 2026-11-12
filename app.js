@@ -4838,7 +4838,7 @@ document.addEventListener('DOMContentLoaded', () => {
                     const isCellFixed = cell.isFixed && !isRef;
                     const cls = isCellFixed ? 'day-cell fixed-cell' : (isRef ? 'day-cell auto-ref-cell' : 'day-cell auto-cell');
                     const thickCls = getDayBorderClass(d);
-                    const titleText = isCellFixed ? '🔒 事前固定希望枠（赤字・太字保持）' : (isAutoRef ? '🌴 自動配分リフ（通常編集自由）' : 'システム自動配置');
+                    const titleText = isCellFixed ? '🔒 事前固定希望枠（赤字・太字保持）' : (isRef ? '🌴 自動配分リフ（通常編集自由）' : 'システム自動配置');
                     bodyHtml += `<td class="${cls} ${thickCls} ${rowBottomCls}" data-s="${s}" data-d="${d}" title="${titleText}">${displaySym}</td>`;
                 }
 
