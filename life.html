@@ -244,6 +244,12 @@
                         <span id="outputTitleDisplay" style="font-weight: 800; color: #1e293b; font-size: 1.05rem;">✏️ 修正作業エリア（仮自動生成・微修正）</span>
                     </div>
                     <div class="action-group" style="display: flex; gap: 8px; flex-wrap: wrap; align-items: center;">
+                                                <button class="btn btn-primary" id="lifeBalanceVisitBtn" style="font-size: 0.82rem; padding: 5px 12px; font-weight: 800; background: #2563eb; border-color: #1d4ed8; color: white;" title="訪問スタッフ（月〜金）の出勤実数ブレを最小化します">
+                            ⚡ 訪問ブレ最小化
+                        </button>
+                        <button class="btn btn-warning" id="lifeBalanceTsushoBtn" style="font-size: 0.82rem; padding: 5px 12px; font-weight: 800; background: #ea580c; border-color: #c2410c; color: white;" title="通所スタッフ（月〜土）の出勤実数ブレを最小化します（CL・ハ3(0.5)・ハ南(0.5)含む）">
+                            ⚡ 通所ブレ最小化
+                        </button>
                         <button class="btn btn-primary" id="copyForExcelBtn" style="font-size: 0.82rem; padding: 5px 12px; font-weight: 700;" title="警告やブロックなしでExcelに直接貼り付け可能！事前希望枠の赤字太字・罫線・自動計算数式を保持してクリップボードにコピーします">
                             📋 Excelへ一発貼り付け用コピー（赤字・数式付き）
                         </button>
@@ -439,7 +445,7 @@
                 <!-- 1. 平日の出勤人数（平準化状況 & 平均） -->
                 <div class="stat-card" style="border-top: 4px solid #2563eb;">
                     <div class="stat-card-title" style="display: flex; align-items: center; justify-content: space-between;">
-                        <span>🏢 平日の出勤人数・実数（平準化状況）</span>
+                        <span>🏢 訪問稼働日（月曜日～金曜日）の実数</span>
                         <span id="statWeekdayBadge" style="font-size: 0.75rem; background: #eff6ff; color: #1d4ed8; padding: 2px 8px; border-radius: 9999px; font-weight: 700;">- 日間</span>
                     </div>
                     <div class="stat-card-value" id="statWeekdayWorkRange" style="font-size: 1.3rem; color: #1e3a8a;">- 〜 - 名</div>
@@ -453,7 +459,7 @@
                 <!-- 2. 土日祝の出勤人数（平準化状況 & 平均） -->
                 <div class="stat-card" style="border-top: 4px solid #dc2626;">
                     <div class="stat-card-title" style="display: flex; align-items: center; justify-content: space-between;">
-                        <span>🎌 土日祝の出勤人数・実数（平準化状況）</span>
+                        <span>🏥 通所稼働日（月曜日～土曜日）の実数</span>
                         <span id="statHolidayBadge" style="font-size: 0.75rem; background: #fef2f2; color: #b91c1c; padding: 2px 8px; border-radius: 9999px; font-weight: 700;">- 日間</span>
                     </div>
                     <div class="stat-card-value" id="statHolidayWorkRange" style="font-size: 1.3rem; color: #991b1b;">- 〜 - 名</div>
@@ -461,7 +467,7 @@
                         <span style="color: #64748b; font-weight: 600;">土日祝の平均出勤人数:</span>
                         <strong id="statHolidayAvgWork" style="color: #1e293b; font-size: 1.05rem;">- 名</strong>
                     </div>
-                    <div id="statSunHolSubInfo" style="font-size: 0.75rem; color: #64748b; margin-top: 4px;">土曜日・日曜日・国民の祝日</div>
+                    <div id="statSunHolSubInfo" style="font-size: 0.75rem; color: #64748b; margin-top: 4px;">月曜日〜土曜日（日曜日を除く）</div>
                 </div>
 
                 <!-- 3. 有休取得合計数 -->

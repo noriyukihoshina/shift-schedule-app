@@ -1916,7 +1916,7 @@ class ShiftScheduler {
             majorSpans.forEach((wSpan, wIdx) => {
                 let hasWeekdayOff = false;
                 for (const d of wSpan) {
-                    if (isHolidaySymbol(this.grid[s][d].symbol)) { hasWeekdayOff = true; break; }
+                    if (isPurePublicOffSymbol(this.grid[s][d].symbol)) { hasWeekdayOff = true; break; }
                 }
 
                 if (!hasWeekdayOff) {
@@ -2034,6 +2034,57 @@ class ShiftScheduler {
             for (let d = 0; d < this.numDays; d++) {
                 if (this.grid[s][d].symbol === '') {
                     this.grid[s][d].symbol = SYMBOLS.WORK;
+                }
+            }
+        }
+
+        // ★ ユーザー指示（ハード制約）: 生活期テーブル 公休から公休の間は最大で6（7日連続公休なしはNG。リフや有休は公休に含めない）
+        for (let s = 0; s < this.numStaff; s++) {
+            const staff = this.staffList[s];
+            if (staff.isUnused) continue;
+
+            for (let pass = 0; pass < 3; pass++) {
+                let pureOffStreak = 0;
+                if (staff.prevDays) {
+                    for (let p = 4; p >= 0; p--) {
+                        if (!isPurePublicOffSymbol(staff.prevDays[p])) pureOffStreak++;
+                        else break;
+                    }
+                }
+
+                for (let d = 0; d < this.numDays; d++) {
+                    const sym = this.grid[s][d].symbol;
+                    if (!isPurePublicOffSymbol(sym)) {
+                        pureOffStreak++;
+                        if (pureOffStreak > 6) {
+                            // 公休間隔が6日を超過！直前6日間のうち未固定の「○」を公休「休」にスワップ
+                            let candD = -1;
+                            for (let backD = d; backD >= Math.max(0, d - 5); backD--) {
+                                if (!this.grid[s][backD].isFixed && this.grid[s][backD].symbol === SYMBOLS.WORK) {
+                                    candD = backD;
+                                    break;
+                                }
+                            }
+                            if (candD !== -1) {
+                                this.grid[s][candD].symbol = SYMBOLS.OFF;
+                                pureOffStreak = d - candD;
+
+                                // 公休日数（8日）を保つため、すでに連休（2連休以上）になっている他の未固定「休」を「○」に還元
+                                for (let otherD = 0; otherD < this.numDays; otherD++) {
+                                    if (otherD !== candD && !this.grid[s][otherD].isFixed && this.grid[s][otherD].symbol === SYMBOLS.OFF) {
+                                        const prevOff = (otherD > 0 && isPurePublicOffSymbol(this.grid[s][otherD - 1].symbol));
+                                        const nextOff = (otherD + 1 < this.numDays && isPurePublicOffSymbol(this.grid[s][otherD + 1].symbol));
+                                        if (prevOff || nextOff) {
+                                            this.grid[s][otherD].symbol = SYMBOLS.WORK;
+                                            break;
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    } else {
+                        pureOffStreak = 0;
+                    }
                 }
             }
         }
@@ -2166,13 +2217,15 @@ class ShiftScheduler {
 
         if (patBStaff.length > 0 && tsushoWorkingDays.length >= 2) {
             for (let iter = 0; iter < 80; iter++) {
-                // 通所出勤実数を計算
+                // 通所出勤実数を計算（通所トグルON + CLトグルON + ハ3/ハ南トグルON(0.5換算)）
                 const dailyLoads = tsushoWorkingDays.map(d => {
                     let real = 0;
                     for (const s of patBStaff) {
                         const sym = this.grid[s][d].symbol;
-                        if (isWorkSymbol(sym)) real += (this.staffList[s].isHalf ? 0.5 : 1.0);
-                        else if (isHalfDuty(sym)) real += 0.5 * (this.staffList[s].isHalf ? 0.5 : 1.0);
+                        const ha = this.staffList[s].haSection || '';
+                        const w = (ha === 'ハ3' || ha === 'ハ南' || ha === 'ハ4') ? 0.5 : (this.staffList[s].isZeroCount ? 0.0 : (this.staffList[s].isHalf ? 0.5 : 1.0));
+                        if (isWorkSymbol(sym)) real += w;
+                        else if (isHalfDuty(sym)) real += 0.5 * w;
                     }
                     return { day: d, real };
                 });
@@ -2205,7 +2258,27 @@ class ShiftScheduler {
                                 this.setSymbol(s, maxD, SYMBOLS.OFF, false);
                                 this.setSymbol(s, minD, SYMBOLS.WORK, false);
 
-                                if (this.isStaffHardValid(s)) {
+                                const checkPureOffStreak = (sIdx) => {
+                                    let strk = 0;
+                                    const stf = this.staffList[sIdx];
+                                    if (stf.prevDays) {
+                                        for (let p = 4; p >= 0; p--) {
+                                            if (!isPurePublicOffSymbol(stf.prevDays[p])) strk++;
+                                            else break;
+                                        }
+                                    }
+                                    for (let cd = 0; cd < this.numDays; cd++) {
+                                        if (!isPurePublicOffSymbol(this.grid[sIdx][cd].symbol)) {
+                                            strk++;
+                                            if (strk > 6) return false;
+                                        } else {
+                                            strk = 0;
+                                        }
+                                    }
+                                    return true;
+                                };
+
+                                if (this.isStaffHardValid(s) && checkPureOffStreak(s)) {
                                     swapped = true;
                                     break;
                                 } else {
@@ -4407,6 +4480,7 @@ class ShiftScheduler {
                 if (this.grid[s][d].symbol === SYMBOLS.H8) {
                     counts[s]++;
                     lastAssignedDay[s] = d;
+                    team8Counts[getStaffTeam(s)]++;
                 }
             }
         }
@@ -4462,10 +4536,9 @@ class ShiftScheduler {
                 // 両チームに can8 スタッフがいる場合のみ、A/Bチーム均等化ペナルティを適用
                 if (canBalanceTeams) {
                     const targetTeam = (team8Counts.A <= team8Counts.B) ? 'A' : 'B';
-                    const teamDiff = team8Counts[team] - (team === 'A' ? team8Counts.B : team8Counts.A);
-                    teamPenalty = teamDiff * 50000;
-                    if (team !== targetTeam && Math.abs(team8Counts.A - team8Counts.B) >= 1) {
-                        teamPenalty += 200000;
+                    if (team !== targetTeam) {
+                        const diff = Math.abs(team8Counts.A - team8Counts.B);
+                        teamPenalty = (diff >= 1) ? 2000000 * diff : 100000;
                     }
                 }
 

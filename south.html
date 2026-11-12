@@ -257,8 +257,11 @@
                         <button class="btn btn-outline" id="exportExcelBtn" style="font-size: 0.82rem; padding: 5px 12px; font-weight: 600;" title="警告やブロックなしで開ける本物のExcel形式(.xlsx)で勤務表をダウンロード（A3横向き印刷設定・動的数式付き）">
                             📊 スプレッドシート保存 (.xlsx)
                         </button>
-                        <button class="btn btn-warning" id="floorBalanceBtn" style="font-size: 0.82rem; padding: 5px 12px; font-weight: 800; background: #f59e0b; border-color: #d97706; color: white;" title="この病棟の出勤ブレを最小化します（土日-2均等化 ＆ 平日均等化）">
-                            ⚡ 全体出勤ブレを最少化
+                        <button class="btn btn-primary" id="floorBalanceWeekdayBtn" style="font-size: 0.82rem; padding: 5px 12px; font-weight: 800; background: #2563eb; border-color: #1d4ed8; color: white;" title="この病棟の平日の出勤実数ブレを最小化します（土日祝日には影響を与えません）">
+                            ⚡ 平日ブレ最小化
+                        </button>
+                        <button class="btn btn-danger" id="floorBalanceWeekendBtn" style="font-size: 0.82rem; padding: 5px 12px; font-weight: 800; background: #dc2626; border-color: #b91c1c; color: white;" title="この病棟の休日（土日祝日）の出勤実数ブレを最小化します（平日には影響を与えません）">
+                            ⚡ 休日ブレ最小化
                         </button>
                         <button class="btn btn-success" id="outputAssignSpecialBtn" style="background: #059669; border-color: #059669; color: white; font-weight: 700; font-size: 0.82rem; padding: 5px 12px;" title="基本勤務表の「○」から、早3名・遅1名・E2名・8時1名を割り当てて「最終チェック&完成」へ進みます">
                             ✨ 特殊勤務を入れる

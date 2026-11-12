@@ -4347,8 +4347,24 @@ document.addEventListener('DOMContentLoaded', () => {
     const outputAssignSpecialBtn = document.getElementById('outputAssignSpecialBtn');
     if (outputAssignSpecialBtn) outputAssignSpecialBtn.addEventListener('click', handleAssignSpecialDuties);
 
+    // ★ ユーザー指示: ブレ最小化ボタン（平日／休日／ST／生活期）
+    const floorBalanceWeekdayBtn = document.getElementById('floorBalanceWeekdayBtn');
+    if (floorBalanceWeekdayBtn) floorBalanceWeekdayBtn.addEventListener('click', handleFloorBalanceWeekday);
+
+    const floorBalanceWeekendBtn = document.getElementById('floorBalanceWeekendBtn');
+    if (floorBalanceWeekendBtn) floorBalanceWeekendBtn.addEventListener('click', handleFloorBalanceWeekend);
+
     const floorBalanceBtn = document.getElementById('floorBalanceBtn');
-    if (floorBalanceBtn) floorBalanceBtn.addEventListener('click', handleFloorBalanceWorkforce);
+    if (floorBalanceBtn) floorBalanceBtn.addEventListener('click', handleFloorBalanceWeekday); // 互換性フォールバック
+
+    const stBalanceBtn = document.getElementById('stBalanceBtn');
+    if (stBalanceBtn) stBalanceBtn.addEventListener('click', handleSTBalance);
+
+    const lifeBalanceVisitBtn = document.getElementById('lifeBalanceVisitBtn');
+    if (lifeBalanceVisitBtn) lifeBalanceVisitBtn.addEventListener('click', handleLifeBalanceVisit);
+
+    const lifeBalanceTsushoBtn = document.getElementById('lifeBalanceTsushoBtn');
+    if (lifeBalanceTsushoBtn) lifeBalanceTsushoBtn.addEventListener('click', handleLifeBalanceTsusho);
 
     // ==========================================
     // ★ ST所属スタッフ連携データ管理（各病棟テーブルへの参照表示 & 実数合算用）
@@ -5250,15 +5266,18 @@ document.addEventListener('DOMContentLoaded', () => {
                     // ③ 通所出勤人数合計 ＝ 通所トグルONの出勤者数 ＋ CLトグルONの出勤者数 ＋ ハ3およびハ南のトグルONの出勤者数合計
                     // ④ 通所実数合計 ＝ 通所トグルONの出勤者実数 ＋ CLトグルONの出勤者実数 ＋ ハ3およびハ南のトグルONの出勤者実数の合計（0.5トグルがONなら0.5で計算）
                     const isVisit = (sec === '訪問');
-                    const isTsusho = (sec === '通所') || (sec === 'Cl1' || sec === 'Cl2') || (ha === 'ハ3' || ha === 'ハ南');
+                    const isTsusho = (sec === '通所') || (sec === 'Cl1' || sec === 'Cl2' || sec === 'Cl') || (ha === 'ハ3' || ha === 'ハ南' || ha === 'ハ4');
 
                     if (isVisit) {
                         vWorkCounts[d]++;
-                        vRealCounts[d] += weight;
+                        let vWeight = (st.isZeroCount || sym === '出張') ? 0.0 : (st.isHalf || sym.includes('/') ? 0.5 : 1.0);
+                        vRealCounts[d] += vWeight;
                     }
                     if (isTsusho) {
                         tWorkCounts[d]++;
-                        tRealCounts[d] += weight;
+                        // ★ ユーザー指示: ハ3とハ南は0.5換算！通所・CLは通常1.0（0.5なら0.5、0なら0）
+                        let tWeight = (ha === 'ハ3' || ha === 'ハ南' || ha === 'ハ4') ? 0.5 : ((st.isZeroCount || sym === '出張') ? 0.0 : (st.isHalf || sym.includes('/') ? 0.5 : 1.0));
+                        tRealCounts[d] += tWeight;
                     }
 
                     if (sym === '8時') {
@@ -5644,8 +5663,40 @@ document.addEventListener('DOMContentLoaded', () => {
     // 展開順: PTA → PTB → OTA → OTB → ST
     // =========================================================================
     
-    // ★ ユーザー指示: マスターテーブル用 全フロア「休みのブレ最少化」システム（土日祝-8均等化）
-    function handleMasterBalanceWeekendOff() {
+    // =========================================================================
+    // ★ ユーザー指示: ブレ最小化エンジン（マスター／フロア／ST／生活期）
+    // =========================================================================
+
+    // 公休間隔6日以内チェック用ヘルパー（労基法・ハード制約！リフや有休は公休に含めない）
+    function checkPureOffIntervalForStaff(grid, s, numDays, staffObj) {
+        let streak = 0;
+        if (staffObj && staffObj.prevDays) {
+            for (let p = 4; p >= 0; p--) {
+                if (!isPurePublicOffSymbol(staffObj.prevDays[p])) streak++;
+                else break;
+            }
+        }
+        for (let d = 0; d < numDays; d++) {
+            const c = grid[s] ? grid[s][d] : null;
+            const sym = (c && typeof c === 'object') ? (c.symbol || '') : (c || '');
+            if (!isPurePublicOffSymbol(sym)) {
+                streak++;
+                if (streak > 6) return false;
+            } else {
+                streak = 0;
+            }
+        }
+        return true;
+    }
+
+    // -------------------------------------------------------------------------
+    // 1. マスターテーブル: 平日ブレ最小化 / 休日ブレ最小化
+    // -------------------------------------------------------------------------
+    function executeMasterBalance(mode) {
+        // mode: 'weekday' (平日ブレ最小化) | 'weekend' (休日ブレ最小化)
+        const isWeekendMode = (mode === 'weekend');
+        const modeTitle = isWeekendMode ? '休日ブレ最小化' : '平日ブレ最小化';
+
         const termSel = document.getElementById('masterTermSelect') || document.getElementById('termSelect');
         const curStartDate = (termSel && termSel.value) ? termSel.value : (document.getElementById('termStartDate')?.value || currentWorkingStartDate || '2026-04-01');
         const term = getTermInfo(curStartDate);
@@ -5658,68 +5709,81 @@ document.addEventListener('DOMContentLoaded', () => {
             { id: 'south', label: '南' }
         ];
 
-        // 各フロアのデータを読み込み
         const floors = [];
         floorConfigs.forEach(fc => {
-            try {
-                const raw = localStorage.getItem(`shift_schedule_${fc.id}_term_${curStartDate}`);
-                if (raw) {
+            const key = `shift_schedule_${fc.id}_term_${curStartDate}`;
+            const raw = localStorage.getItem(key);
+            if (raw) {
+                try {
                     const parsed = JSON.parse(raw);
-                    const staffList = parsed.staffList || [];
-                    const grid = parsed.outputGrid || parsed.intermediateGrid || [];
-                    const dayOffsets = parsed.dayOffsets || [];
-                    if (grid.length > 0 && staffList.length > 0) {
-                        floors.push({ id: fc.id, label: fc.label, staffList, grid, dayOffsets, rawData: parsed });
+                    const grid = parsed.outputGrid || parsed.grid;
+                    const sList = parsed.staffList || [];
+                    if (grid && grid.length > 0 && sList.length > 0) {
+                        floors.push({ id: fc.id, label: fc.label, grid: JSON.parse(JSON.stringify(grid)), staffList: sList, rawData: parsed });
                     }
+                } catch (e) {
+                    console.error(`Error loading floor ${fc.id}:`, e);
                 }
-            } catch (e) {
-                console.error(`Error loading floor ${fc.id}:`, e);
             }
         });
 
         if (floors.length === 0) {
-            alert('各フロア（1階・2階・3階・南）の勤務表データが見つかりません。各病棟で一度勤務表を保存してください。');
+            showToast('⚠️ 各フロアの勤務表データが見つかりません。先に各病棟で「勤務表を自動生成する」を実行してください。');
             return;
         }
 
-        // 土日祝日（土曜・日曜・国民の祝日）のインデックスを抽出
-        const weekendIndices = [];
+        // 対象日の抽出
+        const targetDays = [];
         for (let d = 0; d < numDays; d++) {
-            const dt = term.dates[d];
-            const isWeekendOrHol = dt ? (dt.wIdx === 5 || dt.wIdx === 6 || dt.isHoliday) : false;
-            if (isWeekendOrHol) weekendIndices.push(d);
+            const di = term.dates[d];
+            const isWknd = di ? (di.wIdx === 5 || di.wIdx === 6 || di.isHoliday) : ((d % 7 === 5) || (d % 7 === 6));
+            if (isWeekendMode && isWknd) targetDays.push(d);
+            else if (!isWeekendMode && !isWknd) targetDays.push(d);
         }
 
-        if (weekendIndices.length < 2) {
-            showToast('⚠️ 調整対象となる土日祝日が存在しません');
+        if (targetDays.length < 2) {
+            showToast('⚠️ 平準化対象の日数が不足しています。');
             return;
         }
 
-        // 全フロア合算の日別出勤実数を計算するヘルパー
-        function getDailyReal() {
-            const daily = new Array(numDays).fill(0);
-            for (let d = 0; d < numDays; d++) {
-                let r = 0;
-                floors.forEach(fl => {
-                    fl.staffList.forEach((st, s) => {
-                        if (st.isUnused) return;
-                        const cell = fl.grid[s] ? fl.grid[s][d] : null;
-                        const sym = (cell && typeof cell === 'object') ? (cell.symbol || '') : (cell || '');
-                        if (isWorkSymbol(sym) && sym !== '出' && sym !== '出張' && sym !== SYMBOLS.TRIP) {
-                            let w = 1.0;
-                            if (st.isZeroCount || sym === '出張') w = 0.0;
-                            else if (st.isHalf || sym.includes('/')) w = 0.5;
-                            r += w;
-                        }
-                    });
+        // 全館出勤実数合計を計算
+        function getMasterDailyReal(d) {
+            let total = 0;
+            floors.forEach(fl => {
+                fl.staffList.forEach((st, s) => {
+                    if (st.isUnused) return;
+                    const cell = fl.grid[s] ? fl.grid[s][d] : null;
+                    const sym = (cell && typeof cell === 'object') ? (cell.symbol || '') : (cell || '');
+                    if (isWorkSymbol(sym)) {
+                        let w = 1.0;
+                        if (st.isZeroCount || sym === '出張') w = 0.0;
+                        else if (st.isHalf || sym.includes('/')) w = 0.5;
+                        total += w;
+                    }
                 });
-                daily[d] = r;
-            }
-            return daily;
+            });
+            return total;
         }
 
-        // スワップの安全性検証
-        function canSwapStaffWorkAndOff(fl, s, workD, offD) {
+        // 各フロア単体の出勤実数
+        function getFloorDailyReal(fl, d) {
+            let r = 0;
+            fl.staffList.forEach((st, s) => {
+                if (st.isUnused) return;
+                const cell = fl.grid[s] ? fl.grid[s][d] : null;
+                const sym = (cell && typeof cell === 'object') ? (cell.symbol || '') : (cell || '');
+                if (isWorkSymbol(sym)) {
+                    let w = 1.0;
+                    if (st.isZeroCount || sym === '出張') w = 0.0;
+                    else if (st.isHalf || sym.includes('/')) w = 0.5;
+                    r += w;
+                }
+            });
+            return r;
+        }
+
+        // スワップ安全性検証
+        function canSwapStaff(fl, s, workD, offD) {
             const st = fl.staffList[s];
             if (st.isUnused || st.isSectionChief) return false;
 
@@ -5741,7 +5805,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 if (isRestrictedSpecial(prevO)) return false;
             }
 
-            // スケ可保護: workD のフロアでスケ可勤務が2名以上残るか
+            // スケ可保護
             if (st.canSched) {
                 let schedCountWork = 0;
                 fl.staffList.forEach((oS, oIdx) => {
@@ -5753,134 +5817,103 @@ document.addEventListener('DOMContentLoaded', () => {
                 if (schedCountWork < 2) return false;
             }
 
-            // 仮スワップ
-            if (typeof cellWork === 'object') cellWork.symbol = SYMBOLS.OFF;
-            else fl.grid[s][workD] = SYMBOLS.OFF;
-            if (typeof cellOff === 'object') cellOff.symbol = SYMBOLS.WORK;
-            else fl.grid[s][offD] = SYMBOLS.WORK;
+            // 仮想スワップして検証
+            fl.grid[s][workD] = { symbol: SYMBOLS.OFF, isFixed: false };
+            fl.grid[s][offD] = { symbol: SYMBOLS.WORK, isFixed: false };
 
-            // 連勤検証（5連勤以内、許可者は6連勤以内）
-            let maxConsec = 0, curConsec = 0;
-            let maxHolidayInterval = 0, curIntervalWithoutHoliday = 0;
-            for (let cd = 0; cd < numDays; cd++) {
-                const cs = fl.grid[s][cd] ? (fl.grid[s][cd].symbol || fl.grid[s][cd]) : '';
-                if (isWorkSymbol(cs)) {
-                    curConsec++;
-                    if (curConsec > maxConsec) maxConsec = curConsec;
+            // 1. 公休間隔6日以内チェック
+            const intervalOk = checkPureOffIntervalForStaff(fl.grid, s, numDays, st);
+            if (!intervalOk) {
+                fl.grid[s][workD] = cellWork;
+                fl.grid[s][offD] = cellOff;
+                return false;
+            }
+
+            // 2. 連勤・週休チェック
+            const simSeq = [];
+            if (st.prevDays) {
+                for (let p = 0; p < 5; p++) simSeq.push(st.prevDays[p]);
+            }
+            for (let d = 0; d < numDays; d++) {
+                const c = fl.grid[s][d];
+                simSeq.push((c && typeof c === 'object') ? (c.symbol || '') : (c || ''));
+            }
+
+            let maxConsec = st.allow6Consec ? 6 : 5;
+            let consec = 0;
+            let consecValid = true;
+            for (let idx = 0; idx < simSeq.length; idx++) {
+                if (isWorkSymbol(simSeq[idx])) {
+                    consec++;
+                    if (consec > maxConsec) { consecValid = false; break; }
                 } else {
-                    curConsec = 0;
-                }
-                if (isHolidaySymbol(cs)) {
-                    curIntervalWithoutHoliday = 0;
-                } else {
-                    curIntervalWithoutHoliday++;
-                    if (curIntervalWithoutHoliday > maxHolidayInterval) maxHolidayInterval = curIntervalWithoutHoliday;
+                    consec = 0;
                 }
             }
-            const limitConsec = st.allow6Consec ? 6 : 5;
-            const consecValid = (maxConsec <= limitConsec);
-            const holidayIntervalValid = (maxHolidayInterval <= 6);
 
-            // 週休2日検証（日〜土の各週で公休2日以上を厳格検証）
-            let weekHolidaysValid = true;
-            const weekSpans = (typeof getSunToSatWeekSpans === 'function') ? getSunToSatWeekSpans(term.dates, numDays) : [];
-            if (weekSpans.length > 0) {
-                for (const wSpan of weekSpans) {
-                    let wOffCount = 0;
-                    for (const cd of wSpan) {
-                        const cs = fl.grid[s][cd] ? (fl.grid[s][cd].symbol || fl.grid[s][cd]) : '';
-                        if (isHolidaySymbol(cs)) wOffCount++;
+            let weekValid = true;
+            if (term.weekSpans) {
+                for (const wSpan of term.weekSpans) {
+                    let wWork = 0;
+                    for (const wd of wSpan) {
+                        const c = fl.grid[s][wd];
+                        const sym = (c && typeof c === 'object') ? (c.symbol || '') : (c || '');
+                        if (isWorkSymbol(sym)) wWork++;
                     }
-                    if (wOffCount < 2 && wSpan.length >= 6) {
-                        weekHolidaysValid = false;
-                        break;
-                    }
+                    if (wWork > 5) { weekValid = false; break; }
                 }
             }
 
-            // 単発勤務「休 ○ 休」の発生抑止
-            let singleWorkValid = true;
-            if (offD > 0 && offD < numDays - 1) {
-                const pSym = fl.grid[s][offD - 1] ? (fl.grid[s][offD - 1].symbol || fl.grid[s][offD - 1]) : '';
-                const nSym = fl.grid[s][offD + 1] ? (fl.grid[s][offD + 1].symbol || fl.grid[s][offD + 1]) : '';
-                if (isHolidaySymbol(pSym) && isHolidaySymbol(nSym)) singleWorkValid = false;
-            }
+            // 元に戻す
+            fl.grid[s][workD] = cellWork;
+            fl.grid[s][offD] = cellOff;
 
-            const allValid = consecValid && holidayIntervalValid && weekHolidaysValid && singleWorkValid;
-
-            // ロールバック
-            if (typeof cellWork === 'object') cellWork.symbol = SYMBOLS.WORK;
-            else fl.grid[s][workD] = SYMBOLS.WORK;
-            if (typeof cellOff === 'object') cellOff.symbol = SYMBOLS.OFF;
-            else fl.grid[s][offD] = SYMBOLS.OFF;
-
-            return allValid;
+            return consecValid && weekValid;
         }
 
-        function getFloorDailyReal(fl, d) {
-            let r = 0;
-            fl.staffList.forEach((st, s) => {
-                if (st.isUnused) return;
-                const cell = fl.grid[s] ? fl.grid[s][d] : null;
-                const sym = (cell && typeof cell === 'object') ? (cell.symbol || '') : (cell || '');
-                if (isWorkSymbol(sym) && sym !== '出' && sym !== '出張' && sym !== SYMBOLS.TRIP) {
-                    let w = 1.0;
-                    if (st.isZeroCount || sym === '出張') w = 0.0;
-                    else if (st.isHalf || sym.includes('/')) w = 0.5;
-                    r += w;
-                }
-            });
-            return r;
-        }
-
-        // 土日祝日の出勤・休日ブレ最少化ループ
         let totalSwaps = 0;
-        for (let iter = 0; iter < 120; iter++) {
-            const curDaily = getDailyReal();
-            const sortedWeekends = [...weekendIndices].sort((a, b) => curDaily[b] - curDaily[a]);
-            const maxD = sortedWeekends[0];
-            const minD = sortedWeekends[sortedWeekends.length - 1];
-            const diff = curDaily[maxD] - curDaily[minD];
+        const maxIter = 50;
 
-            if (diff <= 1.5) break; // 土日祝のブレ幅が1.5名以内なら平準化完了
+        for (let iter = 0; iter < maxIter; iter++) {
+            const loads = targetDays.map(d => ({ day: d, load: getMasterDailyReal(d) }));
+            loads.sort((a, b) => b.load - a.load);
 
-            // 各フロアを「maxDに余剰があり、minDに余裕がある」順に評価
-            const sortedFloors = [...floors].sort((fA, fB) => {
-                const gapA = getFloorDailyReal(fA, maxD) - getFloorDailyReal(fA, minD);
-                const gapB = getFloorDailyReal(fB, maxD) - getFloorDailyReal(fB, minD);
-                return gapB - gapA;
-            });
+            const maxItem = loads[0];
+            const minItem = loads[loads.length - 1];
+
+            if (maxItem.load - minItem.load <= 1.0) break;
 
             let swapped = false;
-            for (const fl of sortedFloors) {
-                const offMax = (fl.dayOffsets && fl.dayOffsets[maxD]) || 0;
-                if (offMax > 0) continue;
+            for (let h = 0; h < Math.min(4, loads.length); h++) {
+                const maxD = loads[h].day;
+                for (let l = loads.length - 1; l >= Math.max(0, loads.length - 4); l--) {
+                    const minD = loads[l].day;
+                    if (loads[h].load - loads[l].load <= 1.0) continue;
 
-                // ガード: そのフロア単体で既に maxD <= minD ならスワップによってその階のブレが悪化するためスキップ
-                const flRealMax = getFloorDailyReal(fl, maxD);
-                const flRealMin = getFloorDailyReal(fl, minD);
-                if (flRealMax <= flRealMin) continue;
+                    for (const fl of floors) {
+                        const flMax = getFloorDailyReal(fl, maxD);
+                        const flMin = getFloorDailyReal(fl, minD);
+                        if (flMax < flMin) continue; // フロア単体のブレ悪化防止
 
-                for (let s = 0; s < fl.staffList.length; s++) {
-                    if (canSwapStaffWorkAndOff(fl, s, maxD, minD)) {
-                        const cellMax = fl.grid[s][maxD];
-                        const cellMin = fl.grid[s][minD];
-                        if (typeof cellMax === 'object') cellMax.symbol = SYMBOLS.OFF;
-                        else fl.grid[s][maxD] = SYMBOLS.OFF;
-                        if (typeof cellMin === 'object') cellMin.symbol = SYMBOLS.WORK;
-                        else fl.grid[s][minD] = SYMBOLS.WORK;
-
-                        swapped = true;
-                        totalSwaps++;
-                        break;
+                        for (let s = 0; s < fl.staffList.length; s++) {
+                            if (canSwapStaff(fl, s, maxD, minD)) {
+                                fl.grid[s][maxD] = { symbol: SYMBOLS.OFF, isFixed: false };
+                                fl.grid[s][minD] = { symbol: SYMBOLS.WORK, isFixed: false };
+                                totalSwaps++;
+                                swapped = true;
+                                break;
+                            }
+                        }
+                        if (swapped) break;
                     }
+                    if (swapped) break;
                 }
                 if (swapped) break;
             }
             if (!swapped) break;
         }
 
-        // 変更を各フロアの localStorage に安全保存
+        // 変更を localStorage に保存
         floors.forEach(fl => {
             const key = `shift_schedule_${fl.id}_term_${curStartDate}`;
             const toSave = Object.assign({}, fl.rawData, {
@@ -5894,7 +5927,6 @@ document.addEventListener('DOMContentLoaded', () => {
             }
         });
 
-        // 画面を再描画
         if (typeof renderMasterIntegrationView === 'function') {
             renderMasterIntegrationView();
         }
@@ -5903,19 +5935,34 @@ document.addEventListener('DOMContentLoaded', () => {
         }
 
         if (totalSwaps > 0) {
-            showToast(`⚡ 全フロアの休みのブレを最少化しました（計 ${totalSwaps} 箇所の公休を安全微調整）`);
+            showToast(`⚡ 全フロアの${modeTitle}を実施しました（計 ${totalSwaps} 箇所の公休を安全微調整）`);
         } else {
-            showToast('✅ すでに土日祝日の出勤・休日バランスは最小ブレ（均等状態）に保たれています');
+            showToast(`✅ すでに全フロアの${modeTitle}は最小ブレ（均等状態）に保たれています`);
         }
     }
 
-    // ★ ユーザー指示: 各病棟（1階〜南）の単体出勤ブレ最少化ハンドラ
-    function handleFloorBalanceWorkforce() {
+    function handleMasterBalanceWeekday() {
+        executeMasterBalance('weekday');
+    }
+
+    function handleMasterBalanceWeekend() {
+        executeMasterBalance('weekend');
+    }
+
+    // -------------------------------------------------------------------------
+    // 2. 単体フロア（1階〜南、ST）: 平日ブレ最小化 / 休日ブレ最小化 / STブレ最小化
+    // -------------------------------------------------------------------------
+    function executeSingleFloorBalance(mode) {
+        // mode: 'weekday' | 'weekend' | 'all' (ST用)
+        const isWeekday = (mode === 'weekday');
+        const isWeekend = (mode === 'weekend');
+        const isAll = (mode === 'all');
+        const modeTitle = isAll ? 'ブレ最小化' : (isWeekday ? '平日ブレ最小化' : '休日ブレ最小化');
+
         const curStartDate = document.getElementById('termStartDate')?.value || currentWorkingStartDate || '2026-04-01';
         const term = getTermInfo(curStartDate);
         const numDays = term.dates.length;
 
-        // 対象グリッドを取得
         let targetGrid = null;
         if (lastSolveResult && lastSolveResult.grid && lastSolveResult.grid.length > 0) {
             targetGrid = lastSolveResult.grid;
@@ -5928,38 +5975,37 @@ document.addEventListener('DOMContentLoaded', () => {
             return;
         }
 
-        const weekendIndices = [];
-        const weekdayIndices = [];
+        const targetDays = [];
         for (let d = 0; d < numDays; d++) {
             const di = term.dates[d];
-            const isWeekend = di ? (di.wIdx === 5 || di.wIdx === 6 || di.isHoliday) : ((d % 7 === 5) || (d % 7 === 6));
-            if (isWeekend) weekendIndices.push(d);
-            else weekdayIndices.push(d);
+            const isWknd = di ? (di.wIdx === 5 || di.wIdx === 6 || di.isHoliday) : ((d % 7 === 5) || (d % 7 === 6));
+            if (isAll) targetDays.push(d);
+            else if (isWeekend && isWknd) targetDays.push(d);
+            else if (isWeekday && !isWknd) targetDays.push(d);
         }
 
-        // 単体フロアの日別実数合計を計算
-        function getDailyReal() {
-            const daily = new Array(numDays).fill(0);
-            for (let d = 0; d < numDays; d++) {
-                let r = 0;
-                staffList.forEach((st, s) => {
-                    if (st.isUnused) return;
-                    const cell = targetGrid[s] ? targetGrid[s][d] : null;
-                    const sym = (cell && typeof cell === 'object') ? (cell.symbol || '') : (cell || '');
-                    if (isWorkSymbol(sym)) {
-                        let w = 1.0;
-                        if (st.isZeroCount || sym === '出張') w = 0.0;
-                        else if (st.isHalf || sym.includes('/')) w = 0.5;
-                        r += w;
-                    }
-                });
-                daily[d] = r;
-            }
-            return daily;
+        if (targetDays.length < 2) {
+            showToast('⚠️ 平準化対象の日数が不足しています。');
+            return;
         }
 
-        // スワップの安全性検証
-        function canSwapStaffWorkAndOff(s, workD, offD) {
+        function getDailyReal(d) {
+            let r = 0;
+            staffList.forEach((st, s) => {
+                if (st.isUnused) return;
+                const cell = targetGrid[s] ? targetGrid[s][d] : null;
+                const sym = (cell && typeof cell === 'object') ? (cell.symbol || '') : (cell || '');
+                if (isWorkSymbol(sym)) {
+                    let w = 1.0;
+                    if (st.isZeroCount || sym === '出張') w = 0.0;
+                    else if (st.isHalf || sym.includes('/')) w = 0.5;
+                    r += w;
+                }
+            });
+            return r;
+        }
+
+        function canSwapStaff(s, workD, offD) {
             const st = staffList[s];
             if (st.isUnused || st.isSectionChief) return false;
 
@@ -5981,7 +6027,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 if (isRestrictedSpecial(prevO)) return false;
             }
 
-            // スケ可保護: workD でスケ可日勤が2名以上残るか
+            // スケ可保護
             if (st.canSched) {
                 let schedCountWork = 0;
                 staffList.forEach((oS, oIdx) => {
@@ -5993,197 +6039,333 @@ document.addEventListener('DOMContentLoaded', () => {
                 if (schedCountWork < 2) return false;
             }
 
-            // 仮スワップ
-            if (typeof cellWork === 'object') cellWork.symbol = SYMBOLS.OFF;
-            else targetGrid[s][workD] = SYMBOLS.OFF;
-            if (typeof cellOff === 'object') cellOff.symbol = SYMBOLS.WORK;
-            else targetGrid[s][offD] = SYMBOLS.WORK;
+            // 仮想スワップして検証
+            targetGrid[s][workD] = { symbol: SYMBOLS.OFF, isFixed: false };
+            targetGrid[s][offD] = { symbol: SYMBOLS.WORK, isFixed: false };
 
-            // 連勤検証
-            let maxConsec = 0, curConsec = 0;
-            let maxHolidayInterval = 0, curIntervalWithoutHoliday = 0;
-            for (let cd = 0; cd < numDays; cd++) {
-                const cs = targetGrid[s][cd] ? (targetGrid[s][cd].symbol || targetGrid[s][cd]) : '';
-                if (isWorkSymbol(cs)) {
-                    curConsec++;
-                    if (curConsec > maxConsec) maxConsec = curConsec;
+            // 1. 公休間隔6日以内チェック
+            const intervalOk = checkPureOffIntervalForStaff(targetGrid, s, numDays, st);
+            if (!intervalOk) {
+                targetGrid[s][workD] = cellWork;
+                targetGrid[s][offD] = cellOff;
+                return false;
+            }
+
+            // 2. 連勤・週休チェック
+            const simSeq = [];
+            if (st.prevDays) {
+                for (let p = 0; p < 5; p++) simSeq.push(st.prevDays[p]);
+            }
+            for (let d = 0; d < numDays; d++) {
+                const c = targetGrid[s][d];
+                simSeq.push((c && typeof c === 'object') ? (c.symbol || '') : (c || ''));
+            }
+
+            let maxConsec = st.allow6Consec ? 6 : 5;
+            let consec = 0;
+            let consecValid = true;
+            for (let idx = 0; idx < simSeq.length; idx++) {
+                if (isWorkSymbol(simSeq[idx])) {
+                    consec++;
+                    if (consec > maxConsec) { consecValid = false; break; }
                 } else {
-                    curConsec = 0;
-                }
-                if (isHolidaySymbol(cs)) {
-                    curIntervalWithoutHoliday = 0;
-                } else {
-                    curIntervalWithoutHoliday++;
-                    if (curIntervalWithoutHoliday > maxHolidayInterval) maxHolidayInterval = curIntervalWithoutHoliday;
-                }
-            }
-            const limitConsec = st.allow6Consec ? 6 : 5;
-            const consecValid = (maxConsec <= limitConsec);
-            const holidayIntervalValid = (maxHolidayInterval <= 6);
-
-            // 週休2日検証（日〜土の各週で公休2日以上を厳格検証）
-            let weekHolidaysValid = true;
-            const weekSpans = (typeof getSunToSatWeekSpans === 'function') ? getSunToSatWeekSpans(term.dates, numDays) : [];
-            if (weekSpans.length > 0) {
-                for (const wSpan of weekSpans) {
-                    let wOffCount = 0;
-                    for (const cd of wSpan) {
-                        const cs = targetGrid[s][cd] ? (targetGrid[s][cd].symbol || targetGrid[s][cd]) : '';
-                        if (isHolidaySymbol(cs)) wOffCount++;
-                    }
-                    if (wOffCount < 2 && wSpan.length >= 6) {
-                        weekHolidaysValid = false;
-                        break;
-                    }
-                }
-            } else {
-                for (let w = 0; w < numDays; w += 7) {
-                    const wEnd = Math.min(w + 7, numDays);
-                    let wOffCount = 0;
-                    for (let cd = w; cd < wEnd; cd++) {
-                        const cs = targetGrid[s][cd] ? (targetGrid[s][cd].symbol || targetGrid[s][cd]) : '';
-                        if (isHolidaySymbol(cs)) wOffCount++;
-                    }
-                    if (wOffCount < 2 && (wEnd - w) >= 6) {
-                        weekHolidaysValid = false;
-                        break;
-                    }
+                    consec = 0;
                 }
             }
 
-            // 単発勤務防止
-            let singleWorkValid = true;
-            if (offD > 0 && offD < numDays - 1) {
-                const pSym = targetGrid[s][offD - 1] ? (targetGrid[s][offD - 1].symbol || targetGrid[s][offD - 1]) : '';
-                const nSym = targetGrid[s][offD + 1] ? (targetGrid[s][offD + 1].symbol || targetGrid[s][offD + 1]) : '';
-                if (isHolidaySymbol(pSym) && isHolidaySymbol(nSym)) singleWorkValid = false;
+            let weekValid = true;
+            if (term.weekSpans) {
+                for (const wSpan of term.weekSpans) {
+                    let wWork = 0;
+                    for (const wd of wSpan) {
+                        const c = targetGrid[s][wd];
+                        const sym = (c && typeof c === 'object') ? (c.symbol || '') : (c || '');
+                        if (isWorkSymbol(sym)) wWork++;
+                    }
+                    if (wWork > 5) { weekValid = false; break; }
+                }
             }
 
-            const allValid = consecValid && holidayIntervalValid && weekHolidaysValid && singleWorkValid;
+            // 元に戻す
+            targetGrid[s][workD] = cellWork;
+            targetGrid[s][offD] = cellOff;
 
-            // ロールバック
-            if (typeof cellWork === 'object') cellWork.symbol = SYMBOLS.WORK;
-            else targetGrid[s][workD] = SYMBOLS.WORK;
-            if (typeof cellOff === 'object') cellOff.symbol = SYMBOLS.OFF;
-            else targetGrid[s][offD] = SYMBOLS.OFF;
-
-            return allValid;
+            return consecValid && weekValid;
         }
 
         let totalSwaps = 0;
+        const maxIter = 40;
 
-        // フェーズ1: 土日祝日の平準化（土日-2均等化）
-        if (weekendIndices.length >= 2) {
-            for (let iter = 0; iter < 100; iter++) {
-                const curDaily = getDailyReal();
-                const sortedWeekends = [...weekendIndices].sort((a, b) => curDaily[b] - curDaily[a]);
-                const maxD = sortedWeekends[0];
-                const minD = sortedWeekends[sortedWeekends.length - 1];
-                const diff = curDaily[maxD] - curDaily[minD];
+        for (let iter = 0; iter < maxIter; iter++) {
+            const loads = targetDays.map(d => ({ day: d, load: getDailyReal(d) }));
+            loads.sort((a, b) => b.load - a.load);
 
-                if (diff <= 1.0) break;
+            const maxItem = loads[0];
+            const minItem = loads[loads.length - 1];
 
-                const offMax = (dayOffsets && dayOffsets[maxD]) || 0;
-                if (offMax > 0) break;
+            if (maxItem.load - minItem.load <= 0.6) break;
 
-                let swapped = false;
-                for (let s = 0; s < staffList.length; s++) {
-                    if (canSwapStaffWorkAndOff(s, maxD, minD)) {
-                        const cellMax = targetGrid[s][maxD];
-                        const cellMin = targetGrid[s][minD];
-                        if (typeof cellMax === 'object') cellMax.symbol = SYMBOLS.OFF;
-                        else targetGrid[s][maxD] = SYMBOLS.OFF;
-                        if (typeof cellMin === 'object') cellMin.symbol = SYMBOLS.WORK;
-                        else targetGrid[s][minD] = SYMBOLS.WORK;
+            let swapped = false;
+            for (let h = 0; h < Math.min(3, loads.length); h++) {
+                const maxD = loads[h].day;
+                for (let l = loads.length - 1; l >= Math.max(0, loads.length - 3); l--) {
+                    const minD = loads[l].day;
+                    if (loads[h].load - loads[l].load <= 0.6) continue;
 
-                        swapped = true;
-                        totalSwaps++;
-                        break;
+                    for (let s = 0; s < staffList.length; s++) {
+                        if (canSwapStaff(s, maxD, minD)) {
+                            targetGrid[s][maxD] = { symbol: SYMBOLS.OFF, isFixed: false };
+                            targetGrid[s][minD] = { symbol: SYMBOLS.WORK, isFixed: false };
+                            totalSwaps++;
+                            swapped = true;
+                            break;
+                        }
                     }
+                    if (swapped) break;
                 }
-                if (!swapped) break;
+                if (swapped) break;
             }
+            if (!swapped) break;
         }
 
-        // フェーズ2: 平日の平準化（平日均等化）
-        if (weekdayIndices.length >= 2) {
-            for (let iter = 0; iter < 120; iter++) {
-                const curDaily = getDailyReal();
-                const sortedWeekdays = [...weekdayIndices].sort((a, b) => curDaily[b] - curDaily[a]);
-                const maxD = sortedWeekdays[0];
-                const minD = sortedWeekdays[sortedWeekdays.length - 1];
-                const diff = curDaily[maxD] - curDaily[minD];
+        if (lastSolveResult) lastSolveResult.grid = targetGrid;
+        if (lastScheduler) lastScheduler.grid = targetGrid;
 
-                if (diff <= 1.0) break;
-
-                const offMax = (dayOffsets && dayOffsets[maxD]) || 0;
-                if (offMax > 0) break;
-
-                let swapped = false;
-                for (let s = 0; s < staffList.length; s++) {
-                    if (canSwapStaffWorkAndOff(s, maxD, minD)) {
-                        const cellMax = targetGrid[s][maxD];
-                        const cellMin = targetGrid[s][minD];
-                        if (typeof cellMax === 'object') cellMax.symbol = SYMBOLS.OFF;
-                        else targetGrid[s][maxD] = SYMBOLS.OFF;
-                        if (typeof cellMin === 'object') cellMin.symbol = SYMBOLS.WORK;
-                        else targetGrid[s][minD] = SYMBOLS.WORK;
-
-                        swapped = true;
-                        totalSwaps++;
-                        break;
-                    }
-                }
-                if (!swapped) break;
-            }
+        renderOutputTable(targetGrid);
+        if (typeof renderStatsDashboard === 'function') {
+            const stats = calculateCurrentStats(targetGrid);
+            renderStatsDashboard(stats);
         }
+        saveCurrentTermToStorage();
 
         if (totalSwaps > 0) {
-            const stdVal = parseFloat(document.getElementById('standardHolidaySelect')?.value || '8.0');
-            const scheduler = new ShiftScheduler(staffList, {
-                standardHolidays: stdVal,
-                dates: term.dates,
-                dayOffsets: [...dayOffsets],
-                isST: isST,
-                isSouth: isSouth,
-                isLife: isLife
-            });
-            scheduler.grid = targetGrid;
-            const newStats = scheduler.calculateStats();
-            lastSolveResult = { success: true, grid: targetGrid, stats: newStats };
-            lastScheduler = scheduler;
-
-            renderOutputTable(targetGrid, newStats);
-            renderStatsDashboard(newStats);
-            saveCurrentTermToStorage();
-
-            const finalDaily = getDailyReal();
-            let finalWkMax = 0, finalWkMin = 999;
-            weekdayIndices.forEach(d => {
-                if (finalDaily[d] > finalWkMax) finalWkMax = finalDaily[d];
-                if (finalDaily[d] < finalWkMin) finalWkMin = finalDaily[d];
-            });
-            let finalWeMax = 0, finalWeMin = 999;
-            weekendIndices.forEach(d => {
-                if (finalDaily[d] > finalWeMax) finalWeMax = finalDaily[d];
-                if (finalDaily[d] < finalWeMin) finalWeMin = finalDaily[d];
-            });
-
-            const weekdayDiff = (finalWkMax - finalWkMin).toFixed(1);
-            const weekendDiff = (finalWeMax - finalWeMin).toFixed(1);
-
-            showModal({
-                title: '⚡ 出勤ブレ最少化 完了',
-                desc: `病棟の制約条件（5連勤上限・公休間隔・週休2日・スケ可日勤2名・特殊勤務翌日休）を100%厳格に保持したまま、安全にスワップ可能な計 ${totalSwaps} 箇所の微調整を実施しました！\n\n` +
-                      `【平日の出勤実数】: ${finalWkMin.toFixed(1)}名 〜 ${finalWkMax.toFixed(1)}名（ブレ幅: ${weekdayDiff}名）\n` +
-                      `【土日祝の出勤実数】: ${finalWeMin.toFixed(1)}名 〜 ${finalWeMax.toFixed(1)}名（ブレ幅: ${weekendDiff}名）\n\n` +
-                      `※土日祝日は平日平均から約 -2名の基準枠で均等化されています。\n` +
-                      `※これ以上のスワップは制約遵守のため行わず、安全に完了しました。`,
-                confirmText: 'OK',
-                onConfirm: () => {}
-            });
+            showToast(`⚡ ${modeTitle}を実施しました（計 ${totalSwaps} 箇所の公休を安全微調整）`);
         } else {
-            showToast('ℹ️ この病棟の出勤実数はすでに十分に平準化されています（追加スワップ不要）');
+            showToast(`✅ すでに${modeTitle}は最小ブレ（均等状態）に保たれています`);
+        }
+    }
+
+    function handleFloorBalanceWeekday() {
+        executeSingleFloorBalance('weekday');
+    }
+
+    function handleFloorBalanceWeekend() {
+        executeSingleFloorBalance('weekend');
+    }
+
+    function handleSTBalance() {
+        executeSingleFloorBalance('all');
+    }
+
+    // -------------------------------------------------------------------------
+    // 3. 生活期テーブル: 訪問ブレ最小化 / 通所ブレ最小化
+    // -------------------------------------------------------------------------
+    function handleLifeBalanceVisit() {
+        const curStartDate = document.getElementById('termStartDate')?.value || currentWorkingStartDate || '2026-04-01';
+        const term = getTermInfo(curStartDate);
+        const numDays = term.dates.length;
+
+        let targetGrid = (lastSolveResult && lastSolveResult.grid) || (lastScheduler && lastScheduler.grid) || currentGrid;
+        if (!targetGrid || targetGrid.length === 0) {
+            showToast('⚠️ 先に「勤務表を自動生成する」を実行してください。');
+            return;
+        }
+
+        const visitStaff = [];
+        staffList.forEach((st, s) => {
+            if (st.isUnused || st.isSectionChief) return;
+            const sec = st.lifeSection || '';
+            if (sec === '訪問' || (!st.isSunOff && !st.isSatSunOff && sec !== '通所' && sec !== 'Cl2')) {
+                visitStaff.push(s);
+            }
+        });
+
+        const weekdays = [];
+        for (let d = 0; d < numDays; d++) {
+            const di = term.dates[d];
+            const isWknd = di ? (di.wIdx === 5 || di.wIdx === 6 || di.isHoliday) : ((d % 7 === 5) || (d % 7 === 6));
+            if (!isWknd) weekdays.push(d);
+        }
+
+        if (visitStaff.length === 0 || weekdays.length < 2) {
+            showToast('⚠️ 訪問スタッフデータが不足しています。');
+            return;
+        }
+
+        function getVisitDailyReal(d) {
+            let r = 0;
+            visitStaff.forEach(s => {
+                const cell = targetGrid[s][d];
+                const sym = (cell && typeof cell === 'object') ? cell.symbol : (cell || '');
+                if (isWorkSymbol(sym)) {
+                    r += (staffList[s].isZeroCount ? 0.0 : (staffList[s].isHalf ? 0.5 : 1.0));
+                }
+            });
+            return r;
+        }
+
+        let totalSwaps = 0;
+        for (let iter = 0; iter < 40; iter++) {
+            const loads = weekdays.map(d => ({ day: d, load: getVisitDailyReal(d) }));
+            loads.sort((a, b) => b.load - a.load);
+
+            const maxItem = loads[0];
+            const minItem = loads[loads.length - 1];
+            if (maxItem.load - minItem.load <= 0.6) break;
+
+            let swapped = false;
+            for (let h = 0; h < Math.min(3, loads.length); h++) {
+                const maxD = loads[h].day;
+                for (let l = loads.length - 1; l >= Math.max(0, loads.length - 3); l--) {
+                    const minD = loads[l].day;
+                    if (loads[h].load - loads[l].load <= 0.6) continue;
+
+                    for (const s of visitStaff) {
+                        const cellMax = targetGrid[s][maxD];
+                        const cellMin = targetGrid[s][minD];
+                        const symMax = (cellMax && typeof cellMax === 'object') ? cellMax.symbol : (cellMax || '');
+                        const symMin = (cellMin && typeof cellMin === 'object') ? cellMin.symbol : (cellMin || '');
+
+                        if (symMax === SYMBOLS.WORK && !cellMax.isFixed && symMin === SYMBOLS.OFF && !cellMin.isFixed) {
+                            if (symMax === SYMBOLS.H8 || symMin === SYMBOLS.H8) continue; // 8時は維持
+
+                            targetGrid[s][maxD] = { symbol: SYMBOLS.OFF, isFixed: false };
+                            targetGrid[s][minD] = { symbol: SYMBOLS.WORK, isFixed: false };
+
+                            if (checkPureOffIntervalForStaff(targetGrid, s, numDays, staffList[s])) {
+                                totalSwaps++;
+                                swapped = true;
+                                break;
+                            } else {
+                                targetGrid[s][maxD] = cellMax;
+                                targetGrid[s][minD] = cellMin;
+                            }
+                        }
+                    }
+                    if (swapped) break;
+                }
+                if (swapped) break;
+            }
+            if (!swapped) break;
+        }
+
+        renderOutputTable(targetGrid);
+        if (typeof renderStatsDashboard === 'function') {
+            const stats = calculateCurrentStats(targetGrid);
+            renderStatsDashboard(stats);
+        }
+        saveCurrentTermToStorage();
+
+        if (totalSwaps > 0) {
+            showToast(`⚡ 訪問ブレ最小化を実施しました（計 ${totalSwaps} 箇所の公休を安全微調整）`);
+        } else {
+            showToast('✅ すでに訪問出勤実数は最小ブレ（均等状態）に保たれています');
+        }
+    }
+
+    function handleLifeBalanceTsusho() {
+        const curStartDate = document.getElementById('termStartDate')?.value || currentWorkingStartDate || '2026-04-01';
+        const term = getTermInfo(curStartDate);
+        const numDays = term.dates.length;
+
+        let targetGrid = (lastSolveResult && lastSolveResult.grid) || (lastScheduler && lastScheduler.grid) || currentGrid;
+        if (!targetGrid || targetGrid.length === 0) {
+            showToast('⚠️ 先に「勤務表を自動生成する」を実行してください。');
+            return;
+        }
+
+        // 通所スタッフ + CL + ハ3 + ハ南
+        const tsushoStaff = [];
+        staffList.forEach((st, s) => {
+            if (st.isUnused || st.isSectionChief) return;
+            const sec = st.lifeSection || '';
+            const ha = st.haSection || '';
+            if (sec === '通所' || sec === 'Cl1' || sec === 'Cl2' || sec === 'Cl' || ha === 'ハ3' || ha === 'ハ南' || ha === 'ハ4') {
+                tsushoStaff.push(s);
+            }
+        });
+
+        // 月〜土（日曜除く）
+        const tsushoWorkingDays = [];
+        for (let d = 0; d < numDays; d++) {
+            const di = term.dates[d];
+            const isSun = di ? (di.wIdx === 6) : (d % 7 === 6);
+            if (!isSun) tsushoWorkingDays.push(d);
+        }
+
+        if (tsushoStaff.length === 0 || tsushoWorkingDays.length < 2) {
+            showToast('⚠️ 通所スタッフデータが不足しています。');
+            return;
+        }
+
+        function getTsushoDailyReal(d) {
+            let r = 0;
+            tsushoStaff.forEach(s => {
+                const cell = targetGrid[s][d];
+                const sym = (cell && typeof cell === 'object') ? cell.symbol : (cell || '');
+                if (isWorkSymbol(sym)) {
+                    const ha = staffList[s].haSection || '';
+                    const w = (ha === 'ハ3' || ha === 'ハ南' || ha === 'ハ4') ? 0.5 : (staffList[s].isZeroCount ? 0.0 : (staffList[s].isHalf ? 0.5 : 1.0));
+                    r += w;
+                }
+            });
+            return r;
+        }
+
+        let totalSwaps = 0;
+        for (let iter = 0; iter < 50; iter++) {
+            const loads = tsushoWorkingDays.map(d => ({ day: d, load: getTsushoDailyReal(d) }));
+            loads.sort((a, b) => b.load - a.load);
+
+            const maxItem = loads[0];
+            const minItem = loads[loads.length - 1];
+            if (maxItem.load - minItem.load <= 0.6) break;
+
+            let swapped = false;
+            for (let h = 0; h < Math.min(3, loads.length); h++) {
+                const maxD = loads[h].day;
+                for (let l = loads.length - 1; l >= Math.max(0, loads.length - 3); l--) {
+                    const minD = loads[l].day;
+                    if (loads[h].load - loads[l].load <= 0.6) continue;
+
+                    for (const s of tsushoStaff) {
+                        const cellMax = targetGrid[s][maxD];
+                        const cellMin = targetGrid[s][minD];
+                        const symMax = (cellMax && typeof cellMax === 'object') ? cellMax.symbol : (cellMax || '');
+                        const symMin = (cellMin && typeof cellMin === 'object') ? cellMin.symbol : (cellMin || '');
+
+                        if (symMax === SYMBOLS.WORK && !cellMax.isFixed && symMin === SYMBOLS.OFF && !cellMin.isFixed) {
+                            targetGrid[s][maxD] = { symbol: SYMBOLS.OFF, isFixed: false };
+                            targetGrid[s][minD] = { symbol: SYMBOLS.WORK, isFixed: false };
+
+                            if (checkPureOffIntervalForStaff(targetGrid, s, numDays, staffList[s])) {
+                                totalSwaps++;
+                                swapped = true;
+                                break;
+                            } else {
+                                targetGrid[s][maxD] = cellMax;
+                                targetGrid[s][minD] = cellMin;
+                            }
+                        }
+                    }
+                    if (swapped) break;
+                }
+                if (swapped) break;
+            }
+            if (!swapped) break;
+        }
+
+        renderOutputTable(targetGrid);
+        if (typeof renderStatsDashboard === 'function') {
+            const stats = calculateCurrentStats(targetGrid);
+            renderStatsDashboard(stats);
+        }
+        saveCurrentTermToStorage();
+
+        if (totalSwaps > 0) {
+            showToast(`⚡ 通所ブレ最小化を実施しました（計 ${totalSwaps} 箇所の公休を安全微調整）`);
+        } else {
+            showToast('✅ すでに通所出勤実数は最小ブレ（均等状態）に保たれています');
         }
     }
 
@@ -7449,11 +7631,52 @@ function renderMasterIntegrationView() {
 
             // 土曜(wIdx=5), 日曜(wIdx=6), 国民の祝日(isHoliday)
             const isWeekendOrHoliday = (di.wIdx === 5 || di.wIdx === 6 || di.isHoliday);
-            if (isWeekendOrHoliday) {
-                holidayDaily.push(item);
+            if (isLife) {
+                // ★ 生活期専用集計:
+                // 青カード: 訪問稼働日（月〜金、祝日除く）の訪問実数
+                // 赤カード: 通所稼働日（月〜土、日曜除く）の通所実数
+                let visitReal = 0, visitTotal = 0;
+                let tsushoReal = 0, tsushoTotal = 0;
+                staffList.forEach((st, s) => {
+                    if (st.isUnused) return;
+                    const cell = (currentGrid && currentGrid[s]) ? currentGrid[s][d] : (stats.grid && stats.grid[s] ? stats.grid[s][d] : null);
+                    const sym = (cell && typeof cell === 'object') ? cell.symbol : (cell || '');
+                    if (!sym || isHolidaySymbol(sym) || sym === 'ー') return;
+                    const sec = st.lifeSection || '';
+                    const ha = st.haSection || '';
+                    if (sec === '訪問') {
+                        visitTotal++;
+                        visitReal += (st.isZeroCount || sym === '出張') ? 0.0 : (st.isHalf || sym.includes('/') ? 0.5 : 1.0);
+                    }
+                    if (sec === '通所' || sec === 'Cl1' || sec === 'Cl2' || sec === 'Cl' || ha === 'ハ3' || ha === 'ハ南' || ha === 'ハ4') {
+                        tsushoTotal++;
+                        tsushoReal += (ha === 'ハ3' || ha === 'ハ南' || ha === 'ハ4') ? 0.5 : ((st.isZeroCount || sym === '出張') ? 0.0 : (st.isHalf || sym.includes('/') ? 0.5 : 1.0));
+                    }
+                });
+
+                // 訪問稼働日（月〜金、祝日除く）
+                if (!isWeekendOrHoliday) {
+                    weekdayDaily.push({ d, totalWork: visitTotal, realWork: visitReal, label: di.label, weekday: di.weekday });
+                }
+                // 通所稼働日（月〜土、日曜日除く）
+                if (di.wIdx !== 6) {
+                    holidayDaily.push({ d, totalWork: tsushoTotal, realWork: tsushoReal, label: di.label, weekday: di.weekday });
+                }
             } else {
-                weekdayDaily.push(item);
+                if (isWeekendOrHoliday) {
+                    holidayDaily.push(item);
+                } else {
+                    weekdayDaily.push(item);
+                }
             }
+        }
+
+        // 生活期ダッシュボード専用タイトルDOM切り替え
+        if (isLife) {
+            const wTitleEl = document.querySelector('#statsTab .stat-card:nth-child(1) .stat-card-title span:first-child');
+            if (wTitleEl) wTitleEl.textContent = '🏢 訪問稼働日（月曜日～金曜日）の実数';
+            const hTitleEl = document.querySelector('#statsTab .stat-card:nth-child(2) .stat-card-title span:first-child');
+            if (hTitleEl) hTitleEl.textContent = '🏥 通所稼働日（月曜日～土曜日）の実数';
         }
 
         // --- 平日の集計（最小・最大・平均：実数合計ベース） ---
@@ -7505,7 +7728,7 @@ function renderMasterIntegrationView() {
             if (holidayAvgEl) {
                 holidayAvgEl.innerHTML = `実数 ${rAvg} 名 <span style="font-size:0.78rem; color:#64748b; font-weight:normal;">(出勤計: ${hAvg}名)</span>`;
             }
-            if (sunHolSubInfoEl) sunHolSubInfoEl.textContent = `土曜日・日曜日・国民の祝日（計${holidayDaily.length}日間）`;
+            if (sunHolSubInfoEl) sunHolSubInfoEl.textContent = isLife ? `月曜日〜土曜日（計${holidayDaily.length}日間、日曜除く）` : `土曜日・日曜日・国民の祝日（計${holidayDaily.length}日間）`;
         } else {
             if (holidayBadgeEl) holidayBadgeEl.textContent = '0 日間';
             if (holidayRangeEl) holidayRangeEl.textContent = '- 名';
@@ -8223,14 +8446,22 @@ function renderMasterIntegrationView() {
     }
 
     // 2. ★ Excel貼り付け用コピー処理（安全フェイルセーフ対応）
-    // ★ マスターテーブル「⚡ 休みのブレを最少化」ボタンイベント登録
-    const masterBalanceWeekendOffBtn = document.getElementById('masterBalanceWeekendOffBtn') || document.getElementById('masterBalanceWeekdaysBtn');
-    if (masterBalanceWeekendOffBtn) {
-        masterBalanceWeekendOffBtn.addEventListener('click', handleMasterBalanceWeekendOff);
+    // ★ マスターテーブル「⚡ 平日ブレ最小化」「⚡ 休日ブレ最小化」ボタンイベント登録
+    const masterBalanceWeekdayBtn = document.getElementById('masterBalanceWeekdayBtn');
+    if (masterBalanceWeekdayBtn) {
+        masterBalanceWeekdayBtn.addEventListener('click', handleMasterBalanceWeekday);
     }
-    const masterBalanceWeekendOffBtnStats = document.getElementById('masterBalanceWeekendOffBtnStats') || document.getElementById('masterBalanceWeekdaysBtnStats');
-    if (masterBalanceWeekendOffBtnStats) {
-        masterBalanceWeekendOffBtnStats.addEventListener('click', handleMasterBalanceWeekendOff);
+    const masterBalanceWeekdayBtnStats = document.getElementById('masterBalanceWeekdayBtnStats');
+    if (masterBalanceWeekdayBtnStats) {
+        masterBalanceWeekdayBtnStats.addEventListener('click', handleMasterBalanceWeekday);
+    }
+    const masterBalanceWeekendBtn = document.getElementById('masterBalanceWeekendBtn') || document.getElementById('masterBalanceWeekendOffBtn');
+    if (masterBalanceWeekendBtn) {
+        masterBalanceWeekendBtn.addEventListener('click', handleMasterBalanceWeekend);
+    }
+    const masterBalanceWeekendBtnStats = document.getElementById('masterBalanceWeekendBtnStats') || document.getElementById('masterBalanceWeekendOffBtnStats');
+    if (masterBalanceWeekendBtnStats) {
+        masterBalanceWeekendBtnStats.addEventListener('click', handleMasterBalanceWeekend);
     }
     const copyForExcelBtn = document.getElementById('copyForExcelBtn');
     if (copyForExcelBtn) {
