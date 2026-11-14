@@ -1233,6 +1233,11 @@ class ShiftScheduler {
         // ステップ5: 平準化スワップ（希望休や固定枠による歪みがある場合のみ微調整）
         this.balanceWorkforceForST();
 
+        // ★ ユーザー指示 (ver.28): STテーブル骨格完成後のリフレッシュ休暇最適昇格配置
+        if (!options.skipAutoRefresh) {
+            this.assignAutoRefreshHolidaysToGrid(options);
+        }
+
         return {
             success: true,
             grid: this.grid,
