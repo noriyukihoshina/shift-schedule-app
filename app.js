@@ -388,44 +388,71 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     }
 
-    // ★ 部署別パスワード認証モーダル制御
+    // ★ 部署別パスワード認証モーダル制御（開くたびに要求、リロード時は不要）
     // ==========================================
+    const DEFAULT_DEPT_PASSWORDS = {
+        '1f': '111111',
+        '1F': '111111',
+        '2f': '222222',
+        '2F': '222222',
+        '3f': '333333',
+        '3F': '333333',
+        'south': '444444',
+        '南': '444444',
+        'st': '111111',
+        'life': '555555',
+        'life_admin': '555555',
+        'master': '777777'
+    };
+
     function checkDeptAuthentication() {
-        if (!window.APP_CONFIG || !window.APP_CONFIG.password) return;
-        const config = window.APP_CONFIG;
+        const config = window.APP_CONFIG || { deptId: 'master', deptName: 'マスターテーブル' };
+        const deptId = config.deptId || (document.body.className.match(/theme-([a-z0-9]+)/) ? document.body.className.match(/theme-([a-z0-9]+)/)[1] : 'master');
+        const expectedPassword = config.password || DEFAULT_DEPT_PASSWORDS[deptId] || DEFAULT_DEPT_PASSWORDS[config.floor] || '777777';
 
         // ヘッダータイトルの更新
         const titleEl = document.querySelector('.header-title h1');
         if (titleEl && config.deptName) {
-            titleEl.textContent = `勤務予定表 自動作成システム 【${config.deptName}】`;
+            titleEl.textContent = `勤務予定表 自動作成システム 〜 ${config.deptName} 〜`;
             document.title = `勤務予定表 自動作成システム - ${config.deptName}`;
         }
 
-        const authKey = `auth_${config.deptId}`;
+        const authKey = `auth_${deptId}`;
+        // ★ ユーザー指示: リロード時は不要、ブラウザで新しく開くたびにパスワードを要求（sessionStorage）
         if (sessionStorage.getItem(authKey) === 'true') {
             return; // 認証済み
         }
 
+        // 各フロアのテーマカラー＆アイコン情報
+        const themeInfo = {
+            '1f': { color: '#2563eb', bg: '#eff6ff', name: '1階病棟' },
+            '2f': { color: '#ea580c', bg: '#fff7ed', name: '2階病棟' },
+            '3f': { color: '#16a34a', bg: '#f0fdf4', name: '3階病棟' },
+            'south': { color: '#7c3aed', bg: '#faf5ff', name: '南病棟' },
+            'life': { color: '#0d9488', bg: '#f0fdfa', name: '生活期' },
+            'master': { color: '#b45309', bg: '#fefce8', name: 'マスターテーブル（統括）' }
+        }[deptId] || { color: '#0284c7', bg: '#f0f9ff', name: config.deptName || '勤務表システム' };
+
         // 認証モーダルを動的生成して画面全体を安全にロック
         const overlay = document.createElement('div');
         overlay.id = 'deptAuthOverlay';
-        overlay.style.cssText = `
-            position: fixed; top: 0; left: 0; width: 100vw; height: 100vh;
-            background: rgba(15, 23, 42, 0.85); backdrop-filter: blur(8px);
-            z-index: 99999; display: flex; align-items: center; justify-content: center;
-        `;
+        overlay.className = 'auth-lock-overlay';
 
         overlay.innerHTML = `
-            <div style="background: white; border-radius: 12px; padding: 2rem; max-width: 400px; width: 90%; box-shadow: 0 20px 25px -5px rgba(0,0,0,0.3); text-align: center;">
-                <div style="font-size: 2.5rem; margin-bottom: 0.5rem;">🔒</div>
-                <h3 style="font-size: 1.25rem; font-weight: 800; color: #1e293b; margin-bottom: 0.25rem;">【${config.deptName}】認証</h3>
-                <p style="font-size: 0.85rem; color: #64748b; margin-bottom: 1.5rem;">パスワードを入力して勤務表を開いてください</p>
-                <div style="margin-bottom: 1rem;">
-                    <input type="password" id="deptAuthPasswordInput" placeholder="パスワードを入力" style="width: 100%; padding: 10px 14px; border: 2px solid #cbd5e1; border-radius: 8px; font-size: 1.1rem; text-align: center; letter-spacing: 4px; outline: none; box-sizing: border-box;">
-                    <div id="deptAuthErrorMsg" style="color: #dc2626; font-size: 0.8rem; margin-top: 6px; display: none; font-weight: 600;">パスワードが正しくありません</div>
+            <div class="auth-modal-card">
+                <div class="auth-modal-icon">
+                    <span style="display:inline-flex; align-items:center; justify-content:center; width:68px; height:68px; background:${themeInfo.bg}; border:2px solid ${themeInfo.color}; border-radius:50%; box-shadow:0 4px 12px rgba(0,0,0,0.08);">
+                        💻
+                    </span>
                 </div>
-                <button type="button" id="deptAuthSubmitBtn" style="width: 100%; padding: 10px; background: #2563eb; color: white; border: none; border-radius: 8px; font-size: 1rem; font-weight: 700; cursor: pointer; transition: background 0.2s;">
-                    ロック解除
+                <h3 class="auth-modal-title" style="color:${themeInfo.color};">【${themeInfo.name}】</h3>
+                <p class="auth-modal-subtitle">セキュリティ認証が必要です。<br>設定されたパスワードを入力してください。</p>
+                <div class="auth-input-group">
+                    <input type="password" id="deptAuthPasswordInput" class="auth-password-input" maxlength="8" placeholder="••••••" autofocus autocomplete="off">
+                    <div id="deptAuthErrorMsg" class="auth-error-text" style="display: none;">⚠️ パスワードが正しくありません</div>
+                </div>
+                <button type="button" id="deptAuthSubmitBtn" class="auth-submit-btn" style="background: linear-gradient(135deg, ${themeInfo.color} 0%, #0f172a 100%);">
+                    🔓 ログインして勤務表を開く
                 </button>
             </div>
         `;
@@ -437,13 +464,16 @@ document.addEventListener('DOMContentLoaded', () => {
         const errorMsg = document.getElementById('deptAuthErrorMsg');
 
         function tryAuth() {
-            if (input.value === config.password) {
+            if (input.value === expectedPassword) {
                 sessionStorage.setItem(authKey, 'true');
-                overlay.remove();
+                overlay.classList.add('hidden');
+                setTimeout(() => overlay.remove(), 250);
             } else {
                 errorMsg.style.display = 'block';
                 input.value = '';
                 input.focus();
+                input.style.borderColor = '#dc2626';
+                setTimeout(() => { input.style.borderColor = '#cbd5e1'; }, 1000);
             }
         }
 
@@ -452,7 +482,7 @@ document.addEventListener('DOMContentLoaded', () => {
             if (e.key === 'Enter') tryAuth();
         });
 
-        setTimeout(() => input.focus(), 100);
+        setTimeout(() => input.focus(), 150);
     }
 
     checkDeptAuthentication();
@@ -11662,5 +11692,63 @@ function renderMasterIntegrationView() {
     initMasterTermSelect();
     setTimeout(initMasterTermSelect, 150);
 
+    // ==========================================
+    // ★ ユーザー指示: 統括ファイルのマスターテーブル「情報更新」ボタン
+    // 各階（1階・2階・3階・南・生活期・ST）の情報を吸い取られ最新情報に更新！
+    // ==========================================
+    function initMasterMegaSyncButton() {
+        const syncBtn = document.getElementById('masterMegaSyncBtn');
+        if (!syncBtn) return;
+
+        syncBtn.onclick = async () => {
+            const originalHtml = syncBtn.innerHTML;
+            syncBtn.disabled = true;
+            syncBtn.style.opacity = '0.75';
+            syncBtn.innerHTML = `
+                <span style="display:inline-block; animation: spin 1s linear infinite; font-size:1.25rem;">🔄</span>
+                <span>各階データを吸い上げ中...</span>
+            `;
+
+            try {
+                // 1. クラウド/共有フォルダ同期が有効なら最新データを取得
+                if (typeof pullStateFromCloud === 'function') {
+                    try {
+                        await pullStateFromCloud(true, false);
+                    } catch (e) {
+                        console.warn('Sync notice:', e);
+                    }
+                }
+
+                // 2. マスター統合テーブルの再計算＆全館再描画
+                if (typeof renderMasterIntegrationView === 'function') {
+                    renderMasterIntegrationView();
+                }
+
+                // 3. ダッシュボードの再描画
+                if (typeof renderStatsDashboard === 'function' && lastSolveResult && lastSolveResult.stats) {
+                    renderStatsDashboard(lastSolveResult.stats);
+                }
+
+                const nowStr = new Date().toLocaleTimeString('ja-JP', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+                showToast(`✅ 各階の最新データを吸い上げました（更新時刻: ${nowStr}）`);
+                
+                const badgeText = document.getElementById('autoSaveStatusText');
+                if (badgeText) badgeText.textContent = `🟢 最新同期完了 (${nowStr})`;
+
+            } catch (err) {
+                console.error('マスター同期エラー:', err);
+                showToast(`⚠️ 同期中に一部エラーが発生しました: ${err.message || err}`);
+            } finally {
+                setTimeout(() => {
+                    syncBtn.disabled = false;
+                    syncBtn.style.opacity = '1';
+                    syncBtn.innerHTML = originalHtml;
+                }, 600);
+            }
+        };
+    }
+
+    initMasterMegaSyncButton();
+    setTimeout(initMasterMegaSyncButton, 200);
 
 });

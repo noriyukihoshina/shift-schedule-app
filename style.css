@@ -1605,3 +1605,137 @@ tr.floor-boundary-row th,
 tr.floor-boundary-row td {
     border-top: 4px solid #334155 !important;
 }
+
+/* ====================================================
+   ★ ユーザー指示: 起動時パスワード認証モーダル（画面ロック）
+   ==================================================== */
+.auth-lock-overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100vw;
+    height: 100vh;
+    background: rgba(15, 23, 42, 0.92);
+    backdrop-filter: blur(8px);
+    z-index: 999999;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    transition: opacity 0.25s ease, visibility 0.25s ease;
+}
+.auth-lock-overlay.hidden {
+    opacity: 0;
+    visibility: hidden;
+    pointer-events: none;
+}
+.auth-modal-card {
+    background: #ffffff;
+    width: 90%;
+    max-width: 440px;
+    border-radius: 16px;
+    padding: 32px 28px;
+    box-shadow: 0 20px 40px -15px rgba(0, 0, 0, 0.5), 0 0 0 1px rgba(255, 255, 255, 0.1);
+    text-align: center;
+    animation: authPopIn 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+}
+@keyframes authPopIn {
+    0% { transform: scale(0.92); opacity: 0; }
+    100% { transform: scale(1); opacity: 1; }
+}
+.auth-modal-icon {
+    font-size: 3rem;
+    margin-bottom: 12px;
+}
+.auth-modal-title {
+    font-size: 1.35rem;
+    font-weight: 800;
+    color: #0f172a;
+    margin-bottom: 6px;
+}
+.auth-modal-subtitle {
+    font-size: 0.88rem;
+    color: #475569;
+    margin-bottom: 22px;
+    line-height: 1.4;
+}
+.auth-input-group {
+    margin-bottom: 20px;
+    position: relative;
+}
+.auth-password-input {
+    width: 100%;
+    font-size: 1.8rem;
+    letter-spacing: 12px;
+    text-align: center;
+    padding: 12px 16px;
+    border: 2px solid #cbd5e1;
+    border-radius: 10px;
+    outline: none;
+    transition: all 0.2s;
+    font-family: monospace;
+    background: #f8fafc;
+}
+.auth-password-input:focus {
+    border-color: #2563eb;
+    background: #ffffff;
+    box-shadow: 0 0 0 4px rgba(37, 99, 235, 0.15);
+}
+.auth-submit-btn {
+    width: 100%;
+    padding: 13px;
+    font-size: 1.05rem;
+    font-weight: 800;
+    color: #ffffff;
+    background: linear-gradient(135deg, #2563eb 0%, #1d4ed8 100%);
+    border: none;
+    border-radius: 10px;
+    cursor: pointer;
+    box-shadow: 0 4px 12px rgba(37, 99, 235, 0.3);
+    transition: all 0.2s;
+}
+.auth-submit-btn:hover {
+    background: linear-gradient(135deg, #1d4ed8 0%, #1e40af 100%);
+    transform: translateY(-1px);
+    box-shadow: 0 6px 16px rgba(37, 99, 235, 0.4);
+}
+.auth-error-text {
+    color: #dc2626;
+    font-size: 0.85rem;
+    font-weight: 700;
+    margin-top: 12px;
+    min-height: 20px;
+}
+
+/* ====================================================
+   ★ ユーザー指示: マスターテーブル「情報更新」特大ボタン
+   ==================================================== */
+/* ====================================================
+   ★ ユーザー指示: 単体フロアアプリ（マスター以外）では他フロア切替ナビを完全非表示
+   ==================================================== */
+body:not(.theme-master) .dept-nav-container {
+    display: none !important;
+}
+
+.master-sync-mega-btn {
+    background: linear-gradient(135deg, #0284c7 0%, #0369a1 100%) !important;
+    color: #ffffff !important;
+    font-size: 0.95rem !important;
+    font-weight: 800 !important;
+    padding: 8px 20px !important;
+    border: 2px solid #38bdf8 !important;
+    border-radius: 9999px !important;
+    box-shadow: 0 4px 14px rgba(2, 132, 199, 0.35) !important;
+    cursor: pointer !important;
+    display: inline-flex !important;
+    align-items: center !important;
+    gap: 8px !important;
+    transition: all 0.2s ease !important;
+}
+.master-sync-mega-btn:hover {
+    background: linear-gradient(135deg, #0369a1 0%, #075985 100%) !important;
+    transform: translateY(-1px) scale(1.02) !important;
+    box-shadow: 0 6px 18px rgba(2, 132, 199, 0.45) !important;
+}
+.master-sync-mega-btn:active {
+    transform: translateY(1px) scale(0.99) !important;
+}
