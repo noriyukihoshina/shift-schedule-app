@@ -3314,10 +3314,20 @@ document.addEventListener('DOMContentLoaded', () => {
         return isOutput ? currentOutputSelectedSymbol : currentSelectedSymbol;
     }
 
-    // ★ ユーザー指示: コピペモード用状態変数
-    let isCopyMode = false;
+    // ★ ユーザー指示: コピペモード用状態変数（デフォルトON）
+    let isCopyMode = true;
     let clipboardSymbol = null;
     let selectedCopyCell = null;
+
+    // ★ ユーザー指示: 特殊勤務（早・遅・E）の目立つ背景色分けヘルパー（全画面・全テーブル共通）
+    function applySpecialDutyCellClass(cell, sym) {
+        if (!cell) return;
+        cell.classList.remove('cell-special-early', 'cell-special-late', 'cell-special-eve');
+        if (sym === '早') cell.classList.add('cell-special-early');
+        else if (sym === '遅') cell.classList.add('cell-special-late');
+        else if (sym === 'E') cell.classList.add('cell-special-eve');
+        cell.dataset.sym = sym || '';
+    }
 
     let currentOutputSelectedSymbol = '休';
 
@@ -4936,7 +4946,11 @@ document.addEventListener('DOMContentLoaded', () => {
                         const isFixedCell = cell.isFixed && !isRef;
                         const cls = isFixedCell ? 'day-cell fixed-cell' : (isRef ? 'day-cell auto-ref-cell' : 'day-cell auto-cell');
                         const thickCls = getDayBorderClass(d);
-                        bodyHtml += `<td class="${cls} ${thickCls}" data-s="${s}" data-d="${d}">${displaySym}</td>`;
+                        let specialCls = '';
+                        if (displaySym === '早') specialCls = ' cell-special-early';
+                        else if (displaySym === '遅') specialCls = ' cell-special-late';
+                        else if (displaySym === 'E') specialCls = ' cell-special-eve';
+                        bodyHtml += `<td class="${cls} ${thickCls}${specialCls}" data-sym="${displaySym}" data-s="${s}" data-d="${d}">${displaySym}</td>`;
                     }
                     bodyHtml += `
                         <td class="stat-cell" data-s="${s}" data-stat="work">${staffStat.workDays}</td>
@@ -4971,8 +4985,12 @@ document.addEventListener('DOMContentLoaded', () => {
                     const isCellFixed = cell.isFixed && !isRef;
                     const cls = isCellFixed ? 'day-cell fixed-cell' : (isRef ? 'day-cell auto-ref-cell' : 'day-cell auto-cell');
                     const thickCls = getDayBorderClass(d);
+                    let specialCls = '';
+                    if (displaySym === '早') specialCls = ' cell-special-early';
+                    else if (displaySym === '遅') specialCls = ' cell-special-late';
+                    else if (displaySym === 'E') specialCls = ' cell-special-eve';
                     const titleText = isCellFixed ? '🔒 事前固定希望枠（赤字・太字保持）' : (isRef ? '🌴 自動配分リフ（通常編集自由）' : 'システム自動配置');
-                    bodyHtml += `<td class="${cls} ${thickCls} ${rowBottomCls}" data-s="${s}" data-d="${d}" title="${titleText}">${displaySym}</td>`;
+                    bodyHtml += `<td class="${cls} ${thickCls} ${rowBottomCls}${specialCls}" data-sym="${displaySym}" data-s="${s}" data-d="${d}" title="${titleText}">${displaySym}</td>`;
                 }
 
                 bodyHtml += `
@@ -7288,12 +7306,16 @@ function renderMasterIntegrationView() {
                     );
 
                     const color = isCellFixed ? '#dc2626' : (isRef ? '#0f172a' : '#334155');
-                    const bg = '#ffffff';
+                    let specialCls = '';
+                    if (sym === '早') specialCls = ' cell-special-early';
+                    else if (sym === '遅') specialCls = ' cell-special-late';
+                    else if (sym === 'E') specialCls = ' cell-special-eve';
+                    const bgStyle = (sym === '早' || sym === '遅' || sym === 'E') ? '' : 'background:#ffffff;';
 
                     const fixedCls = isCellFixed ? 'fixed-cell' : (isRef ? 'auto-ref-cell' : 'auto-cell');
                     const titleText = isCellFixed ? '🔒 事前固定希望枠（赤字・クリックで修正可能）' : 'システム自動配置（クリックで修正可能）';
 
-                    html += `<td class="${thickCls} ${fixedCls} master-editable-cell col-day-fixed" data-floor="${fc.id}" data-is-st="${item.isST ? '1' : '0'}" data-is-ha="${item.isHa ? '1' : '0'}" data-ha-idx="${item.lifeStaffIdx !== undefined ? item.lifeStaffIdx : -1}" data-staff-id="${s.id || ''}" data-staff-name="${escapeHtmlText(s.name)}" data-day="${d}" title="${titleText}" style="width:52px; min-width:52px; max-width:52px; background:${bg}; color:${color}; font-weight:700; border-bottom:1px solid #e2e8f0; text-align:center; cursor:pointer;">${sym}</td>`;
+                    html += `<td class="${thickCls} ${fixedCls}${specialCls} master-editable-cell col-day-fixed" data-sym="${sym}" data-floor="${fc.id}" data-is-st="${item.isST ? '1' : '0'}" data-is-ha="${item.isHa ? '1' : '0'}" data-ha-idx="${item.lifeStaffIdx !== undefined ? item.lifeStaffIdx : -1}" data-staff-id="${s.id || ''}" data-staff-name="${escapeHtmlText(s.name)}" data-day="${d}" title="${titleText}" style="width:52px; min-width:52px; max-width:52px; ${bgStyle} color:${color}; font-weight:700; border-bottom:1px solid #e2e8f0; text-align:center; cursor:pointer;">${sym}</td>`;
                 }
 
                 // 勤務の右端に出勤・公休などのスタッフ毎の集計を記載
@@ -7497,6 +7519,15 @@ function renderMasterIntegrationView() {
         // 選択中パレットの記号で修正後、LocalStorageを更新して全体サマリー・階別集計を即時再計算！
         document.querySelectorAll('.master-editable-cell').forEach(cell => {
             cell.addEventListener('click', () => {
+                // ★ ユーザー指示: コピペモード時は選択枠を付与してCtrl+C/Ctrl+Vの準備（誤上書き防止）
+                if (isCopyMode) {
+                    if (selectedCopyCell) selectedCopyCell.classList.remove('copy-selected-cell');
+                    selectedCopyCell = cell;
+                    cell.classList.add('copy-selected-cell');
+                    cell.focus();
+                    return;
+                }
+
                 // 選択されているパレット記号を取得（チェック画面パレット優先、なければ入力画面パレット）
                 const activeCheckBtn = document.querySelector('.check-palette-btn.selected');
                 const activeInpBtn = document.querySelector('.palette-btn.selected');
@@ -10728,7 +10759,27 @@ function renderMasterIntegrationView() {
     window.addEventListener('beforeunload', flushCloudSync);
 
 
-// ★ ユーザー指示: コピペモード（セル選択 Ctrl+C / Ctrl+V またはクリック貼付）
+// ★ ユーザー指示: コピペモード（セル選択 Ctrl+C / Ctrl+V またはクリック貼付、全テーブルでデフォルトON）
+    const syncInitialCopyModeBtns = () => {
+        const allCopyBtns = document.querySelectorAll('#copyModeToggleBtn, .copy-mode-btn');
+        allCopyBtns.forEach(b => {
+            if (isCopyMode) {
+                b.classList.remove('btn-outline-primary');
+                b.classList.add('btn-primary');
+                b.textContent = '📋 コピペモードON';
+            } else {
+                b.classList.remove('btn-primary');
+                b.classList.add('btn-outline-primary');
+                b.textContent = '📋 コピペモード';
+            }
+        });
+    };
+    if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', syncInitialCopyModeBtns);
+    } else {
+        syncInitialCopyModeBtns();
+    }
+
     document.addEventListener('click', (e) => {
         const toggleBtn = e.target.closest('#copyModeToggleBtn, .copy-mode-btn');
         if (toggleBtn) {
@@ -10769,11 +10820,96 @@ function renderMasterIntegrationView() {
             }
         } else if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'v') {
             if (activeCell && clipboardSymbol !== null) {
+                let newSym = clipboardSymbol;
+
+                // ★ マスターテーブルのセル（.master-editable-cell）への貼り付け処理
+                if (activeCell.classList.contains('master-editable-cell')) {
+                    const floorId = activeCell.dataset.floor;
+                    const isStCell = (activeCell.dataset.isSt === '1');
+                    const isHaCell = (activeCell.dataset.isHa === '1');
+                    const staffId = activeCell.dataset.staffId;
+                    const staffName = activeCell.dataset.staffName;
+                    const haIdx = parseInt(activeCell.dataset.haIdx, 10);
+                    const dayIdx = parseInt(activeCell.dataset.day, 10);
+
+                    const curStartDate = document.getElementById('masterTermSelect')?.value || document.getElementById('termStartDate')?.value || currentWorkingStartDate || '2026-04-01';
+                    const targetKey = isHaCell
+                        ? `shift_schedule_life_term_${curStartDate}`
+                        : (isStCell ? `shift_schedule_st_term_${curStartDate}` : `shift_schedule_${floorId}_term_${curStartDate}`);
+
+                    try {
+                        let raw = localStorage.getItem(targetKey);
+                        let fData = null;
+                        if (raw) {
+                            try { fData = JSON.parse(raw); } catch (err) {}
+                        }
+                        if (fData && Array.isArray(fData.staffList)) {
+                            let stIdx = -1;
+                            if (isHaCell) {
+                                if (haIdx >= 0 && fData.staffList[haIdx]) {
+                                    stIdx = haIdx;
+                                } else {
+                                    stIdx = fData.staffList.findIndex(st => (staffId && String(st.id) === String(staffId)) || st.name === staffName || (st.haSection && staffName.includes(st.haSection)));
+                                }
+                            } else {
+                                stIdx = fData.staffList.findIndex(st => (staffId && String(st.id) === String(staffId)) || st.name === staffName);
+                            }
+                            if (stIdx !== -1) {
+                                if (!fData.outputGrid) fData.outputGrid = [];
+                                if (!fData.outputGrid[stIdx]) fData.outputGrid[stIdx] = new Array(NUM_DAYS).fill({ symbol: '', isFixed: false });
+
+                                const curCell = fData.outputGrid[stIdx][dayIdx];
+                                const curFixed = (curCell && typeof curCell === 'object') ? !!curCell.isFixed : false;
+                                fData.outputGrid[stIdx][dayIdx] = { symbol: newSym, isFixed: curFixed };
+
+                                const openFloors = [];
+                                floorConfigs.forEach(fc => {
+                                    const rows = document.querySelectorAll(`.master-detail-${fc.id}`);
+                                    if (rows.length > 0 && rows[0].style.display !== 'none' && rows[0].style.display !== '') {
+                                        openFloors.push(fc.id);
+                                    }
+                                });
+
+                                const prevJson = raw;
+                                fData.updatedAt = new Date().toISOString();
+                                const nextJson = JSON.stringify(fData);
+                                if (typeof pushMasterHistory === 'function') {
+                                    pushMasterHistory({
+                                        targetKey: targetKey,
+                                        prevJson: prevJson,
+                                        nextJson: nextJson,
+                                        openFloors: openFloors
+                                    });
+                                }
+                                localStorage.setItem(targetKey, nextJson);
+                            }
+                        }
+                    } catch (err) {
+                        console.error('マスターテーブル貼り付けエラー:', err);
+                    }
+
+                    activeCell.textContent = newSym;
+                applySpecialDutyCellClass(activeCell, newSym);
+                    applySpecialDutyCellClass(activeCell, newSym);
+                    if (typeof renderMasterIntegrationView === 'function') {
+                        renderMasterIntegrationView();
+                    }
+
+                    if (selectedCopyCell) selectedCopyCell.classList.remove('copy-selected-cell');
+                    const reSelected = document.querySelector(`.master-editable-cell[data-floor="${floorId}"][data-staff-id="${staffId}"][data-day="${dayIdx}"]`) || activeCell;
+                    if (reSelected) {
+                        reSelected.classList.add('copy-selected-cell');
+                        selectedCopyCell = reSelected;
+                    }
+                    showToast(`📋 【${newSym || '空欄'}】を貼り付けました (Ctrl+V)`);
+                    e.preventDefault();
+                    return;
+                }
+
                 const s = parseInt(activeCell.dataset.s, 10);
                 const d = parseInt(activeCell.dataset.d, 10);
                 const type = activeCell.dataset.type;
                 pushHistory();
-                let newSym = clipboardSymbol;
 
                 // 1. 入力データ（staffList）の更新
                 if (!isNaN(s) && staffList[s]) {
@@ -10799,6 +10935,7 @@ function renderMasterIntegrationView() {
                 }
 
                 activeCell.textContent = newSym;
+                applySpecialDutyCellClass(activeCell, newSym);
 
                 // 3. リアルタイム再集計＆画面再描画（個人集計列＆フッター日別集計行の即時更新）
                 if (updatedOutput && lastScheduler) {

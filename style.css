@@ -450,6 +450,59 @@ td.col-day-fixed {
     font-weight: 600;
 }
 
+/* =========================================================================
+   ★ 特殊勤務セル（早・遅・E）目視確認用 目立つ背景色分け
+   ※全テーブル共通・各テーブルのテーマ色と混ざらない高視認性配色
+   ========================================================================= */
+.cell-special-early,
+[data-sym="早"]:not(.stat-cell):not(th),
+td[data-sym="早"] {
+    background-color: #fef08a !important; /* 目立つイエロー/アンバー系 */
+    color: #854d0e !important;            /* 濃いアンバー文字 */
+    font-weight: 800 !important;
+}
+
+.cell-special-late,
+[data-sym="遅"]:not(.stat-cell):not(th),
+td[data-sym="遅"] {
+    background-color: #a5f3fc !important; /* 目立つシアン/ターコイズ系 */
+    color: #164e63 !important;            /* 濃いシアンネイビー文字 */
+    font-weight: 800 !important;
+}
+
+.cell-special-eve,
+[data-sym="E"]:not(.stat-cell):not(th),
+td[data-sym="E"] {
+    background-color: #fbcfe8 !important; /* 目立つピンク/マゼンタ系 */
+    color: #831843 !important;            /* 濃いワインレッド文字 */
+    font-weight: 800 !important;
+}
+
+/* 事前固定希望枠（赤字）の場合は赤字を維持しつつ背景色を保持 */
+.cell-special-early.fixed-cell,
+[data-sym="早"].fixed-cell {
+    color: #dc2626 !important;
+    background-color: #fef08a !important;
+}
+.cell-special-late.fixed-cell,
+[data-sym="遅"].fixed-cell {
+    color: #dc2626 !important;
+    background-color: #a5f3fc !important;
+}
+.cell-special-eve.fixed-cell,
+[data-sym="E"].fixed-cell {
+    color: #dc2626 !important;
+    background-color: #fbcfe8 !important;
+}
+
+/* エラー網掛け（.conflict-highlight）が重なった場合はエラー青網掛けを最優先 */
+.cell-special-early.conflict-highlight,
+.cell-special-late.conflict-highlight,
+.cell-special-eve.conflict-highlight {
+    background-color: #bfdbfe !important;
+    color: #1e3a8a !important;
+}
+
 /* フッター集計行 */
 .sheet-table tfoot th,
 .sheet-table tfoot td {
@@ -701,6 +754,33 @@ input:checked + .toggle-slider:before {
         line-height: 1.1 !important;
         font-size: 7pt !important;
         border: 1px solid #94a3b8 !important;
+    }
+
+    /* ★ ユーザー指示: 印刷時には特殊勤務（早・遅・E等）のセル背景色は完全除去（白地・枠線と黒文字のみ） */
+    .cell-special-early,
+    .cell-special-late,
+    .cell-special-eve,
+    [data-sym="早"],
+    [data-sym="遅"],
+    [data-sym="E"],
+    td.day-cell,
+    td.master-editable-cell,
+    td.input-cell {
+        background-color: transparent !important;
+        background: transparent !important;
+        background-image: none !important;
+        box-shadow: none !important;
+        color: #000000 !important;
+        -webkit-print-color-adjust: exact !important;
+        print-color-adjust: exact !important;
+    }
+    .cell-special-early.fixed-cell,
+    .cell-special-late.fixed-cell,
+    .cell-special-eve.fixed-cell,
+    .fixed-cell {
+        color: #000000 !important;
+        background-color: transparent !important;
+        background: transparent !important;
     }
 
     /* 印刷時のsticky解除（紙面での座標ズレを防止） */
@@ -1333,6 +1413,33 @@ body.theme-master tr.st-linked-row .sticky-col-2 {
         border: 1px solid #94a3b8 !important;
         font-size: 8pt !important;
         padding: 2px 3px !important;
+    }
+
+    /* ★ ユーザー指示: 印刷時には特殊勤務（早・遅・E等）のセル背景色は完全除去（白地・枠線と黒文字のみ） */
+    .cell-special-early,
+    .cell-special-late,
+    .cell-special-eve,
+    [data-sym="早"],
+    [data-sym="遅"],
+    [data-sym="E"],
+    td.day-cell,
+    td.master-editable-cell,
+    td.input-cell {
+        background-color: transparent !important;
+        background: transparent !important;
+        background-image: none !important;
+        box-shadow: none !important;
+        color: #000000 !important;
+        -webkit-print-color-adjust: exact !important;
+        print-color-adjust: exact !important;
+    }
+    .cell-special-early.fixed-cell,
+    .cell-special-late.fixed-cell,
+    .cell-special-eve.fixed-cell,
+    .fixed-cell {
+        color: #000000 !important;
+        background-color: transparent !important;
+        background: transparent !important;
     }
 
     .sticky-col-1,

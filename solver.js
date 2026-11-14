@@ -2844,6 +2844,22 @@ class ShiftScheduler {
                     }
                 }
 
+                // ★ ユーザー指示: 「特殊勤務後の公休の制約が破られる事が多い。どうしても難しいときはこれまで同様に制約をまもらずに配置し網掛けしてくれれば良い。」
+                // 第1フォールバックでも候補者が不足する場合、回数上限・1勤制約等を最大限緩和した第2フォールバックで候補者を救済し、配置を完遂（青網掛け表示）
+                if (candidates.length < needed) {
+                    const alreadyCandSet2 = new Set(candidates.map(c => c.staffIndex));
+                    for (let s = 0; s < this.numStaff; s++) {
+                        if (alreadyCandSet2.has(s)) continue;
+                        if (this.staffList[s].isUnused || this.staffList[s].isSectionChief) continue;
+                        if (this.grid[s][d].isFixed || this.grid[s][d].symbol !== SYMBOLS.WORK) continue;
+                        if (this.staffList[s][req.noFlag]) continue;
+                        if (req.targetFloor && getSubFloor(s) !== req.targetFloor) continue;
+
+                        let score = 900000 + counts.total[s] * 10000;
+                        candidates.push({ staffIndex: s, score, swapDay: -1, isNextWorkFallback: true });
+                    }
+                }
+
                 if (candidates.length < needed) {
                     if (!force) {
                         return {
