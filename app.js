@@ -4394,14 +4394,7 @@ document.addEventListener('DOMContentLoaded', () => {
         }
 
             pushHistory(); // ★ 勤務表生成前の状態を記録し、「↩ 戻る」で元に戻せるようにする
-            // ★ リフレッシュ休暇自動配分連携:
-            // ターム内にリフ対象月が含まれており、まだ必要人数分に達していないグループ（月末最終タームの未消化分含む）があれば自動配分を補完適用！
             const term = getTermInfo();
-
-            const refGroups = (typeof getTermRefreshGroups === 'function') ? getTermRefreshGroups(term.dates) : [];
-            if (refGroups && refGroups.length > 0) {
-                handleAutoAssignRefreshHolidays({ silent: true });
-            }
 
             setSolveLoading(true);
 
@@ -4430,17 +4423,24 @@ document.addEventListener('DOMContentLoaded', () => {
                         stDailyHeadCount: getLinkedSTDailyHeadCount(),
                         stDailyFtWork: getLinkedSTDailyFtWork(),
                         stDailyEarly: getLinkedSTDailyEarly(),
-                    stDailyLate: getLinkedSTDailyLate(),
-                    stDailyEve: getLinkedSTDailyEve(),
+                        stDailyLate: getLinkedSTDailyLate(),
+                        stDailyEve: getLinkedSTDailyEve(),
                         stFloorFtCount: getLinkedSTFloorFtCount()
                     });
-                    const result = scheduler.solveBaseSchedule();
+
+                    // ★ ユーザー指示 (ver.28): 骨格生成後の最適日勤○からリフ昇格配置
+                    const pastHistory = (typeof collectPastRefreshHolidayHistory === 'function') ? collectPastRefreshHolidayHistory(curStartDate) : {};
+                    const futureHistory = (typeof collectFutureRefreshHolidayHistory === 'function') ? collectFutureRefreshHolidayHistory(curStartDate) : {};
+                    const result = scheduler.solveBaseSchedule({
+                        obtainedHistory: pastHistory,
+                        futureHistory: futureHistory
+                    });
 
                     setSolveLoading(false);
 
                     if (result.success) {
                         clearConflictHighlights();
-                        // ★ 自動配分リフを通常文字・編集自由セル（isFixed: false）にする
+                        // ★ 自動配分リフを通常文字・編集自由セル（isFixed: false）にし、履歴セットに同期
                         if (result.grid) {
                             for (let s = 0; s < NUM_STAFF; s++) {
                                 if (!result.grid[s]) continue;
@@ -4449,9 +4449,13 @@ document.addEventListener('DOMContentLoaded', () => {
                                     if (!cell) continue;
                                     const sym = cell.symbol || cell;
                                     const isRef = SYMBOLS.REF_SUMMER.includes(sym) || SYMBOLS.REF_WINTER.includes(sym);
-                                    if (isRef && autoAssignedRefKeys.has(`${curStartDate}:${s},${d}`)) {
+                                    if (isRef && (!cell.isFixed || cell.isAutoAssignedRef)) {
                                         cell.isFixed = false;
                                         cell.isAutoAssignedRef = true;
+                                        autoAssignedRefKeys.add(`${curStartDate}:${s},${d}`);
+                                        if (staffList[s]) {
+                                            autoAssignedStaffIds.add(`${curStartDate}:${staffList[s].id}`);
+                                        }
                                     }
                                 }
                             }

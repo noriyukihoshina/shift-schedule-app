@@ -1902,6 +1902,12 @@ class ShiftScheduler {
         // ★ 平準化後にも再度Cl2同日休みがないかを最終保証
         this.repairCl2SimultaneousOff(cl2Staff);
 
+        // ★ ユーザー指示 (ver.28): 生活期骨格完成後のリフレッシュ休暇最適昇格配置
+        if (!options.skipAutoRefresh) {
+            this.assignAutoRefreshHolidaysToGrid(options);
+            this.repairCl2SimultaneousOff(cl2Staff);
+        }
+
         return {
             success: true,
             grid: this.grid,
@@ -2219,10 +2225,257 @@ class ShiftScheduler {
             }
         }
 
+        // ★ ユーザー指示 (ver.28): 骨格勤務表完成後のリフレッシュ休暇最適昇格配置
+        // 公休8.0日・上限5連勤・週休2日・属性充足が完璧に満たされた安定骨格の日勤「○」から、
+        // 役職・スケ可・専従保護、連休化、平準化を考慮して安全にリフ記号へ昇格させる。
+        if (!options.skipAutoRefresh) {
+            this.assignAutoRefreshHolidaysToGrid(options);
+        }
+
         return {
             success: true,
             grid: this.grid,
             stats: this.calculateStats()
+        };
+    }
+
+    /**
+     * ★ ユーザー指示 (ver.28): 骨格勤務表完成後のリフレッシュ休暇最適昇格配置
+     * 公休8日・上限5連勤・週休2日・役職充足が完璧に満たされた勤務表の日勤「○」から、
+     * 役職・スケ可・専従保護、連休化、平準化を考慮して安全にリフ記号へ昇格させる。
+     */
+    assignAutoRefreshHolidaysToGrid(options = {}) {
+        if (!this.dates || this.dates.length === 0) return { assignedCount: 0, assignments: [] };
+        const groups = (typeof getTermRefreshGroups === 'function') ? getTermRefreshGroups(this.dates) : [];
+        if (!groups || groups.length === 0) return { assignedCount: 0, assignments: [] };
+
+        const obtainedHistory = options.obtainedHistory || {};
+        const futureHistory = options.futureHistory || {};
+        const assignments = [];
+
+        // 有効スタッフインデックス一覧
+        const activeStaffIndices = [];
+        for (let s = 0; s < this.numStaff; s++) {
+            if (!this.staffList[s].isUnused) activeStaffIndices.push(s);
+        }
+        const activeStaffCount = activeStaffIndices.length;
+        if (activeStaffCount === 0) return { assignedCount: 0, assignments: [] };
+
+        // 既存のリフを走査
+        const dailyRefCount = new Array(this.numDays).fill(0);
+        const staffWithRefInTerm = new Set();
+        for (let s = 0; s < this.numStaff; s++) {
+            if (this.staffList[s].isUnused) continue;
+            for (let d = 0; d < this.numDays; d++) {
+                const sym = this.grid[s][d].symbol;
+                if (SYMBOLS.REF_SUMMER.includes(sym) || SYMBOLS.REF_WINTER.includes(sym)) {
+                    dailyRefCount[d]++;
+                    staffWithRefInTerm.add(s);
+                }
+            }
+        }
+
+        // 日別の出勤人数カウント（平準化用）
+        const getDailyWorkforce = (d) => {
+            let count = 0;
+            for (let s = 0; s < this.numStaff; s++) {
+                if (!this.staffList[s].isUnused && isWorkSymbol(this.grid[s][d].symbol)) {
+                    count++;
+                }
+            }
+            return count;
+        };
+
+        for (const grp of groups) {
+            const isLastTermOfMonth = grp.dayIndices.includes(grp.totalMonthDays - 1) || (grp.dayIndices.length >= grp.totalMonthDays);
+            const daysInTerm = grp.dayIndices.length;
+
+            let alreadyObtainedInPast = 0;
+            for (const sIdx of activeStaffIndices) {
+                const st = this.staffList[sIdx];
+                const history = obtainedHistory[st.id] || obtainedHistory[sIdx];
+                const hasObtained = (history instanceof Set) ? history.has(grp.symbol) : (Array.isArray(history) && history.includes(grp.symbol));
+                if (hasObtained) alreadyObtainedInPast++;
+            }
+
+            const remainingUnobtained = Math.max(0, activeStaffCount - alreadyObtainedInPast);
+            const proportionalTarget = Math.min(
+                remainingUnobtained,
+                Math.round(activeStaffCount * (daysInTerm / grp.totalMonthDays))
+            );
+            const prevDaysInMonth = Math.max(0, grp.totalMonthDays - daysInTerm);
+            const expectedPrevAssigned = Math.round(activeStaffCount * (prevDaysInMonth / grp.totalMonthDays));
+            const fallbackLastTermTarget = Math.min(remainingUnobtained, Math.max(0, activeStaffCount - expectedPrevAssigned));
+
+            const targetCount = isLastTermOfMonth
+                ? ((alreadyObtainedInPast > 0 || daysInTerm >= grp.totalMonthDays) ? remainingUnobtained : fallbackLastTermTarget)
+                : proportionalTarget;
+
+            // 今タームで既にこのグループのリフを持っている人数
+            let alreadyInTermForThisGroup = 0;
+            const staffWithThisGroupInTerm = new Set();
+            for (const sIdx of activeStaffIndices) {
+                for (const d of grp.dayIndices) {
+                    const sym = this.grid[sIdx][d].symbol;
+                    if (sym === grp.symbol) {
+                        alreadyInTermForThisGroup++;
+                        staffWithThisGroupInTerm.add(sIdx);
+                        break;
+                    }
+                }
+            }
+
+            const needToAssign = Math.max(0, targetCount - alreadyInTermForThisGroup);
+            if (needToAssign === 0) continue;
+
+            // 候補スタッフの抽出
+            const candidates = [];
+            for (const sIdx of activeStaffIndices) {
+                if (staffWithThisGroupInTerm.has(sIdx)) continue;
+                const st = this.staffList[sIdx];
+
+                const history = obtainedHistory[st.id] || obtainedHistory[sIdx];
+                const hasObtained = (history instanceof Set) ? history.has(grp.symbol) : (Array.isArray(history) && history.includes(grp.symbol));
+                if (hasObtained) continue;
+
+                const futHist = futureHistory[st.id] || futureHistory[sIdx];
+                const hasInFuture = (futHist instanceof Set) ? futHist.has(grp.symbol) : (Array.isArray(futHist) && futHist.includes(grp.symbol));
+
+                candidates.push({
+                    sIdx,
+                    staff: st,
+                    hasInFuture: hasInFuture ? 1 : 0
+                });
+            }
+
+            // 候補者ソート（未取得者最優先、1人1ターム1リフ優先、役職分散）
+            candidates.sort((a, b) => {
+                if (a.hasInFuture !== b.hasInFuture) return a.hasInFuture - b.hasInFuture;
+                const hasOtherRefA = staffWithRefInTerm.has(a.sIdx) ? 1 : 0;
+                const hasOtherRefB = staffWithRefInTerm.has(b.sIdx) ? 1 : 0;
+                if (hasOtherRefA !== hasOtherRefB) return hasOtherRefA - hasOtherRefB;
+                const weightA = ((a.staff.isSectionChief || a.staff.isChief) ? 2 : 0) + (a.staff.isFullTime ? 2 : 0) + (a.staff.canSched ? 1 : 0);
+                const weightB = ((b.staff.isSectionChief || b.staff.isChief) ? 2 : 0) + (b.staff.isFullTime ? 2 : 0) + (b.staff.canSched ? 1 : 0);
+                if (weightA !== weightB) return weightA - weightB;
+                return a.staff.id - b.staff.id;
+            });
+
+            const toAssign = candidates.slice(0, needToAssign);
+
+            for (const cand of toAssign) {
+                const sIdx = cand.sIdx;
+                const st = cand.staff;
+
+                let bestDay = -1;
+                let bestScore = -999999;
+
+                for (const d of grp.dayIndices) {
+                    const cell = this.grid[sIdx][d];
+                    // 日勤「○」かつ未固定セルのみが昇格対象
+                    if (cell.symbol !== SYMBOLS.WORK || cell.isFixed) continue;
+
+                    // 係長や土日固定休スタッフは土日祝を避けて平日限定
+                    const isSatSunOffStaff = st.isSectionChief || !!st.isSatSunOff || (st.lifeSection === '訪問' || st.lifeSection === '管理' || st.lifeSection === 'Cl1' || st.haSection === 'ハ1' || st.haSection === 'ハ2');
+                    const dObj = this.dates[d];
+                    if (isSatSunOffStaff && dObj && (dObj.isSun || dObj.isSat)) continue;
+
+                    // 1. 役職者保護: 主任・副主任がリフを取る場合、当日に別の主任・副主任が少なくとも1名出勤していること
+                    if (st.isChief || st.isSubChief) {
+                        let otherRolesWorking = 0;
+                        for (const otherS of activeStaffIndices) {
+                            if (otherS === sIdx) continue;
+                            const ost = this.staffList[otherS];
+                            if ((ost.isChief || ost.isSubChief) && isWorkSymbol(this.grid[otherS][d].symbol)) {
+                                otherRolesWorking++;
+                            }
+                        }
+                        if (otherRolesWorking < 1) continue; // 役職不在を完全防止！
+                    }
+
+                    // 2. スケ可保護: スケ可スタッフが休む場合、当日に別のスケ可が2名以上残ること
+                    if (st.canSched) {
+                        let otherSchedWorking = 0;
+                        for (const otherS of activeStaffIndices) {
+                            if (otherS === sIdx) continue;
+                            if (this.staffList[otherS].canSched && isWorkSymbol(this.grid[otherS][d].symbol)) {
+                                otherSchedWorking++;
+                            }
+                        }
+                        if (otherSchedWorking < 2) continue; // スケ可不足を防止！
+                    }
+
+                    // 3. 専従保護: 専従スタッフが休む場合、当日に別の専従が3名以上残ること
+                    if (st.isFullTime) {
+                        let otherFtWorking = 0;
+                        for (const otherS of activeStaffIndices) {
+                            if (otherS === sIdx) continue;
+                            if (this.staffList[otherS].isFullTime && isWorkSymbol(this.grid[otherS][d].symbol)) {
+                                otherFtWorking++;
+                            }
+                        }
+                        if (otherFtWorking < 3) continue; // 専従不足を防止！
+                    }
+
+                    // 4. Cl2保護（生活期）: Cl2スタッフが同日全員休みにならないこと
+                    if (this.isLife && (st.lifeSection === 'Cl2' || st.isCL2 === true || st.isCl2 === true)) {
+                        let otherCl2Working = 0;
+                        for (const otherS of activeStaffIndices) {
+                            if (otherS === sIdx) continue;
+                            const ost = this.staffList[otherS];
+                            if ((ost.lifeSection === 'Cl2' || ost.isCL2 === true || ost.isCl2 === true) && isWorkSymbol(this.grid[otherS][d].symbol)) {
+                                otherCl2Working++;
+                            }
+                        }
+                        if (otherCl2Working < 1) continue; // Cl2同日休みを完全防止！
+                    }
+
+                    // スコアリング
+                    let score = 100;
+                    // 出勤人数が多い日を優先（平準化促進）
+                    const curWorkforce = getDailyWorkforce(d);
+                    score += curWorkforce * 15;
+
+                    // すでに同日にリフが入っている人数が多い日は減点（リフ集中防止）
+                    score -= dailyRefCount[d] * 30;
+
+                    // 公休（休）の前後は連休ボーナス加点
+                    const prevSym = d > 0 ? this.grid[sIdx][d - 1].symbol : '';
+                    const nextSym = d < this.numDays - 1 ? this.grid[sIdx][d + 1].symbol : '';
+                    if (isHolidaySymbol(prevSym)) score += 40;
+                    if (isHolidaySymbol(nextSym)) score += 40;
+
+                    // 係長・土日休スタッフの月曜・金曜ボーナス
+                    if (isSatSunOffStaff && dObj && (dObj.wIdx === 0 || dObj.wIdx === 4)) {
+                        score += 30;
+                    }
+
+                    if (score > bestScore) {
+                        bestScore = score;
+                        bestDay = d;
+                    }
+                }
+
+                // 最適日勤○が見つかった場合、リフ記号へ昇格！
+                if (bestDay !== -1) {
+                    this.grid[sIdx][bestDay].symbol = grp.symbol;
+                    this.grid[sIdx][bestDay].isFixed = false;
+                    this.grid[sIdx][bestDay].isAutoAssignedRef = true;
+                    dailyRefCount[bestDay]++;
+                    staffWithRefInTerm.add(sIdx);
+                    assignments.push({
+                        staffIndex: sIdx,
+                        staffId: st.id,
+                        staffName: st.name,
+                        dayIndex: bestDay,
+                        symbol: grp.symbol
+                    });
+                }
+            }
+        }
+
+        return {
+            assignedCount: assignments.length,
+            assignments: assignments
         };
     }
 
