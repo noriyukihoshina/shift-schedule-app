@@ -3849,6 +3849,10 @@ document.addEventListener('DOMContentLoaded', () => {
             updateRefreshBadge(dates);
         }
 
+        const weekSpans = (typeof getSunToSatWeekSpans === 'function')
+            ? getSunToSatWeekSpans(dates, NUM_DAYS)
+            : [];
+
         return {
             title,
             badgeText,
@@ -3856,6 +3860,7 @@ document.addEventListener('DOMContentLoaded', () => {
             first,
             last,
             numDays: NUM_DAYS,
+            weekSpans,
             isTerm13: !!(termDef && termDef.isTerm13)
         };
     }
@@ -6042,6 +6047,99 @@ document.addEventListener('DOMContentLoaded', () => {
         return true;
     }
 
+    // ★ ブレ最小化スワップ時の厳格制約検証ヘルパー（連勤・週休2日・公休8日・5連勤直後2連休・特殊翌日休の100%遵守を物理保証）
+    function verifyCandidateStaffSchedule(grid, s, numDays, staffObj, term, targetHolidays = 8.0) {
+        if (!staffObj || staffObj.isUnused) return false;
+        if (staffObj.isSectionChief) return false;
+
+        // 1. 公休日数が targetHolidays と完全一致しているか（公休7日や9日への変動を物理遮断！）
+        let offCount = 0;
+        for (let d = 0; d < numDays; d++) {
+            const c = grid[s] ? grid[s][d] : null;
+            const sym = (c && typeof c === 'object') ? (c.symbol || '') : (c || '');
+            if (sym === SYMBOLS.OFF) offCount += 1.0;
+            else if (isHalfDuty(sym)) offCount += 0.5;
+        }
+        if (Math.abs(offCount - targetHolidays) > 0.01) return false;
+
+        // 2. 公休間隔6日以内チェック（労基法）
+        if (!checkPureOffIntervalForStaff(grid, s, numDays, staffObj)) return false;
+
+        // 3. 連勤シーケンスの構築（prevDays 含む）
+        const sequence = [];
+        const pDays = staffObj.prevDays || [];
+        for (let p = 0; p < pDays.length; p++) sequence.push(pDays[p] || '');
+        for (let d = 0; d < numDays; d++) {
+            const c = grid[s] ? grid[s][d] : null;
+            const sym = (c && typeof c === 'object') ? (c.symbol || '') : (c || '');
+            sequence.push(sym);
+        }
+
+        // 4. 連勤制限（原則最大5日、allow6Consecのみ6日）
+        const maxConsec = staffObj.allow6Consec ? 6 : 5;
+        let consec = 0;
+        for (let i = 0; i < sequence.length; i++) {
+            const sym = sequence[i];
+            if (isWorkSymbol(sym)) {
+                consec++;
+                if (consec > maxConsec) return false;
+            } else {
+                consec = 0;
+            }
+        }
+
+        // 5. 5連勤後の2連休ルール（allow6Consec以外）
+        if (!staffObj.allow6Consec) {
+            let workStreak = 0;
+            for (let i = 0; i < sequence.length; i++) {
+                if (isWorkSymbol(sequence[i])) {
+                    workStreak++;
+                    if (workStreak === 5) {
+                        for (let offOffset = 1; offOffset <= 2; offOffset++) {
+                            const checkIdx = i + offOffset;
+                            if (checkIdx < sequence.length) {
+                                const sym = sequence[checkIdx];
+                                if (sym !== '' && !isHolidaySymbol(sym)) return false;
+                            }
+                        }
+                    }
+                } else {
+                    workStreak = 0;
+                }
+            }
+        }
+
+        // 6. 週（日〜土）出勤制限（週出勤最大5日以内、週休2日以上保証）
+        const weekSpans = (term && term.weekSpans && term.weekSpans.length > 0)
+            ? term.weekSpans
+            : (typeof getSunToSatWeekSpans === 'function' ? getSunToSatWeekSpans(term ? term.dates : null, numDays) : []);
+        for (const wSpan of weekSpans) {
+            let weekWork = 0;
+            for (const wd of wSpan) {
+                const c = grid[s] ? grid[s][wd] : null;
+                const sym = (c && typeof c === 'object') ? (c.symbol || '') : (c || '');
+                if (isWorkSymbol(sym) && sym !== SYMBOLS.TRIP && !isHalfDuty(sym)) {
+                    weekWork++;
+                }
+            }
+            const allowedInWeek = staffObj.allow6Consec ? 6 : 5;
+            if (weekWork > allowedInWeek) return false;
+        }
+
+        // 7. 特殊勤務翌日休の保護
+        for (let d = 0; d < numDays - 1; d++) {
+            const cCur = grid[s] ? grid[s][d] : null;
+            const symCur = (cCur && typeof cCur === 'object') ? (cCur.symbol || '') : (cCur || '');
+            if (isRestrictedSpecial(symCur)) {
+                const cNext = grid[s] ? grid[s][d + 1] : null;
+                const symNext = (cNext && typeof cNext === 'object') ? (cNext.symbol || '') : (cNext || '');
+                if (!isHolidaySymbol(symNext)) return false;
+            }
+        }
+
+        return true;
+    }
+
     // -------------------------------------------------------------------------
     // 1. マスターテーブル: 平日ブレ最小化 / 休日ブレ最小化
     // -------------------------------------------------------------------------
@@ -6172,58 +6270,18 @@ document.addEventListener('DOMContentLoaded', () => {
                 if (schedCountWork < 2) return false;
             }
 
-            // 仮想スワップして検証
+            // 仮想スワップして全ハード制約（連勤・週休2日・公休8日・5連勤直後2連休・特殊翌日休）を厳格検証
             fl.grid[s][workD] = { symbol: SYMBOLS.OFF, isFixed: false };
-            fl.grid[s][offD] = { symbol: SYMBOLS.WORK, isFixed: false };
+            fl.grid[s][offD] = { symbol: symWork, isFixed: false };
 
-            // 1. 公休間隔6日以内チェック
-            const intervalOk = checkPureOffIntervalForStaff(fl.grid, s, numDays, st);
-            if (!intervalOk) {
-                fl.grid[s][workD] = cellWork;
-                fl.grid[s][offD] = cellOff;
-                return false;
-            }
-
-            // 2. 連勤・週休チェック
-            const simSeq = [];
-            if (st.prevDays) {
-                for (let p = 0; p < st.prevDays.length; p++) simSeq.push(st.prevDays[p]);
-            }
-            for (let d = 0; d < numDays; d++) {
-                const c = fl.grid[s][d];
-                simSeq.push((c && typeof c === 'object') ? (c.symbol || '') : (c || ''));
-            }
-
-            let maxConsec = st.allow6Consec ? 6 : 5;
-            let consec = 0;
-            let consecValid = true;
-            for (let idx = 0; idx < simSeq.length; idx++) {
-                if (isWorkSymbol(simSeq[idx])) {
-                    consec++;
-                    if (consec > maxConsec) { consecValid = false; break; }
-                } else {
-                    consec = 0;
-                }
-            }
-
-            let weekValid = true;
-            if (term.weekSpans) {
-                for (const wSpan of term.weekSpans) {
-                    let wWork = 0;
-                    for (const wd of wSpan) {
-                        const c = fl.grid[s][wd];
-                        const sym = (c && typeof c === 'object') ? (c.symbol || '') : (c || '');
-                        if (isWorkSymbol(sym)) wWork++;
-                    }
-                    if (wWork > 5) { weekValid = false; break; }
-                }
-            }
+            const stdHolidayVal = 8.0;
+            const isValid = verifyCandidateStaffSchedule(fl.grid, s, numDays, st, term, stdHolidayVal);
 
             // 元に戻す
             fl.grid[s][workD] = cellWork;
             fl.grid[s][offD] = cellOff;
 
-            return consecValid && weekValid;
+            return isValid;
         }
 
         let totalSwaps = 0;
@@ -6441,58 +6499,18 @@ document.addEventListener('DOMContentLoaded', () => {
                 if (schedCountWork < 2) return false;
             }
 
-            // 仮想スワップして検証
+            // 仮想スワップして全ハード制約（連勤・週休2日・公休8日・5連勤直後2連休・特殊翌日休）を厳格検証
             targetGrid[s][workD] = { symbol: SYMBOLS.OFF, isFixed: false };
             targetGrid[s][offD] = { symbol: symWork, isFixed: false };
 
-            // 1. 公休間隔6日以内チェック
-            const intervalOk = checkPureOffIntervalForStaff(targetGrid, s, numDays, st);
-            if (!intervalOk) {
-                targetGrid[s][workD] = cellWork;
-                targetGrid[s][offD] = cellOff;
-                return false;
-            }
-
-            // 2. 連勤・週休チェック
-            const simSeq = [];
-            if (st.prevDays) {
-                for (let p = 0; p < st.prevDays.length; p++) simSeq.push(st.prevDays[p]);
-            }
-            for (let d = 0; d < numDays; d++) {
-                const c = targetGrid[s][d];
-                simSeq.push((c && typeof c === 'object') ? (c.symbol || '') : (c || ''));
-            }
-
-            let maxConsec = st.allow6Consec ? 6 : 5;
-            let consec = 0;
-            let consecValid = true;
-            for (let idx = 0; idx < simSeq.length; idx++) {
-                if (isWorkSymbol(simSeq[idx])) {
-                    consec++;
-                    if (consec > maxConsec) { consecValid = false; break; }
-                } else {
-                    consec = 0;
-                }
-            }
-
-            let weekValid = true;
-            if (term.weekSpans) {
-                for (const wSpan of term.weekSpans) {
-                    let wWork = 0;
-                    for (const wd of wSpan) {
-                        const c = targetGrid[s][wd];
-                        const sym = (c && typeof c === 'object') ? (c.symbol || '') : (c || '');
-                        if (isWorkSymbol(sym)) wWork++;
-                    }
-                    if (wWork > 5) { weekValid = false; break; }
-                }
-            }
+            const stdHolidayVal = parseFloat(document.getElementById('standardHolidaySelect')?.value || '8.0');
+            const isValid = verifyCandidateStaffSchedule(targetGrid, s, numDays, st, term, stdHolidayVal);
 
             // 元に戻す
             targetGrid[s][workD] = cellWork;
             targetGrid[s][offD] = cellOff;
 
-            return consecValid && weekValid;
+            return isValid;
         }
 
         let totalSwaps = 0;
@@ -6706,46 +6724,19 @@ document.addEventListener('DOMContentLoaded', () => {
                 if (schedWorkCount === 0) return false;
             }
 
-            // 仮スワップ
+            // 仮スワップして全ハード制約（連勤・週休2日・公休8日・5連勤直後2連休・労基法公休間隔）を厳格検証
             const origSym = symWork;
             targetGrid[s][workD] = { symbol: SYMBOLS.OFF, isFixed: false };
             targetGrid[s][offD] = { symbol: origSym, isFixed: false };
 
-            // 1. 連勤チェック（最大5連勤）
-            let maxConsec = st.allow6Consec ? 6 : 5;
-            let consec = 0;
-            let consecValid = true;
-            for (let d = 0; d < numDays; d++) {
-                const sym = (targetGrid[s][d] && targetGrid[s][d].symbol) || '';
-                if (isWorkSymbol(sym)) {
-                    consec++;
-                    if (consec > maxConsec) { consecValid = false; break; }
-                } else {
-                    consec = 0;
-                }
-            }
-
-            // 2. 週休2日チェック
-            let weekValid = true;
-            if (term.weekSpans) {
-                for (const wSpan of term.weekSpans) {
-                    let wWork = 0;
-                    for (const wd of wSpan) {
-                        const sym = (targetGrid[s][wd] && targetGrid[s][wd].symbol) || '';
-                        if (isWorkSymbol(sym)) wWork++;
-                    }
-                    if (wWork > 5) { weekValid = false; break; }
-                }
-            }
-
-            // 3. 労基法公休間隔（最大6日以内）
-            let pureOffValid = checkPureOffIntervalForStaff(targetGrid, s, numDays, st);
+            const stdHolidayVal = parseFloat(document.getElementById('standardHolidaySelect')?.value || '8.0');
+            const isValid = verifyCandidateStaffSchedule(targetGrid, s, numDays, st, term, stdHolidayVal);
 
             // 元に戻す
             targetGrid[s][workD] = cellWork;
             targetGrid[s][offD] = cellOff;
 
-            return consecValid && weekValid && pureOffValid;
+            return isValid;
         }
 
         function getFloorDailyReal(flKey, d) {

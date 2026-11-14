@@ -1883,11 +1883,59 @@ class ShiftScheduler {
             }
         }
 
-        // 4. Cl2 スタッフのリストアップ
+        // 4. Cl2 / 通所トレーナースタッフのリストアップ
         const cl2Staff = [];
         for (let s = 0; s < this.numStaff; s++) {
             if (this.staffList[s].isUnused) continue;
-            if (this.staffList[s].lifeSection === 'Cl2') cl2Staff.push(s);
+            const name = this.staffList[s].name || '';
+            const sec = this.staffList[s].lifeSection || '';
+            if (name.includes('通所トレ') || name.includes('トレーナー') || sec === 'Cl2' || name.includes('クラーク2')) {
+                cl2Staff.push(s);
+            }
+        }
+
+        // ★ 通所トレーナー（通所トレ / Cl2）の稼働日（月〜土）同日休み完全解消リペア
+        if (cl2Staff.length >= 2) {
+            for (let d = 0; d < this.numDays; d++) {
+                const di = dates[d];
+                const isSun = di ? (di.wIdx === 6) : (d % 7 === 6);
+                if (isSun) continue; // 日曜日は全員休み
+
+                let working = false;
+                cl2Staff.forEach(s => {
+                    const sym = this.grid[s][d].symbol;
+                    if (isWorkSymbol(sym) && sym !== SYMBOLS.TRIP) working = true;
+                });
+
+                if (!working) {
+                    for (const s of cl2Staff) {
+                        if (this.grid[s][d].isFixed) continue;
+                        if (this.grid[s][d].symbol !== SYMBOLS.OFF) continue;
+
+                        let repaired = false;
+                        for (let otherD = 0; otherD < this.numDays; otherD++) {
+                            const otherDi = dates[otherD];
+                            const otherIsSun = otherDi ? (otherDi.wIdx === 6) : (otherD % 7 === 6);
+                            if (otherIsSun || otherD === d) continue;
+                            if (this.grid[s][otherD].isFixed || this.grid[s][otherD].symbol !== SYMBOLS.WORK) continue;
+
+                            const otherHasTrainer = cl2Staff.some(o => o !== s && isWorkSymbol(this.grid[o][otherD].symbol));
+                            if (!otherHasTrainer) continue;
+
+                            this.setSymbol(s, d, SYMBOLS.WORK, false);
+                            this.setSymbol(s, otherD, SYMBOLS.OFF, false);
+                            if (this.isStaffHardValid(s)) {
+                                repaired = true;
+                                break;
+                            } else {
+                                this.setSymbol(s, d, SYMBOLS.OFF, false);
+                                this.setSymbol(s, otherD, SYMBOLS.WORK, false);
+                            }
+                        }
+                        if (repaired) break;
+                    }
+                }
+            }
         }
 
         // 5. 通所出勤実数の厳格平準化（月〜土の通所出勤ブレを極小化）
@@ -3229,10 +3277,12 @@ class ShiftScheduler {
                     }
                 }
             } else {
-                // 安全なフォールバック: 各週の未固定セルに公休を必ず割り振る（公休0日放置の完全排除）
+                // 安全なフォールバック: 各週の未固定セルに公休を必ず割り振る（公休8.0日厳守！有休やリフは公休から引かない）
                 let curOff = 0;
                 for (let d = 0; d < this.numDays; d++) {
-                    if (this.grid[s][d].isFixed && isHolidaySymbol(this.grid[s][d].symbol)) curOff += 1.0;
+                    const sym = (this.grid[s][d].isFixed || this.grid[s][d].isAfterPreSpecial) ? this.grid[s][d].symbol : '';
+                    if (sym === SYMBOLS.OFF) curOff += 1.0;
+                    else if (isHalfDuty(sym)) curOff += 0.5;
                 }
                 const neededMore = Math.max(0, Math.round(stdHolidays - curOff));
 
@@ -4089,10 +4139,10 @@ class ShiftScheduler {
 
         let bestSchedule = null;
         let searchSteps = 0;
-        const MAX_SEARCH_STEPS = 2000;
+        const MAX_SEARCH_STEPS = 6000;
 
-        // ★ 枝刈り高速化: 評価スコア上位12配分パターンに限定
-        const patternsToTry = distributionPatterns.length > 12 ? distributionPatterns.slice(0, 12) : distributionPatterns;
+        // ★ 枝刈り高速化: 評価スコア順に全配分パターンを安全に探索（即時連勤枝刈りにより高速処理）
+        const patternsToTry = distributionPatterns;
 
         // ★ 即時連勤枝刈り（Pruning）判定ヘルパー: verifyStaffScheduleと100%完全同期
         function isPartialConsecutiveValid(wIdx, assignedDaysSet) {
@@ -4714,17 +4764,16 @@ class ShiftScheduler {
         if (totalStaffA === 0 || totalStaffB === 0) return;
 
         // ★ 超高速 Greedy 局所探索（Aチーム vs Bチーム / 南2階 vs 南3階の出勤人数差を直接最小化）
-        // 同一週内の曜日間スワップ＆クロススワップを組み合わせ、わずか数ミリ秒で全28日間の差を 0〜1名（ほぼ完全同数）に収束させる！
-        const numWeeks = Math.ceil(this.numDays / 7);
+        // 同一週（日〜土）スパン内の曜日間スワップ＆クロススワップを組み合わせ、週休2日を完全に死守しながら全28日間の差を 0〜1名に収束させる！
+        const weekSpans = this.weekSpans || (typeof getSunToSatWeekSpans === 'function' ? getSunToSatWeekSpans(this.dates, this.numDays) : []);
 
-        // 1. 同週内単独スワップ（週休2日を完全に維持したまま各週内のA/B人数を完全均等化）
+        // 1. 同週内単独スワップ（日〜土の週スパン内で週休2日を絶対に維持したまま各週内のA/B人数を完全均等化）
         for (let iter = 0; iter < 40; iter++) {
             let moved = false;
-            for (let w = 0; w < numWeeks; w++) {
+            for (let w = 0; w < weekSpans.length; w++) {
                 const wDays = [];
-                const startD = w * 7;
-                const endD = Math.min((w + 1) * 7, this.numDays);
-                for (let d = startD; d < endD; d++) {
+                const spanDays = weekSpans[w];
+                for (const d of spanDays) {
                     const m = this.getDailySectionWorkMap(d);
                     wDays.push({ day: d, diff: m.teamA - m.teamB });
                 }
@@ -5790,16 +5839,8 @@ class ShiftScheduler {
                 const excess = totalEarly - needEarlyTotal;
                 for (let e = 0; e < excess && e < poEarlyStaffIndices.length; e++) {
                     const targetS = poEarlyStaffIndices[e];
-                    // PO早番を通常日勤「○」に戻す
+                    // PO早番を通常日勤「○」に戻す（公休日数を絶対に減らさないよう、翌日の休日はそのまま安全に保持！）
                     this.setSymbol(targetS, d, SYMBOLS.WORK, false);
-
-                    // 翌日が特殊翌日休で自動配置された「休」であれば、必要に応じて週休や連勤を再修復
-                    if (d + 1 < this.numDays && this.grid[targetS][d + 1].symbol === SYMBOLS.OFF && !this.grid[targetS][d + 1].isFixed) {
-                        this.setSymbol(targetS, d + 1, SYMBOLS.WORK, false);
-                        if (!this.isStaffHardValid(targetS) || !this.isGlobalAttributesValid()) {
-                            this.setSymbol(targetS, d + 1, SYMBOLS.OFF, false);
-                        }
-                    }
                 }
             }
         }
@@ -5807,6 +5848,16 @@ class ShiftScheduler {
 
     isStaffHardValid(s) {
         const staff = this.staffList[s];
+
+        // ★ 公休日数が標準公休日数（8.0日、または指定日数）と完全一致しているか（公休7日・9日への変動を物理遮断！）
+        const targetOff = this.options.standardHolidays || 8.0;
+        let curOff = 0;
+        for (let d = 0; d < this.numDays; d++) {
+            const sym = this.grid[s][d].symbol;
+            if (sym === SYMBOLS.OFF) curOff += 1.0;
+            else if (isHalfDuty(sym)) curOff += 0.5;
+        }
+        if (Math.abs(curOff - targetOff) > 0.01) return false;
 
         // ★ 係長は平日に未固定の「休」を入れることを禁止（スワップ平準化等で平日が休みに変わるのを完全防止！）
         if (staff.isSectionChief) {
@@ -7033,6 +7084,35 @@ function validateScheduleGrid(grid, staffList, options = {}) {
                     const reason = `${dateLabel}の訪問8時が${h8Count}名です（要件: 1名）`;
                     errors.push(`【${dateLabel}】${reason}。`);
                     conflictCells.push({ dayIndex: d, footerStat: 'h8', reason });
+                }
+            }
+
+            // ★ 生活期テーブル専用チェック: 通所トレーナー（Cl2／通所トレ）は稼働日（月〜土）に同日全員休みを禁止（必ず1名以上出勤）
+            const isSunday = di ? (di.wIdx === 6) : (d % 7 === 6);
+            if (!isSunday) {
+                const trainerIndices = [];
+                staffList.forEach((st, sIdx) => {
+                    if (st.isUnused) return;
+                    const name = st.name || '';
+                    const sec = st.lifeSection || '';
+                    if (name.includes('通所トレ') || name.includes('トレーナー') || sec === 'Cl2' || name.includes('クラーク2')) {
+                        trainerIndices.push(sIdx);
+                    }
+                });
+
+                if (trainerIndices.length >= 2) {
+                    let workingTrainers = 0;
+                    trainerIndices.forEach(sIdx => {
+                        const sym = getSym(sIdx, d);
+                        if (isWorkSymbol(sym) && sym !== SYMBOLS.TRIP) workingTrainers++;
+                    });
+                    if (workingTrainers === 0) {
+                        const reason = `${dateLabel}に通所トレーナー（Cl2）が全員休み（公休・有休・リフ）になっています（要件: 稼働日に1名以上出勤）`;
+                        errors.push(`【${dateLabel}】${reason}。`);
+                        trainerIndices.forEach(sIdx => {
+                            addConflict(sIdx, d, `${dateLabel}: 通所トレーナーが同日休みです（必ず1名以上出勤が必要）`);
+                        });
+                    }
                 }
             }
         } else if (!isST) {
