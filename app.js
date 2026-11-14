@@ -1822,7 +1822,18 @@ document.addEventListener('DOMContentLoaded', () => {
             const action = masterUndoStack.pop();
             masterRedoStack.push(action);
             try {
-                localStorage.setItem(action.targetKey, action.prevJson);
+                if (action.type === 'multiFloorBalance' && action.beforeFloorStates) {
+                    Object.keys(action.beforeFloorStates).forEach(k => {
+                        const val = action.beforeFloorStates[k];
+                        if (val !== null && val !== undefined) {
+                            localStorage.setItem(k, val);
+                        } else {
+                            localStorage.removeItem(k);
+                        }
+                    });
+                } else if (action.targetKey) {
+                    localStorage.setItem(action.targetKey, action.prevJson);
+                }
                 renderMasterIntegrationView();
                 if (action.openFloors && Array.isArray(action.openFloors)) {
                     action.openFloors.forEach(flId => {
@@ -1859,7 +1870,18 @@ document.addEventListener('DOMContentLoaded', () => {
             const action = masterRedoStack.pop();
             masterUndoStack.push(action);
             try {
-                localStorage.setItem(action.targetKey, action.nextJson);
+                if (action.type === 'multiFloorBalance' && action.afterFloorStates) {
+                    Object.keys(action.afterFloorStates).forEach(k => {
+                        const val = action.afterFloorStates[k];
+                        if (val !== null && val !== undefined) {
+                            localStorage.setItem(k, val);
+                        } else {
+                            localStorage.removeItem(k);
+                        }
+                    });
+                } else if (action.targetKey) {
+                    localStorage.setItem(action.targetKey, action.nextJson);
+                }
                 renderMasterIntegrationView();
                 if (action.openFloors && Array.isArray(action.openFloors)) {
                     action.openFloors.forEach(flId => {
@@ -6228,6 +6250,13 @@ document.addEventListener('DOMContentLoaded', () => {
             return;
         }
 
+        // ★ Undo用にスワップ前の全フロアデータをバックアップ
+        const beforeFloorStates = {};
+        floorConfigs.forEach(fc => {
+            const key = `shift_schedule_${fc.id}_term_${curStartDate}`;
+            beforeFloorStates[key] = localStorage.getItem(key);
+        });
+
         // 対象日の抽出
         const targetDays = [];
         for (let d = 0; d < numDays; d++) {
@@ -6412,6 +6441,7 @@ document.addEventListener('DOMContentLoaded', () => {
         }
 
         // 変更を localStorage に保存
+        const afterFloorStates = {};
         floors.forEach(fl => {
             const key = `shift_schedule_${fl.id}_term_${curStartDate}`;
             const toSave = Object.assign({}, fl.rawData, {
@@ -6419,11 +6449,25 @@ document.addEventListener('DOMContentLoaded', () => {
                 updatedAt: new Date().toISOString()
             });
             try {
-                localStorage.setItem(key, JSON.stringify(toSave));
+                const jsonStr = JSON.stringify(toSave);
+                localStorage.setItem(key, jsonStr);
+                afterFloorStates[key] = jsonStr;
             } catch (e) {
                 console.error(`Error saving floor ${fl.id}:`, e);
             }
         });
+
+        if (totalSwaps > 0) {
+            // ★ スワップが行われた場合、Undo履歴にプッシュ！
+            masterUndoStack.push({
+                type: 'multiFloorBalance',
+                beforeFloorStates: beforeFloorStates,
+                afterFloorStates: afterFloorStates,
+                openFloors: typeof masterExpandedFloors !== 'undefined' ? Array.from(masterExpandedFloors) : []
+            });
+            masterRedoStack.length = 0;
+            updateUndoRedoUI();
+        }
 
         if (typeof renderMasterIntegrationView === 'function') {
             renderMasterIntegrationView();
@@ -6472,6 +6516,9 @@ document.addEventListener('DOMContentLoaded', () => {
             showToast('⚠️ 先に「勤務表を自動生成する」を実行してください。');
             return;
         }
+
+        // ★ Undo用にスワップ前の勤務表状態を履歴に保存（「↩ 戻る」で元に戻せるようにする）
+        pushHistory();
 
         const targetDays = [];
         for (let d = 0; d < numDays; d++) {
@@ -6669,6 +6716,9 @@ document.addEventListener('DOMContentLoaded', () => {
             showToast('⚠️ 先に「勤務表を自動生成する」を実行してください。');
             return;
         }
+
+        // ★ Undo用にスワップ前の勤務表状態を履歴に保存（「↩ 戻る」で元に戻せるようにする）
+        pushHistory();
 
         // ★ ユーザー指示: STテーブル 2段階調整（①各階平均化 ➔ ②全階平均化）
         // ① 各階（1F, 2F, 3F, 南）の出勤実数を 2.0〜2.5名（整数換算2〜3名）に厳密平準化
@@ -6921,6 +6971,9 @@ document.addEventListener('DOMContentLoaded', () => {
             return;
         }
 
+        // ★ Undo用にスワップ前の勤務表状態を履歴に保存（「↩ 戻る」で元に戻せるようにする）
+        pushHistory();
+
         const visitStaff = [];
         staffList.forEach((st, s) => {
             if (st.isUnused || st.isSectionChief) return;
@@ -7032,6 +7085,9 @@ document.addEventListener('DOMContentLoaded', () => {
             showToast('⚠️ 先に「勤務表を自動生成する」を実行してください。');
             return;
         }
+
+        // ★ Undo用にスワップ前の勤務表状態を履歴に保存（「↩ 戻る」で元に戻せるようにする）
+        pushHistory();
 
         // 通所スタッフ + CL2 + ハ3 + ハ南
         const tsushoStaff = [];
