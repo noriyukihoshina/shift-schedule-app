@@ -1822,18 +1822,7 @@ document.addEventListener('DOMContentLoaded', () => {
             const action = masterUndoStack.pop();
             masterRedoStack.push(action);
             try {
-                if (action.type === 'multiFloorBalance' && action.beforeFloorStates) {
-                    Object.keys(action.beforeFloorStates).forEach(k => {
-                        const val = action.beforeFloorStates[k];
-                        if (val !== null && val !== undefined) {
-                            localStorage.setItem(k, val);
-                        } else {
-                            localStorage.removeItem(k);
-                        }
-                    });
-                } else if (action.targetKey) {
-                    localStorage.setItem(action.targetKey, action.prevJson);
-                }
+                localStorage.setItem(action.targetKey, action.prevJson);
                 renderMasterIntegrationView();
                 if (action.openFloors && Array.isArray(action.openFloors)) {
                     action.openFloors.forEach(flId => {
@@ -1870,18 +1859,7 @@ document.addEventListener('DOMContentLoaded', () => {
             const action = masterRedoStack.pop();
             masterUndoStack.push(action);
             try {
-                if (action.type === 'multiFloorBalance' && action.afterFloorStates) {
-                    Object.keys(action.afterFloorStates).forEach(k => {
-                        const val = action.afterFloorStates[k];
-                        if (val !== null && val !== undefined) {
-                            localStorage.setItem(k, val);
-                        } else {
-                            localStorage.removeItem(k);
-                        }
-                    });
-                } else if (action.targetKey) {
-                    localStorage.setItem(action.targetKey, action.nextJson);
-                }
+                localStorage.setItem(action.targetKey, action.nextJson);
                 renderMasterIntegrationView();
                 if (action.openFloors && Array.isArray(action.openFloors)) {
                     action.openFloors.forEach(flId => {
@@ -3991,102 +3969,6 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     }
 
-    // ★ ユーザー指示: マスターテーブルから全テーブル（1階・2階・3階・南・生活期・ST・マスター）を一括白紙化
-    const handleResetAllFloors = () => {
-        const term = getTermInfo();
-        const termStart = currentWorkingStartDate || document.getElementById('termStartDate')?.value || '2026-04-01';
-        const numDays = term.dates ? term.dates.length : 28;
-
-        const msg = `⚠️ 【${term.title}】の全テーブル（1階・2階・3階・南・生活期・ST・マスター）を白紙化しますか？\n\n` +
-                    `・各テーブルの作成済み勤務表がクリアされ、初期状態（白紙）に戻ります。\n` +
-                    `・スタッフ名簿や基本設定は保持されます。\n` +
-                    `・白紙化後、各フロアで改めて自動生成を回して検証できます。\n\n` +
-                    `本当によろしいですか？`;
-
-        if (!confirm(msg)) return;
-
-        try {
-            const allFloorIds = ['1f', '2f', '3f', 'south', 'st', 'life', 'master'];
-            
-            allFloorIds.forEach(flId => {
-                const storageKey = `shift_schedule_${flId}_term_${termStart}`;
-                const raw = localStorage.getItem(storageKey);
-                if (raw) {
-                    try {
-                        const data = JSON.parse(raw);
-                        if (data) {
-                            data.outputGrid = [];
-                            data.lastSolveResult = null;
-                            if (Array.isArray(data.staffList)) {
-                                data.staffList.forEach(st => {
-                                    st.days = new Array(numDays).fill('');
-                                    st.remarks = '';
-                                });
-                            }
-                            localStorage.setItem(storageKey, JSON.stringify(data));
-                        }
-                    } catch (e) {
-                        localStorage.removeItem(storageKey);
-                    }
-                } else {
-                    const masterKey = `shift_schedule_${flId}_staff_master`;
-                    const mRaw = localStorage.getItem(masterKey);
-                    let mList = [];
-                    if (mRaw) {
-                        try { mList = JSON.parse(mRaw); } catch (e) {}
-                    }
-                    if (Array.isArray(mList) && mList.length > 0) {
-                        const cleanData = {
-                            staffList: mList.map(st => Object.assign({}, st, {
-                                days: new Array(numDays).fill(''),
-                                remarks: ''
-                            })),
-                            outputGrid: [],
-                            lastSolveResult: null,
-                            termStartDate: termStart
-                        };
-                        localStorage.setItem(storageKey, JSON.stringify(cleanData));
-                    }
-                }
-            });
-
-            localStorage.removeItem(`shift_schedule_master_confirmed_last7_${termStart}`);
-            localStorage.removeItem(`shift_schedule_master_confirmed_last5_${termStart}`);
-
-            if (isMaster) {
-                lastSolveResult = null;
-                lastScheduler = null;
-                if (Array.isArray(staffList)) {
-                    staffList.forEach(s => {
-                        s.days = new Array(numDays).fill('');
-                        s.remarks = '';
-                    });
-                }
-                clearOutputTables();
-                if (typeof renderMasterIntegrationView === 'function') {
-                    renderMasterIntegrationView();
-                }
-            } else {
-                initNewTerm(termStart);
-            }
-
-            pushStateToCloud(false);
-            showToast(`🗑️ 【${term.title}】の全テーブルを白紙化しました。各テーブルで新たに自動生成を実行できます。`);
-        } catch (e) {
-            console.error('全テーブル白紙化エラー:', e);
-            alert('白紙化処理中にエラーが発生しました: ' + e.message);
-        }
-    };
-
-    const resetAllFloorsBtn = document.getElementById('resetAllFloorsBtn');
-    if (resetAllFloorsBtn) {
-        resetAllFloorsBtn.addEventListener('click', handleResetAllFloors);
-    }
-    const resetAllFloorsTermBtn = document.getElementById('resetAllFloorsTermBtn');
-    if (resetAllFloorsTermBtn) {
-        resetAllFloorsTermBtn.addEventListener('click', handleResetAllFloors);
-    }
-
     const standardHolidaySelect = document.getElementById('standardHolidaySelect');
     if (standardHolidaySelect) {
         standardHolidaySelect.addEventListener('change', () => {
@@ -5403,20 +5285,7 @@ document.addEventListener('DOMContentLoaded', () => {
                         if (displaySym === '早') specialCls = ' cell-special-early';
                         else if (displaySym === '遅') specialCls = ' cell-special-late';
                         else if (displaySym === 'E') specialCls = ' cell-special-eve';
-
-                        // ★ ユーザー指示: 1勤（前後が休日となる単発勤務）の網掛けハイライト表示
-                        let isSingleWork = false;
-                        if (isWorkSymbol(displaySym)) {
-                            const prevSym = (d === 0) ? ((staff.prevDays && staff.prevDays.length) ? staff.prevDays[staff.prevDays.length - 1] : '') : (grid[s][d - 1] ? (grid[s][d - 1].symbol || '') : '');
-                            const nextSym = (d + 1 < NUM_DAYS) ? (grid[s][d + 1] ? (grid[s][d + 1].symbol || '') : '') : '';
-                            if (isHolidaySymbol(prevSym) && (d + 1 < NUM_DAYS ? isHolidaySymbol(nextSym) : true)) {
-                                isSingleWork = true;
-                            }
-                        }
-                        const singleWorkCls = isSingleWork ? ' cell-single-work' : '';
-                        const titleText = isSingleWork ? '💡 【1勤（単発勤務）】前日・翌日が休日となっています（原則作らないが回避不能時は許容）' : (isFixedCell ? '🔒 事前固定希望枠（赤字・太字保持）' : (isRef ? '🌴 自動配分リフ（通常編集自由）' : 'システム自動配置'));
-
-                        bodyHtml += `<td class="${cls} ${thickCls}${specialCls}${singleWorkCls}" data-sym="${displaySym}" data-s="${s}" data-d="${d}" title="${titleText}">${displaySym}</td>`;
+                        bodyHtml += `<td class="${cls} ${thickCls}${specialCls}" data-sym="${displaySym}" data-s="${s}" data-d="${d}">${displaySym}</td>`;
                     }
                     bodyHtml += `
                         <td class="stat-cell" data-s="${s}" data-stat="work">${staffStat.workDays}</td>
@@ -5455,20 +5324,8 @@ document.addEventListener('DOMContentLoaded', () => {
                     if (displaySym === '早') specialCls = ' cell-special-early';
                     else if (displaySym === '遅') specialCls = ' cell-special-late';
                     else if (displaySym === 'E') specialCls = ' cell-special-eve';
-
-                    // ★ ユーザー指示: 1勤（前後が休日となる単発勤務）の網掛けハイライト表示
-                    let isSingleWork = false;
-                    if (isWorkSymbol(displaySym)) {
-                        const prevSym = (d === 0) ? ((staff.prevDays && staff.prevDays.length) ? staff.prevDays[staff.prevDays.length - 1] : '') : (grid[s][d - 1] ? (grid[s][d - 1].symbol || '') : '');
-                        const nextSym = (d + 1 < NUM_DAYS) ? (grid[s][d + 1] ? (grid[s][d + 1].symbol || '') : '') : '';
-                        if (isHolidaySymbol(prevSym) && (d + 1 < NUM_DAYS ? isHolidaySymbol(nextSym) : true)) {
-                            isSingleWork = true;
-                        }
-                    }
-                    const singleWorkCls = isSingleWork ? ' cell-single-work' : '';
-                    const titleText = isSingleWork ? '💡 【1勤（単発勤務）】前日・翌日が休日となっています（原則作らないが回避不能時は許容）' : (isCellFixed ? '🔒 事前固定希望枠（赤字・太字保持）' : (isRef ? '🌴 自動配分リフ（通常編集自由）' : 'システム自動配置'));
-
-                    bodyHtml += `<td class="${cls} ${thickCls} ${rowBottomCls}${specialCls}${singleWorkCls}" data-sym="${displaySym}" data-s="${s}" data-d="${d}" title="${titleText}">${displaySym}</td>`;
+                    const titleText = isCellFixed ? '🔒 事前固定希望枠（赤字・太字保持）' : (isRef ? '🌴 自動配分リフ（通常編集自由）' : 'システム自動配置');
+                    bodyHtml += `<td class="${cls} ${thickCls} ${rowBottomCls}${specialCls}" data-sym="${displaySym}" data-s="${s}" data-d="${d}" title="${titleText}">${displaySym}</td>`;
                 }
 
                 bodyHtml += `
@@ -6275,13 +6132,6 @@ document.addEventListener('DOMContentLoaded', () => {
             return;
         }
 
-        // ★ Undo用にスワップ前の全フロアデータをバックアップ
-        const beforeFloorStates = {};
-        floorConfigs.forEach(fc => {
-            const key = `shift_schedule_${fc.id}_term_${curStartDate}`;
-            beforeFloorStates[key] = localStorage.getItem(key);
-        });
-
         // 対象日の抽出
         const targetDays = [];
         for (let d = 0; d < numDays; d++) {
@@ -6466,7 +6316,6 @@ document.addEventListener('DOMContentLoaded', () => {
         }
 
         // 変更を localStorage に保存
-        const afterFloorStates = {};
         floors.forEach(fl => {
             const key = `shift_schedule_${fl.id}_term_${curStartDate}`;
             const toSave = Object.assign({}, fl.rawData, {
@@ -6474,25 +6323,11 @@ document.addEventListener('DOMContentLoaded', () => {
                 updatedAt: new Date().toISOString()
             });
             try {
-                const jsonStr = JSON.stringify(toSave);
-                localStorage.setItem(key, jsonStr);
-                afterFloorStates[key] = jsonStr;
+                localStorage.setItem(key, JSON.stringify(toSave));
             } catch (e) {
                 console.error(`Error saving floor ${fl.id}:`, e);
             }
         });
-
-        if (totalSwaps > 0) {
-            // ★ スワップが行われた場合、Undo履歴にプッシュ！
-            masterUndoStack.push({
-                type: 'multiFloorBalance',
-                beforeFloorStates: beforeFloorStates,
-                afterFloorStates: afterFloorStates,
-                openFloors: typeof masterExpandedFloors !== 'undefined' ? Array.from(masterExpandedFloors) : []
-            });
-            masterRedoStack.length = 0;
-            updateUndoRedoUI();
-        }
 
         if (typeof renderMasterIntegrationView === 'function') {
             renderMasterIntegrationView();
@@ -6541,9 +6376,6 @@ document.addEventListener('DOMContentLoaded', () => {
             showToast('⚠️ 先に「勤務表を自動生成する」を実行してください。');
             return;
         }
-
-        // ★ Undo用にスワップ前の勤務表状態を履歴に保存（「↩ 戻る」で元に戻せるようにする）
-        pushHistory();
 
         const targetDays = [];
         for (let d = 0; d < numDays; d++) {
@@ -6741,9 +6573,6 @@ document.addEventListener('DOMContentLoaded', () => {
             showToast('⚠️ 先に「勤務表を自動生成する」を実行してください。');
             return;
         }
-
-        // ★ Undo用にスワップ前の勤務表状態を履歴に保存（「↩ 戻る」で元に戻せるようにする）
-        pushHistory();
 
         // ★ ユーザー指示: STテーブル 2段階調整（①各階平均化 ➔ ②全階平均化）
         // ① 各階（1F, 2F, 3F, 南）の出勤実数を 2.0〜2.5名（整数換算2〜3名）に厳密平準化
@@ -6996,9 +6825,6 @@ document.addEventListener('DOMContentLoaded', () => {
             return;
         }
 
-        // ★ Undo用にスワップ前の勤務表状態を履歴に保存（「↩ 戻る」で元に戻せるようにする）
-        pushHistory();
-
         const visitStaff = [];
         staffList.forEach((st, s) => {
             if (st.isUnused || st.isSectionChief) return;
@@ -7111,9 +6937,6 @@ document.addEventListener('DOMContentLoaded', () => {
             return;
         }
 
-        // ★ Undo用にスワップ前の勤務表状態を履歴に保存（「↩ 戻る」で元に戻せるようにする）
-        pushHistory();
-
         // 通所スタッフ + CL2 + ハ3 + ハ南
         const tsushoStaff = [];
         const cl2Staff = [];
@@ -7121,10 +6944,9 @@ document.addEventListener('DOMContentLoaded', () => {
             if (st.isUnused || st.isSectionChief) return;
             const sec = st.lifeSection || '';
             const ha = st.haSection || '';
-            const isCl2 = (sec === 'Cl2') || (st.isCL2 === true) || (st.isCl2 === true);
-            if (sec === '通所' || isCl2 || ha === 'ハ3' || ha === 'ハ南' || ha === 'ハ4') {
+            if (sec === '通所' || sec === 'Cl2' || ha === 'ハ3' || ha === 'ハ南' || ha === 'ハ4') {
                 tsushoStaff.push(s);
-                if (isCl2) cl2Staff.push(s);
+                if (sec === 'Cl2') cl2Staff.push(s);
             }
         });
 
@@ -7255,61 +7077,6 @@ document.addEventListener('DOMContentLoaded', () => {
                 if (swapped) break;
             }
             if (!swapped) break;
-        }
-
-        // ★ Cl2スタッフ（2名以上）の同日休み（月〜土）の最終安全チェック & 自動修復
-        if (cl2Staff.length >= 2) {
-            for (const d of tsushoWorkingDays) {
-                const allOff = cl2Staff.every(s => {
-                    const cell = targetGrid[s][d];
-                    const sym = (cell && typeof cell === 'object') ? cell.symbol : (cell || '');
-                    return isHolidaySymbol(sym);
-                });
-                if (allOff) {
-                    for (const s of cl2Staff) {
-                        const cellD = targetGrid[s][d];
-                        const symD = (cellD && typeof cellD === 'object') ? cellD.symbol : (cellD || '');
-                        if (cellD && cellD.isFixed) continue;
-                        if (symD !== SYMBOLS.OFF) continue;
-
-                        for (const dOther of tsushoWorkingDays) {
-                            if (dOther === d) continue;
-                            const cellOther = targetGrid[s][dOther];
-                            const symOther = (cellOther && typeof cellOther === 'object') ? cellOther.symbol : (cellOther || '');
-                            if (cellOther && cellOther.isFixed) continue;
-                            if (symOther !== SYMBOLS.WORK) continue;
-
-                            const otherCl2WorkingAtOther = cl2Staff.some(o => {
-                                if (o === s) return false;
-                                const oCell = targetGrid[o][dOther];
-                                const oSym = (oCell && typeof oCell === 'object') ? oCell.symbol : (oCell || '');
-                                return isWorkSymbol(oSym);
-                            });
-                            if (!otherCl2WorkingAtOther) continue;
-
-                            // スワップ試行
-                            targetGrid[s][d] = { symbol: SYMBOLS.WORK, isFixed: false };
-                            targetGrid[s][dOther] = { symbol: SYMBOLS.OFF, isFixed: false };
-
-                            let valid = false;
-                            if (lastScheduler && typeof lastScheduler.isStaffHardValid === 'function') {
-                                const origGrid = lastScheduler.grid;
-                                lastScheduler.grid = targetGrid;
-                                valid = lastScheduler.isStaffHardValid(s);
-                                lastScheduler.grid = origGrid;
-                            }
-                            if (valid) {
-                                totalSwaps++;
-                                break;
-                            } else {
-                                targetGrid[s][d] = cellD;
-                                targetGrid[s][dOther] = cellOther;
-                            }
-                        }
-                        break;
-                    }
-                }
-            }
         }
 
         const updatedStats = calculateGridStats(targetGrid);
@@ -8107,25 +7874,12 @@ function renderMasterIntegrationView() {
                     const conflictCls = hasConflict ? ' conflict-highlight' : '';
                     const conflictReasons = hasConflict ? sCheck.dayConflicts[d].join(' / ') : '';
                     const conflictTitle = hasConflict ? `⚠️ 【制約違反】${conflictReasons}` : '';
-
-                    // ★ ユーザー指示: 1勤（前後が休日となる単発勤務）の網掛けハイライト表示
-                    let isSingleWork = false;
-                    if (!hasConflict && isWorkSymbol(sym)) {
-                        const prevSym = (d === 0) ? ((s.prevDays && s.prevDays.length) ? s.prevDays[s.prevDays.length - 1] : '') : sRowSyms[d - 1];
-                        const nextSym = (d + 1 < numDays) ? sRowSyms[d + 1] : '';
-                        if (isHolidaySymbol(prevSym) && (d + 1 < numDays ? isHolidaySymbol(nextSym) : true)) {
-                            isSingleWork = true;
-                        }
-                    }
-                    const singleWorkCls = isSingleWork ? ' cell-single-work' : '';
-                    const singleWorkTitle = isSingleWork ? '💡 【1勤（単発勤務）】前日・翌日が休日となっています（原則作らないが回避不能時は許容）' : '';
-
-                    const titleText = conflictTitle || singleWorkTitle || (isCellFixed ? '🔒 事前固定希望枠（赤字・クリックで修正可能）' : 'システム自動配置（クリックで修正可能）');
-                    const bgStyle = (hasConflict || isSingleWork || sym === '早' || sym === '遅' || sym === 'E') ? '' : 'background:#ffffff;';
+                    const titleText = conflictTitle || (isCellFixed ? '🔒 事前固定希望枠（赤字・クリックで修正可能）' : 'システム自動配置（クリックで修正可能）');
+                    const bgStyle = (hasConflict || sym === '早' || sym === '遅' || sym === 'E') ? '' : 'background:#ffffff;';
 
                     const fixedCls = isCellFixed ? 'fixed-cell' : (isRef ? 'auto-ref-cell' : 'auto-cell');
 
-                    html += `<td class="${thickCls} ${fixedCls}${specialCls}${conflictCls}${singleWorkCls} master-editable-cell col-day-fixed" data-sym="${sym}" data-floor="${fc.id}" data-is-st="${item.isST ? '1' : '0'}" data-is-ha="${item.isHa ? '1' : '0'}" data-ha-idx="${item.lifeStaffIdx !== undefined ? item.lifeStaffIdx : -1}" data-staff-id="${s.id || ''}" data-staff-name="${escapeHtmlText(s.name)}" data-day="${d}" data-conflict-reason="${escapeHtmlText(conflictReasons)}" title="${escapeHtmlText(titleText)}" style="width:52px; min-width:52px; max-width:52px; ${bgStyle} color:${color}; font-weight:700; border-bottom:1px solid #e2e8f0; text-align:center; cursor:pointer;">${sym}</td>`;
+                    html += `<td class="${thickCls} ${fixedCls}${specialCls}${conflictCls} master-editable-cell col-day-fixed" data-sym="${sym}" data-floor="${fc.id}" data-is-st="${item.isST ? '1' : '0'}" data-is-ha="${item.isHa ? '1' : '0'}" data-ha-idx="${item.lifeStaffIdx !== undefined ? item.lifeStaffIdx : -1}" data-staff-id="${s.id || ''}" data-staff-name="${escapeHtmlText(s.name)}" data-day="${d}" data-conflict-reason="${escapeHtmlText(conflictReasons)}" title="${escapeHtmlText(titleText)}" style="width:52px; min-width:52px; max-width:52px; ${bgStyle} color:${color}; font-weight:700; border-bottom:1px solid #e2e8f0; text-align:center; cursor:pointer;">${sym}</td>`;
                 }
 
                 // ★ ユーザー指示: 公休を丸にするなどして公休数が8日以外になった場合、ブルー網掛けでエラー検知
