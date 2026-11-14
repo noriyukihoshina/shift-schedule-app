@@ -8028,10 +8028,12 @@ function renderMasterIntegrationView() {
         }
         html += `<th colspan="9" style="background:${lifeFc.headerBg}; border-bottom:1px solid ${lifeFc.border};"></th></tr>`;
 
-        // 生活期 サマリー行1: 訪問出勤人数合計（sticky-col-1 に rowspan="6" で「生活期」を縦結合配置！）
+        // 生活期 サマリー行1: 訪問出勤人数合計（sticky-col-1 に rowspan="6" で「生活期」を縦書き配置！）
         const lifeVWorkSum = lifeVWorkCounts.reduce((a, b) => a + b, 0);
         html += `<tr style="background:${lifeFc.bg}; font-weight:700;">
-            <td class="sticky-col-1" rowspan="6" style="background:${lifeFc.headerBg}; color:${lifeFc.badgeColor}; font-size:1.05rem; font-weight:800; vertical-align:middle; text-align:center; border-right:1px solid ${lifeFc.border}; width:44px; min-width:44px; max-width:44px;">生活期</td>
+            <td class="sticky-col-1" rowspan="6" style="background:${lifeFc.headerBg}; color:${lifeFc.badgeColor}; font-size:1.05rem; font-weight:800; vertical-align:middle; text-align:center; border-right:1px solid ${lifeFc.border}; width:44px; min-width:44px; max-width:44px; line-height:1.3;">
+                <div style="writing-mode: vertical-rl; text-orientation: upright; letter-spacing: 3px; margin: 0 auto; display: inline-block;">生活期</div>
+            </td>
             <td class="sticky-col-2" style="background:${lifeFc.bg}; color:#0f172a !important; border-right:2px solid #475569; font-weight:800; font-size:0.85rem; width:125px; min-width:125px; max-width:125px; padding:2px 4px; white-space:nowrap;">訪問出勤人数合計</td>`;
         for (let d = 0; d < numDays; d++) {
             const thickCls = getDayBorderClass(d);
