@@ -3319,6 +3319,124 @@ document.addEventListener('DOMContentLoaded', () => {
     let clipboardSymbol = null;
     let selectedCopyCell = null;
 
+    // ★ マスターテーブル共通フロア定義 & 展開状態永続保持用Set（再描画時も折りたたまれず展開状態を100%維持）
+    const MASTER_FLOOR_CONFIGS = [
+        { id: '1f', floorKey: '1F', label: '1階', bg: '#f0f8ff', headerBg: '#e0f2fe', border: '#bae6fd', badgeColor: '#0369a1' },
+        { id: '2f', floorKey: '2F', label: '2階', bg: '#fff8f0', headerBg: '#ffedd5', border: '#fed7aa', badgeColor: '#c2410c' },
+        { id: '3f', floorKey: '3F', label: '3階', bg: '#ecfdf5', headerBg: '#a7f3d0', border: '#34d399', badgeColor: '#065f46' },
+        { id: 'south', floorKey: '南', label: '南', bg: '#faf5ff', headerBg: '#f3e8ff', border: '#e9d5ff', badgeColor: '#7e22ce' }
+    ];
+    const masterExpandedFloors = new Set();
+
+    // ★ ユーザー指示: マスターテーブル直接セル更新・コピペ共通関数
+    function updateMasterIntegrationCell(cell, newSym) {
+        if (!cell) return false;
+        const floorId = cell.dataset.floor;
+        const isStCell = (cell.dataset.isSt === '1');
+        const isHaCell = (cell.dataset.isHa === '1');
+        const staffId = cell.dataset.staffId;
+        const staffName = cell.dataset.staffName;
+        const haIdx = parseInt(cell.dataset.haIdx, 10);
+        const dayIdx = parseInt(cell.dataset.day, 10);
+
+        const termSel = document.getElementById('masterTermSelect') || document.getElementById('termSelect');
+        const curStartDate = (termSel && termSel.value) ? termSel.value : (document.getElementById('termStartDate')?.value || currentWorkingStartDate || '2026-04-01');
+        const targetKey = isHaCell
+            ? `shift_schedule_life_term_${curStartDate}`
+            : (isStCell ? `shift_schedule_st_term_${curStartDate}` : `shift_schedule_${floorId}_term_${curStartDate}`);
+
+        try {
+            let raw = localStorage.getItem(targetKey);
+            let fData = null;
+            if (raw) {
+                try { fData = JSON.parse(raw); } catch (e) {}
+            }
+            if (!fData && isHaCell) {
+                let baseStaff = [];
+                try {
+                    const rawM = localStorage.getItem('shift_schedule_life_staff_master');
+                    if (rawM) baseStaff = JSON.parse(rawM);
+                } catch (e) {}
+                if (!baseStaff || baseStaff.length === 0) {
+                    baseStaff = [
+                        { id: 41, name: '生活期 ハ1', haSection: 'ハ1', isUnused: false },
+                        { id: 42, name: '生活期 ハ2', haSection: 'ハ2', isUnused: false },
+                        { id: 43, name: '生活期 ハ3', haSection: 'ハ3', isUnused: false },
+                        { id: 44, name: '生活期 ハ南', haSection: 'ハ南', isUnused: false }
+                    ];
+                }
+                fData = {
+                    staffList: baseStaff,
+                    outputGrid: baseStaff.map(() => new Array(NUM_DAYS).fill(null).map(() => ({ symbol: '', isFixed: false })))
+                };
+                raw = JSON.stringify(fData);
+            }
+            if (!fData || !Array.isArray(fData.staffList)) return false;
+
+            let stIdx = -1;
+            if (isHaCell) {
+                if (haIdx >= 0 && fData.staffList[haIdx]) {
+                    stIdx = haIdx;
+                } else {
+                    stIdx = fData.staffList.findIndex(st => (staffId && String(st.id) === String(staffId)) || st.name === staffName || (st.haSection && staffName.includes(st.haSection)));
+                }
+                if (stIdx === -1) {
+                    fData.staffList.push({ id: staffId || 41, name: staffName, isUnused: false });
+                    stIdx = fData.staffList.length - 1;
+                }
+            } else {
+                stIdx = fData.staffList.findIndex(st => (staffId && String(st.id) === String(staffId)) || st.name === staffName);
+            }
+            if (stIdx === -1) return false;
+
+            if (!fData.outputGrid) fData.outputGrid = [];
+            if (!fData.outputGrid[stIdx]) fData.outputGrid[stIdx] = new Array(NUM_DAYS).fill({ symbol: '', isFixed: false });
+
+            const curCell = fData.outputGrid[stIdx][dayIdx];
+            const curFixed = (curCell && typeof curCell === 'object') ? !!curCell.isFixed : false;
+
+            if (newSym === 'P') {
+                const curSym = (curCell && typeof curCell === 'object') ? curCell.symbol : (curCell || '');
+                fData.outputGrid[stIdx][dayIdx] = { symbol: curSym, isFixed: !curFixed };
+            } else {
+                fData.outputGrid[stIdx][dayIdx] = { symbol: newSym, isFixed: curFixed };
+            }
+
+            const openFloors = Array.from(masterExpandedFloors);
+            const prevJson = raw;
+            fData.updatedAt = new Date().toISOString();
+            const nextJson = JSON.stringify(fData);
+            if (typeof pushMasterHistory === 'function') {
+                pushMasterHistory({
+                    targetKey: targetKey,
+                    prevJson: prevJson,
+                    nextJson: nextJson,
+                    openFloors: openFloors
+                });
+            }
+            localStorage.setItem(targetKey, nextJson);
+
+            // 全体サマリー＆階別集計を即時再描画（masterExpandedFloorsにより展開行は折りたたまれず完全維持！）
+            if (typeof renderMasterIntegrationView === 'function') {
+                renderMasterIntegrationView();
+            }
+
+            // 貼り付け後もセルのフォーカス・選択枠を再付与
+            const reSelected = document.querySelector(`.master-editable-cell[data-floor="${floorId}"][data-staff-id="${staffId}"][data-day="${dayIdx}"]`);
+            if (reSelected) {
+                if (selectedCopyCell) selectedCopyCell.classList.remove('copy-selected-cell');
+                reSelected.classList.add('copy-selected-cell');
+                selectedCopyCell = reSelected;
+            }
+
+            showToast(`📋 【${newSym || '空欄'}】を${staffName}（${dayIdx + 1}日目）に反映しました`);
+            return true;
+        } catch (err) {
+            console.error('マスター直接修正エラー:', err);
+            return false;
+        }
+    }
+
     // ★ ユーザー指示: 特殊勤務（早・遅・E）の目立つ背景色分けヘルパー（全画面・全テーブル共通）
     function applySpecialDutyCellClass(cell, sym) {
         if (!cell) return;
@@ -7143,11 +7261,13 @@ function renderMasterIntegrationView() {
             }
             html += `<td colspan="9" style="background:${fc.bg};"></td></tr>`;
 
+            const isExp = masterExpandedFloors.has(fc.id);
+
             // サマリー行8: 「！表示する」トグルボタン行 (12行目相当)
             html += `<tr style="background:${fc.bg}; border-bottom: 2px solid ${fc.border};">
                 <td class="sticky-col-2" style="background:${fc.bg}; border-right:2px solid #475569; padding:4px 6px; width:95px; min-width:95px; max-width:105px;">
-                    <button type="button" class="btn btn-outline toggle-master-floor-btn" data-floor="${fc.id}" style="width:100%; font-size:0.75rem; padding:2px 6px; font-weight:700; background:#ffffff; color:${fc.badgeColor}; border-color:${fc.border}; box-shadow: 0 1px 2px rgba(0,0,0,0.05); cursor:pointer;">
-                        ⚡表示する
+                    <button type="button" class="btn btn-outline toggle-master-floor-btn" data-floor="${fc.id}" style="width:100%; font-size:0.75rem; padding:2px 6px; font-weight:700; background:${isExp ? '#f1f5f9' : '#ffffff'}; color:${fc.badgeColor}; border-color:${fc.border}; box-shadow: 0 1px 2px rgba(0,0,0,0.05); cursor:pointer;">
+                        ${isExp ? '▲折りたたむ' : '⚡表示する'}
                     </button>
                 </td>`;
             for (let d = 0; d < numDays; d++) {
@@ -7239,7 +7359,7 @@ function renderMasterIntegrationView() {
             }
 
             if (orderedStaffList.length === 0) {
-                html += `<tr class="master-detail-row master-detail-${fc.id}" style="display:none; background:#ffffff;">
+                html += `<tr class="master-detail-row master-detail-${fc.id}" style="display:${isExp ? 'table-row' : 'none'}; background:#ffffff;">
                     <td class="sticky-col-1" style="background:#f8fafc; color:#64748b; font-size:0.75rem; text-align:center; border-right:1px solid #cbd5e1;">-</td>
                     <td class="sticky-col-2" style="background:#ffffff; color:#94a3b8; font-size:0.8rem; text-align:left; border-right:2px solid #475569; padding-left:8px;">※${fc.label}のデータは未保存です（${fc.label}テーブルで保存すると集約表示されます）</td>
                     <td colspan="${numDays + 9}" style="background:#ffffff; color:#94a3b8; font-size:0.8rem; text-align:center; border-bottom:1px solid #e2e8f0;">-</td>
@@ -7251,7 +7371,7 @@ function renderMasterIntegrationView() {
                 const secBadgeBg = item.sec === 'PT A' ? '#e0e7ff' : (item.sec === 'PT B' ? '#ede9fe' : (item.sec === 'OT A' ? '#fae8ff' : (item.sec === 'OT B' ? '#fce7f3' : (item.isST ? '#fdf2f8' : (item.isHa ? '#d1fae5' : '#f1f5f9')))));
                 const secBadgeColor = item.sec === 'PT A' ? '#3730a3' : (item.sec === 'PT B' ? '#5b21b6' : (item.sec === 'OT A' ? '#86198f' : (item.sec === 'OT B' ? '#9d174d' : (item.isST ? '#be185d' : (item.isHa ? '#065f46' : '#475569')))));
 
-                html += `<tr class="master-detail-row master-detail-${fc.id}" style="display:none; background:#ffffff;">
+                html += `<tr class="master-detail-row master-detail-${fc.id}" style="display:${isExp ? 'table-row' : 'none'}; background:#ffffff;">
                     <td class="sticky-col-1" style="background:${secBadgeBg}; color:${secBadgeColor}; font-size:0.75rem; font-weight:700; text-align:center; border-right:1px solid #cbd5e1;">${item.sec}</td>
                     <td class="sticky-col-2" style="background:#ffffff; font-weight:600; text-align:left; border-right:2px solid #475569; padding-left:8px;">${escapeHtmlText(s.name)}</td>`;
 
@@ -7412,7 +7532,7 @@ function renderMasterIntegrationView() {
             floorFooterRows.forEach(fr => {
                 const totalSum = fr.vals.reduce((a, b) => a + b, 0);
                 const displayTotal = totalSum % 1 === 0 ? totalSum : totalSum.toFixed(1);
-                html += `<tr class="master-detail-row master-detail-${fc.id}" style="display:none; background:${fr.bg}; font-weight:${fr.bold ? '800' : '700'};">
+                html += `<tr class="master-detail-row master-detail-${fc.id}" style="display:${isExp ? 'table-row' : 'none'}; background:${fr.bg}; font-weight:${fr.bold ? '800' : '700'};">
                     <td class="sticky-col-1" style="background:${fr.bg}; color:${fr.color}; font-size:0.75rem; text-align:center; border-right:1px solid #cbd5e1;">集計</td>
                     <td class="sticky-col-2" style="background:${fr.bg}; color:${fr.color}; font-weight:${fr.bold ? '800' : '700'}; font-size:0.82rem; text-align:left; border-right:2px solid #475569; padding-left:8px;">${fr.label}</td>`;
                 for (let d = 0; d < numDays; d++) {
@@ -7501,12 +7621,17 @@ function renderMasterIntegrationView() {
 
         checkTbody.innerHTML = html;
 
-        // トグルボタンのイベントリスナー付与
+        // トグルボタンのイベントリスナー付与（masterExpandedFloorsに展開状態を記録し、再描画時も100%維持）
         document.querySelectorAll('.toggle-master-floor-btn').forEach(btn => {
             btn.addEventListener('click', () => {
                 const floorId = btn.dataset.floor;
+                const isCurrentlyHidden = !masterExpandedFloors.has(floorId);
+                if (isCurrentlyHidden) {
+                    masterExpandedFloors.add(floorId);
+                } else {
+                    masterExpandedFloors.delete(floorId);
+                }
                 const rows = document.querySelectorAll(`.master-detail-${floorId}`);
-                const isCurrentlyHidden = (rows.length > 0 && (rows[0].style.display === 'none' || rows[0].style.display === ''));
                 rows.forEach(r => {
                     r.style.display = isCurrentlyHidden ? 'table-row' : 'none';
                 });
@@ -7515,8 +7640,7 @@ function renderMasterIntegrationView() {
             });
         });
 
-        // ★ 添付1準拠: マスターテーブル上で展開されたスタッフのセルを記号パレットで直接修正可能に！
-        // 選択中パレットの記号で修正後、LocalStorageを更新して全体サマリー・階別集計を即時再計算！
+        // ★ 添付1準拠: マスターテーブル上で展開されたスタッフのセルを記号パレットまたはコピペで直接修正可能に！
         document.querySelectorAll('.master-editable-cell').forEach(cell => {
             cell.addEventListener('click', () => {
                 // ★ ユーザー指示: コピペモード時は選択枠を付与してCtrl+C/Ctrl+Vの準備（誤上書き防止）
@@ -7539,119 +7663,7 @@ function renderMasterIntegrationView() {
                 }
 
                 if (selectedSym === 'CLEAR') selectedSym = '';
-
-                const floorId = cell.dataset.floor;
-                const isStCell = (cell.dataset.isSt === '1');
-                const isHaCell = (cell.dataset.isHa === '1');
-                const staffId = cell.dataset.staffId;
-                const staffName = cell.dataset.staffName;
-                const haIdx = parseInt(cell.dataset.haIdx, 10);
-                const dayIdx = parseInt(cell.dataset.day, 10);
-
-                const curStartDate = document.getElementById('masterTermSelect')?.value || document.getElementById('termStartDate')?.value || currentWorkingStartDate || '2026-04-01';
-                const targetKey = isHaCell
-                    ? `shift_schedule_life_term_${curStartDate}`
-                    : (isStCell ? `shift_schedule_st_term_${curStartDate}` : `shift_schedule_${floorId}_term_${curStartDate}`);
-
-                try {
-                    let raw = localStorage.getItem(targetKey);
-                    let fData = null;
-                    if (raw) {
-                        try { fData = JSON.parse(raw); } catch (e) {}
-                    }
-                    if (!fData && isHaCell) {
-                        // 生活期データ未保存時のフォールバック初期構築
-                        let baseStaff = [];
-                        try {
-                            const rawM = localStorage.getItem('shift_schedule_life_staff_master');
-                            if (rawM) baseStaff = JSON.parse(rawM);
-                        } catch (e) {}
-                        if (!baseStaff || baseStaff.length === 0) {
-                            baseStaff = [
-                                { id: 41, name: '生活期 ハ1', haSection: 'ハ1', isUnused: false },
-                                { id: 42, name: '生活期 ハ2', haSection: 'ハ2', isUnused: false },
-                                { id: 43, name: '生活期 ハ3', haSection: 'ハ3', isUnused: false },
-                                { id: 44, name: '生活期 ハ南', haSection: 'ハ南', isUnused: false }
-                            ];
-                        }
-                        fData = {
-                            staffList: baseStaff,
-                            outputGrid: baseStaff.map(() => new Array(numDays).fill(null).map(() => ({ symbol: '', isFixed: false })))
-                        };
-                        raw = JSON.stringify(fData);
-                    }
-                    if (!fData || !Array.isArray(fData.staffList)) return;
-
-                    let stIdx = -1;
-                    if (isHaCell) {
-                        if (haIdx >= 0 && fData.staffList[haIdx]) {
-                            stIdx = haIdx;
-                        } else {
-                            stIdx = fData.staffList.findIndex(st => (staffId && String(st.id) === String(staffId)) || st.name === staffName || (st.haSection && staffName.includes(st.haSection)));
-                        }
-                        if (stIdx === -1) {
-                            fData.staffList.push({ id: staffId || 41, name: staffName, isUnused: false });
-                            stIdx = fData.staffList.length - 1;
-                        }
-                    } else {
-                        stIdx = fData.staffList.findIndex(st => (staffId && String(st.id) === String(staffId)) || st.name === staffName);
-                    }
-                    if (stIdx === -1) return;
-
-                    if (!fData.outputGrid) fData.outputGrid = [];
-                    if (!fData.outputGrid[stIdx]) fData.outputGrid[stIdx] = new Array(numDays).fill({ symbol: '', isFixed: false });
-
-                    // セル更新（プロテクトPモードなら固定フラグ反転、それ以外なら記号変更）
-                    if (selectedSym === 'P') {
-                        const curCell = fData.outputGrid[stIdx][dayIdx];
-                        const curFixed = (curCell && typeof curCell === 'object') ? !!curCell.isFixed : false;
-                        const curSym = (curCell && typeof curCell === 'object') ? curCell.symbol : (curCell || '');
-                        fData.outputGrid[stIdx][dayIdx] = { symbol: curSym, isFixed: !curFixed };
-                    } else {
-                        const curCell = fData.outputGrid[stIdx][dayIdx];
-                        const curFixed = (curCell && typeof curCell === 'object') ? !!curCell.isFixed : false;
-                        fData.outputGrid[stIdx][dayIdx] = { symbol: selectedSym, isFixed: curFixed };
-                    }
-
-                    // 展開状態（どの階が展開されていたか）を記憶
-                    const openFloors = [];
-                    floorConfigs.forEach(fc => {
-                        const rows = document.querySelectorAll(`.master-detail-${fc.id}`);
-                        if (rows.length > 0 && rows[0].style.display !== 'none' && rows[0].style.display !== '') {
-                            openFloors.push(fc.id);
-                        }
-                    });
-
-                    // ★ マスターUndo履歴を保存（「↩ 戻る」「↪ やり直し」で即座に戻せる！）
-                    const prevJson = raw;
-                    fData.updatedAt = new Date().toISOString();
-                    const nextJson = JSON.stringify(fData);
-                    pushMasterHistory({
-                        targetKey: targetKey,
-                        prevJson: prevJson,
-                        nextJson: nextJson,
-                        openFloors: openFloors
-                    });
-
-                    localStorage.setItem(targetKey, nextJson);
-
-                    renderMasterIntegrationView();
-
-                    // 展開状態を復元
-                    openFloors.forEach(flId => {
-                        const rows = document.querySelectorAll(`.master-detail-${flId}`);
-                        rows.forEach(r => { r.style.display = 'table-row'; });
-                        const btn = document.querySelector(`.toggle-master-floor-btn[data-floor="${flId}"]`);
-                        if (btn) {
-                            btn.innerHTML = '▲折りたたむ';
-                            btn.style.background = '#f1f5f9';
-                        }
-                    });
-
-                    showToast(`✏️ ${staffName} の勤務を「${selectedSym === 'P' ? '保護切替' : selectedSym}」に修正し、集計を再計算しました`);
-                } catch (err) {
-                    console.error('マスター直接修正エラー:', err);
-                }
+                updateMasterIntegrationCell(cell, selectedSym);
             });
         });
 
@@ -10824,84 +10836,7 @@ function renderMasterIntegrationView() {
 
                 // ★ マスターテーブルのセル（.master-editable-cell）への貼り付け処理
                 if (activeCell.classList.contains('master-editable-cell')) {
-                    const floorId = activeCell.dataset.floor;
-                    const isStCell = (activeCell.dataset.isSt === '1');
-                    const isHaCell = (activeCell.dataset.isHa === '1');
-                    const staffId = activeCell.dataset.staffId;
-                    const staffName = activeCell.dataset.staffName;
-                    const haIdx = parseInt(activeCell.dataset.haIdx, 10);
-                    const dayIdx = parseInt(activeCell.dataset.day, 10);
-
-                    const curStartDate = document.getElementById('masterTermSelect')?.value || document.getElementById('termStartDate')?.value || currentWorkingStartDate || '2026-04-01';
-                    const targetKey = isHaCell
-                        ? `shift_schedule_life_term_${curStartDate}`
-                        : (isStCell ? `shift_schedule_st_term_${curStartDate}` : `shift_schedule_${floorId}_term_${curStartDate}`);
-
-                    try {
-                        let raw = localStorage.getItem(targetKey);
-                        let fData = null;
-                        if (raw) {
-                            try { fData = JSON.parse(raw); } catch (err) {}
-                        }
-                        if (fData && Array.isArray(fData.staffList)) {
-                            let stIdx = -1;
-                            if (isHaCell) {
-                                if (haIdx >= 0 && fData.staffList[haIdx]) {
-                                    stIdx = haIdx;
-                                } else {
-                                    stIdx = fData.staffList.findIndex(st => (staffId && String(st.id) === String(staffId)) || st.name === staffName || (st.haSection && staffName.includes(st.haSection)));
-                                }
-                            } else {
-                                stIdx = fData.staffList.findIndex(st => (staffId && String(st.id) === String(staffId)) || st.name === staffName);
-                            }
-                            if (stIdx !== -1) {
-                                if (!fData.outputGrid) fData.outputGrid = [];
-                                if (!fData.outputGrid[stIdx]) fData.outputGrid[stIdx] = new Array(NUM_DAYS).fill({ symbol: '', isFixed: false });
-
-                                const curCell = fData.outputGrid[stIdx][dayIdx];
-                                const curFixed = (curCell && typeof curCell === 'object') ? !!curCell.isFixed : false;
-                                fData.outputGrid[stIdx][dayIdx] = { symbol: newSym, isFixed: curFixed };
-
-                                const openFloors = [];
-                                floorConfigs.forEach(fc => {
-                                    const rows = document.querySelectorAll(`.master-detail-${fc.id}`);
-                                    if (rows.length > 0 && rows[0].style.display !== 'none' && rows[0].style.display !== '') {
-                                        openFloors.push(fc.id);
-                                    }
-                                });
-
-                                const prevJson = raw;
-                                fData.updatedAt = new Date().toISOString();
-                                const nextJson = JSON.stringify(fData);
-                                if (typeof pushMasterHistory === 'function') {
-                                    pushMasterHistory({
-                                        targetKey: targetKey,
-                                        prevJson: prevJson,
-                                        nextJson: nextJson,
-                                        openFloors: openFloors
-                                    });
-                                }
-                                localStorage.setItem(targetKey, nextJson);
-                            }
-                        }
-                    } catch (err) {
-                        console.error('マスターテーブル貼り付けエラー:', err);
-                    }
-
-                    activeCell.textContent = newSym;
-                applySpecialDutyCellClass(activeCell, newSym);
-                    applySpecialDutyCellClass(activeCell, newSym);
-                    if (typeof renderMasterIntegrationView === 'function') {
-                        renderMasterIntegrationView();
-                    }
-
-                    if (selectedCopyCell) selectedCopyCell.classList.remove('copy-selected-cell');
-                    const reSelected = document.querySelector(`.master-editable-cell[data-floor="${floorId}"][data-staff-id="${staffId}"][data-day="${dayIdx}"]`) || activeCell;
-                    if (reSelected) {
-                        reSelected.classList.add('copy-selected-cell');
-                        selectedCopyCell = reSelected;
-                    }
-                    showToast(`📋 【${newSym || '空欄'}】を貼り付けました (Ctrl+V)`);
+                    updateMasterIntegrationCell(activeCell, newSym);
                     e.preventDefault();
                     return;
                 }
@@ -10963,6 +10898,74 @@ function renderMasterIntegrationView() {
                 showToast(`📋 【${newSym || '空欄'}】を貼り付けました (Ctrl+V)`);
                 e.preventDefault();
             }
+        }
+    });
+
+    // ★ ユーザー指示: クリップボード paste イベント対応（Excel等からの貼付けも100%サポート）
+    window.addEventListener('paste', (e) => {
+        if (!isCopyMode) return;
+        const activeCell = selectedCopyCell || document.querySelector('.copy-selected-cell') || (document.activeElement && (document.activeElement.classList.contains('day-cell') || document.activeElement.classList.contains('master-editable-cell')) ? document.activeElement : null);
+        if (!activeCell) return;
+
+        let pastedText = '';
+        if (e.clipboardData) {
+            pastedText = e.clipboardData.getData('text') || '';
+        }
+        pastedText = pastedText.trim();
+        if (!pastedText && clipboardSymbol !== null) {
+            pastedText = clipboardSymbol;
+        }
+        if (!pastedText && pastedText !== '') return;
+
+        pastedText = pastedText.replace(/[◦•･◯〇●]/g, '○');
+        clipboardSymbol = pastedText;
+
+        if (activeCell.classList.contains('master-editable-cell')) {
+            updateMasterIntegrationCell(activeCell, pastedText);
+            e.preventDefault();
+        } else {
+            const s = parseInt(activeCell.dataset.s, 10);
+            const d = parseInt(activeCell.dataset.d, 10);
+            const type = activeCell.dataset.type;
+            pushHistory();
+            if (!isNaN(s) && staffList[s]) {
+                if (type === 'prev') {
+                    const p = parseInt(activeCell.dataset.p, 10);
+                    if (!isNaN(p)) staffList[s].prevDays[p] = pastedText;
+                } else if (!isNaN(d)) {
+                    staffList[s].days[d] = pastedText;
+                }
+            }
+            let updatedOutput = false;
+            if (!isNaN(s) && !isNaN(d)) {
+                if (lastSolveResult && lastSolveResult.grid && lastSolveResult.grid[s] && lastSolveResult.grid[s][d]) {
+                    lastSolveResult.grid[s][d].symbol = pastedText;
+                    updatedOutput = true;
+                }
+                if (lastScheduler && lastScheduler.grid && lastScheduler.grid[s] && lastScheduler.grid[s][d]) {
+                    lastScheduler.grid[s][d].symbol = pastedText;
+                    updatedOutput = true;
+                }
+            }
+            activeCell.textContent = pastedText;
+            applySpecialDutyCellClass(activeCell, pastedText);
+            if (updatedOutput && lastScheduler) {
+                const newStats = lastScheduler.calculateStats();
+                if (lastSolveResult) lastSolveResult.stats = newStats;
+                renderOutputTable(lastSolveResult.grid, newStats);
+                if (typeof renderStatsDashboard === 'function') renderStatsDashboard(newStats);
+            } else if (document.getElementById('inputTab')?.classList.contains('active')) {
+                renderInputTable();
+            }
+            if (selectedCopyCell) selectedCopyCell.classList.remove('copy-selected-cell');
+            const newActiveCell = document.querySelector(`.day-cell[data-s="${s}"][data-d="${d}"]`) || activeCell;
+            if (newActiveCell) {
+                newActiveCell.classList.add('copy-selected-cell');
+                selectedCopyCell = newActiveCell;
+            }
+            saveCurrentTermToStorage();
+            showToast(`📋 【${pastedText || '空欄'}】を貼り付けました`);
+            e.preventDefault();
         }
     });
 
