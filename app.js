@@ -7031,11 +7031,13 @@ document.addEventListener('DOMContentLoaded', () => {
         const cl2Staff = [];
         staffList.forEach((st, s) => {
             if (st.isUnused || st.isSectionChief) return;
-            const sec = st.lifeSection || '';
+            const sec = st.lifeSection || st.section || '';
             const ha = st.haSection || '';
-            if (sec === '通所' || sec === 'Cl2' || ha === 'ハ3' || ha === 'ハ南' || ha === 'ハ4') {
+            const name = st.name || '';
+            const isCl2 = (sec === 'Cl2') || !!st.isCl2 || !!st.isCL2 || name.includes('通所トレ') || name.includes('クラーク2') || name.includes('トレーナー');
+            if (sec === '通所' || isCl2 || ha === 'ハ3' || ha === 'ハ南' || ha === 'ハ4') {
                 tsushoStaff.push(s);
-                if (sec === 'Cl2') cl2Staff.push(s);
+                if (isCl2) cl2Staff.push(s);
             }
         });
 

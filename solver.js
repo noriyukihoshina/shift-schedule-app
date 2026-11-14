@@ -1883,13 +1883,16 @@ class ShiftScheduler {
             }
         }
 
-        // 4. Cl2 / 通所トレーナースタッフのリストアップ
+        // 4. Cl2 / 通所トレーナースタッフのリストアップ（Cl2トグルONを最優先判定）
         const cl2Staff = [];
         for (let s = 0; s < this.numStaff; s++) {
             if (this.staffList[s].isUnused) continue;
-            const name = this.staffList[s].name || '';
-            const sec = this.staffList[s].lifeSection || '';
-            if (name.includes('通所トレ') || name.includes('トレーナー') || sec === 'Cl2' || name.includes('クラーク2')) {
+            const st = this.staffList[s];
+            const name = st.name || '';
+            const sec = st.lifeSection || st.section || '';
+            // ★ ユーザー最優先要件: Cl2トグルがONになっているスタッフ（＝通所トレーナー）
+            const isCl2 = (sec === 'Cl2') || !!st.isCl2 || !!st.isCL2 || name.includes('通所トレ') || name.includes('トレーナー') || name.includes('クラーク2');
+            if (isCl2) {
                 cl2Staff.push(s);
             }
         }
@@ -7094,8 +7097,9 @@ function validateScheduleGrid(grid, staffList, options = {}) {
                 staffList.forEach((st, sIdx) => {
                     if (st.isUnused) return;
                     const name = st.name || '';
-                    const sec = st.lifeSection || '';
-                    if (name.includes('通所トレ') || name.includes('トレーナー') || sec === 'Cl2' || name.includes('クラーク2')) {
+                    const sec = st.lifeSection || st.section || '';
+                    const isCl2 = (sec === 'Cl2') || !!st.isCl2 || !!st.isCL2 || name.includes('通所トレ') || name.includes('トレーナー') || name.includes('クラーク2');
+                    if (isCl2) {
                         trainerIndices.push(sIdx);
                     }
                 });
