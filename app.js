@@ -3927,6 +3927,102 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     }
 
+    // ★ ユーザー指示: マスターテーブルから全テーブル（1階・2階・3階・南・生活期・ST・マスター）を一括白紙化
+    const handleResetAllFloors = () => {
+        const term = getTermInfo();
+        const termStart = currentWorkingStartDate || document.getElementById('termStartDate')?.value || '2026-04-01';
+        const numDays = term.dates ? term.dates.length : 28;
+
+        const msg = `⚠️ 【${term.title}】の全テーブル（1階・2階・3階・南・生活期・ST・マスター）を白紙化しますか？\n\n` +
+                    `・各テーブルの作成済み勤務表がクリアされ、初期状態（白紙）に戻ります。\n` +
+                    `・スタッフ名簿や基本設定は保持されます。\n` +
+                    `・白紙化後、各フロアで改めて自動生成を回して検証できます。\n\n` +
+                    `本当によろしいですか？`;
+
+        if (!confirm(msg)) return;
+
+        try {
+            const allFloorIds = ['1f', '2f', '3f', 'south', 'st', 'life', 'master'];
+            
+            allFloorIds.forEach(flId => {
+                const storageKey = `shift_schedule_${flId}_term_${termStart}`;
+                const raw = localStorage.getItem(storageKey);
+                if (raw) {
+                    try {
+                        const data = JSON.parse(raw);
+                        if (data) {
+                            data.outputGrid = [];
+                            data.lastSolveResult = null;
+                            if (Array.isArray(data.staffList)) {
+                                data.staffList.forEach(st => {
+                                    st.days = new Array(numDays).fill('');
+                                    st.remarks = '';
+                                });
+                            }
+                            localStorage.setItem(storageKey, JSON.stringify(data));
+                        }
+                    } catch (e) {
+                        localStorage.removeItem(storageKey);
+                    }
+                } else {
+                    const masterKey = `shift_schedule_${flId}_staff_master`;
+                    const mRaw = localStorage.getItem(masterKey);
+                    let mList = [];
+                    if (mRaw) {
+                        try { mList = JSON.parse(mRaw); } catch (e) {}
+                    }
+                    if (Array.isArray(mList) && mList.length > 0) {
+                        const cleanData = {
+                            staffList: mList.map(st => Object.assign({}, st, {
+                                days: new Array(numDays).fill(''),
+                                remarks: ''
+                            })),
+                            outputGrid: [],
+                            lastSolveResult: null,
+                            termStartDate: termStart
+                        };
+                        localStorage.setItem(storageKey, JSON.stringify(cleanData));
+                    }
+                }
+            });
+
+            localStorage.removeItem(`shift_schedule_master_confirmed_last7_${termStart}`);
+            localStorage.removeItem(`shift_schedule_master_confirmed_last5_${termStart}`);
+
+            if (isMaster) {
+                lastSolveResult = null;
+                lastScheduler = null;
+                if (Array.isArray(staffList)) {
+                    staffList.forEach(s => {
+                        s.days = new Array(numDays).fill('');
+                        s.remarks = '';
+                    });
+                }
+                clearOutputTables();
+                if (typeof renderMasterIntegrationView === 'function') {
+                    renderMasterIntegrationView();
+                }
+            } else {
+                initNewTerm(termStart);
+            }
+
+            pushStateToCloud(false);
+            showToast(`🗑️ 【${term.title}】の全テーブルを白紙化しました。各テーブルで新たに自動生成を実行できます。`);
+        } catch (e) {
+            console.error('全テーブル白紙化エラー:', e);
+            alert('白紙化処理中にエラーが発生しました: ' + e.message);
+        }
+    };
+
+    const resetAllFloorsBtn = document.getElementById('resetAllFloorsBtn');
+    if (resetAllFloorsBtn) {
+        resetAllFloorsBtn.addEventListener('click', handleResetAllFloors);
+    }
+    const resetAllFloorsTermBtn = document.getElementById('resetAllFloorsTermBtn');
+    if (resetAllFloorsTermBtn) {
+        resetAllFloorsTermBtn.addEventListener('click', handleResetAllFloors);
+    }
+
     const standardHolidaySelect = document.getElementById('standardHolidaySelect');
     if (standardHolidaySelect) {
         standardHolidaySelect.addEventListener('change', () => {
