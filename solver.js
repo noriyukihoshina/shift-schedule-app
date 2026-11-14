@@ -4148,10 +4148,114 @@ class ShiftScheduler {
         }
 
         let bestSchedule = null;
+        let searchSteps = 0;
+        const MAX_SEARCH_STEPS = 25000;
+
+        // ★ 週跨ぎ連勤・公休間隔・特殊勤務翌日休の安全・高速枝刈り判定
+        // 出勤日（○、早、遅、E、8時、ハヤ、オソ、イブ等）のみを連勤としてカウントし、休・有・リフは出勤ではないため連勤リセット
+        function isPartialConsecutiveValid(upToWeek, assignedDaysSet) {
+            const endDay = weekSpans[upToWeek][weekSpans[upToWeek].length - 1];
+            const partialSeq = [];
+            const pDays = staff.prevDays || [];
+            const pLen = pDays.length;
+            const firstDateObj = (self.dates && self.dates[0]) ? new Date(self.dates[0].dateStr + 'T00:00:00') : null;
+            for (let i = 0; i < pLen; i++) {
+                let pSym = pDays[i] || '';
+                let isSatOrSun = false;
+                if (firstDateObj) {
+                    const prevD = new Date(firstDateObj);
+                    prevD.setDate(prevD.getDate() - (pLen - i));
+                    const dow = prevD.getDay();
+                    if (dow === 0 || dow === 6) isSatOrSun = true;
+                } else {
+                    if (pLen === 7 && (i === 3 || i === 4)) isSatOrSun = true;
+                    if (pLen === 5 && (i === 1 || i === 2)) isSatOrSun = true;
+                }
+                if (staff.isSectionChief && isSatOrSun && isWorkSymbol(pSym)) pSym = SYMBOLS.OFF;
+                partialSeq.push(pSym);
+            }
+
+            for (let d = 0; d <= endDay; d++) {
+                let sym = '';
+                if (self.grid[s][d].isFixed || self.grid[s][d].isAfterPreSpecial) {
+                    sym = self.grid[s][d].symbol;
+                } else if (assignedDaysSet.has(d)) {
+                    sym = SYMBOLS.OFF;
+                } else {
+                    sym = SYMBOLS.WORK;
+                }
+                partialSeq.push(sym);
+            }
+
+            // 1. 特殊勤務翌日休制約
+            if (!staff.isSectionChief) {
+                for (let i = 0; i < partialSeq.length - 1; i++) {
+                    if (isRestrictedSpecial(partialSeq[i]) && !isHolidaySymbol(partialSeq[i + 1])) {
+                        const dCur = i - pLen;
+                        const dNext = dCur + 1;
+                        const isFixedConflict = (dCur >= 0 && dNext < self.numDays && self.grid[s][dCur].isFixed && self.grid[s][dNext].isFixed);
+                        if (!isFixedConflict) return false;
+                    }
+                }
+            }
+
+            // 2. 連勤制限（出勤日のみカウント！休・有・リフは出勤ではないため連勤リセット！）
+            // ★ ユーザー指示: 出勤日（○、早、遅、E、8時、ハヤ、オソ、イブ等）
+            let workStreak = 0;
+            for (let i = 0; i < partialSeq.length; i++) {
+                if (partialSeq[i] !== '' && isWorkSymbol(partialSeq[i])) {
+                    workStreak++;
+                    if (workStreak > maxConsec) return false;
+                } else {
+                    workStreak = 0;
+                }
+            }
+
+            // 3. 公休間隔原則（公休と公休の間隔は最大6日以内）
+            let publicOffGap = 0;
+            for (let i = 0; i < partialSeq.length; i++) {
+                const sym = partialSeq[i];
+                if (sym === '') {
+                    publicOffGap = 0;
+                } else if (!isPurePublicOffSymbol(sym)) {
+                    publicOffGap++;
+                    if (publicOffGap > 6) return false;
+                } else {
+                    publicOffGap = 0;
+                }
+            }
+
+            // 4. 5連勤後の2連休制約（allow6Consec以外）
+            if (!staff.allow6Consec && !staff.isSectionChief) {
+                let wStreak = 0;
+                for (let i = 0; i < partialSeq.length; i++) {
+                    if (isWorkSymbol(partialSeq[i])) {
+                        wStreak++;
+                        if (wStreak === 5) {
+                            for (let offOffset = 1; offOffset <= 2; offOffset++) {
+                                const checkIdx = i + offOffset;
+                                if (checkIdx < partialSeq.length) {
+                                    const sym = partialSeq[checkIdx];
+                                    if (sym !== '' && !isHolidaySymbol(sym)) return false;
+                                }
+                            }
+                        }
+                    } else {
+                        wStreak = 0;
+                    }
+                }
+            }
+
+            return true;
+        }
 
         for (const dist of distributionPatterns) {
-            function searchWeek(wIdx, assignedOffDays) {
+            if (bestSchedule !== null || searchSteps > MAX_SEARCH_STEPS) break;
+
+            function searchWeek(wIdx, assignedOffDays, assignedSet) {
                 if (bestSchedule !== null) return;
+                searchSteps++;
+                if (searchSteps > MAX_SEARCH_STEPS) return;
 
                 if (wIdx === totalWeeks) {
                     const gridSymbols = new Array(numDays);
@@ -4161,7 +4265,7 @@ class ShiftScheduler {
                             gridSymbols[d] = self.grid[s][d].symbol;
                             if (gridSymbols[d] === SYMBOLS.OFF) currentOff += 1.0;
                             else if (gridSymbols[d] === SYMBOLS.HALF_WORK_OFF || gridSymbols[d] === SYMBOLS.HALF_OFF_WORK) currentOff += 0.5;
-                        } else if (assignedOffDays.includes(d)) {
+                        } else if (assignedSet.has(d)) {
                             gridSymbols[d] = SYMBOLS.OFF;
                             currentOff += 1.0;
                         } else {
@@ -4183,13 +4287,21 @@ class ShiftScheduler {
                 const neededInThisWeek = dist[wIdx];
                 const choices = getWeekHolidayChoices(wIdx, neededInThisWeek);
                 for (const choice of choices) {
+                    // ★ 週跨ぎ連勤枝刈り: choice を追加した部分スケジュールが連勤違反なら即枝刈り
+                    const nextSet = new Set(assignedSet);
+                    for (const cd of choice) nextSet.add(cd);
+
+                    if (!isPartialConsecutiveValid(wIdx, nextSet)) {
+                        continue; // ★ 即座に枝刈り！無駄な深掘り再帰を完全遮断
+                    }
+
                     const nextAssigned = assignedOffDays.concat(choice);
-                    searchWeek(wIdx + 1, nextAssigned);
+                    searchWeek(wIdx + 1, nextAssigned, nextSet);
                     if (bestSchedule !== null) return;
                 }
             }
 
-            searchWeek(0, []);
+            searchWeek(0, [], new Set());
             if (bestSchedule !== null) break;
         }
 
