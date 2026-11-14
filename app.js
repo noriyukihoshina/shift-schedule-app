@@ -6911,6 +6911,189 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     }
 
+    // ★ ユーザー指示: マスターテーブルリアルタイム制約チェック（連勤・週休・特殊勤務翌日休・不可フラグ）
+    function evaluateStaffScheduleRow(staff, rowDays, dates, options = {}) {
+        const numDays = rowDays.length;
+        const dayConflicts = {}; // d -> Array<string>
+        const errors = [];
+        if (!staff || staff.isUnused || staff.isZeroCount || staff.lifeSection === '管理' || staff.lifeSection === 'Cl1') {
+            return { dayConflicts, errors };
+        }
+
+        const sName = staff.name || 'スタッフ';
+        const allow6Consec = !!staff.allow6Consec;
+        const isSectionChief = !!staff.isSectionChief;
+        const maxAllowed = allow6Consec ? 6 : 5;
+
+        const addConflict = (d, reason) => {
+            if (d >= 0 && d < numDays) {
+                if (!dayConflicts[d]) dayConflicts[d] = [];
+                if (!dayConflicts[d].includes(reason)) {
+                    dayConflicts[d].push(reason);
+                }
+            }
+        };
+
+        const formatDate = (d) => {
+            if (dates && dates[d]) {
+                const di = dates[d];
+                if (di.m && di.day) return `${di.m}/${di.day}`;
+                if (di.label) return di.label;
+            }
+            return `${d + 1}日目`;
+        };
+
+        const getSym = (d) => (rowDays && rowDays[d] !== undefined) ? String(rowDays[d] || '') : '';
+
+        // 1. 個別不可フラグチェック
+        if (!isSectionChief) {
+            for (let d = 0; d < numDays; d++) {
+                const sym = getSym(d);
+                const dLabel = formatDate(d);
+                if (sym === '8時' && !staff.can8) {
+                    errors.push(`【${sName}】${dLabel}に「8時」が入っていますが「8時可」ではありません。`);
+                    addConflict(d, `${dLabel}: 8時可フラグOFF`);
+                }
+                if ((sym === '早' || sym === 'ハヤ') && staff.noEarly) {
+                    errors.push(`【${sName}】${dLabel}に「${sym}」が入っていますが「早番不可」です。`);
+                    addConflict(d, `${dLabel}: 早番不可`);
+                }
+                if ((sym === '遅' || sym === 'オソ') && staff.noLate) {
+                    errors.push(`【${sName}】${dLabel}に「${sym}」が入っていますが「遅番不可」です。`);
+                    addConflict(d, `${dLabel}: 遅番不可`);
+                }
+                if ((sym === 'E' || sym === 'イブ') && staff.noEve) {
+                    errors.push(`【${sName}】${dLabel}に「${sym}」が入っていますが「E不可」です。`);
+                    addConflict(d, `${dLabel}: E不可`);
+                }
+            }
+        }
+
+        // 2. 特殊勤務（早・遅・E・ハヤ・オソ・イブ）翌日休日チェック
+        if (!isSectionChief) {
+            for (let d = 0; d < numDays - 1; d++) {
+                const sym = getSym(d);
+                const isRestricted = (typeof isRestrictedSpecial === 'function')
+                    ? isRestrictedSpecial(sym)
+                    : (sym === '早' || sym === '遅' || sym === 'E' || sym === 'ハヤ' || sym === 'オソ' || sym === 'イブ');
+                if (isRestricted) {
+                    const nextSym = getSym(d + 1);
+                    const isHoliday = (typeof isHolidaySymbol === 'function')
+                        ? isHolidaySymbol(nextSym)
+                        : (nextSym === '休' || nextSym === '有' || nextSym.includes('リフ') || nextSym.startsWith('上') || nextSym.startsWith('下') || nextSym === '特休' || nextSym === '慶弔');
+                    if (!isHoliday) {
+                        const curLabel = formatDate(d);
+                        const nextLabel = formatDate(d + 1);
+                        errors.push(`【${sName}】${curLabel}の特殊勤務「${sym}」の翌日（${nextLabel}）が休日ではありません（現在:「${nextSym || '空欄'}」）。`);
+                        addConflict(d, `特殊勤務「${sym}」の翌日は原則休日が必要です`);
+                        addConflict(d + 1, `前日が「${sym}」のため原則休日にする必要があります`);
+                    }
+                }
+            }
+        }
+
+        // 3. 連勤チェック（公休なし連続期間、allow6Consecなら6、通常5）
+        const sequence = [];
+        for (let p = 0; p < 5; p++) {
+            let pSym = (staff.prevDays && staff.prevDays[p]) ? staff.prevDays[p] : '';
+            if (isSectionChief && (p === 1 || p === 2) && (typeof isWorkSymbol === 'function' ? isWorkSymbol(pSym) : pSym === '○')) pSym = '休';
+            sequence.push(pSym);
+        }
+        for (let d = 0; d < numDays; d++) sequence.push(getSym(d));
+
+        let streakBlocks = [];
+        let currentStreak = [];
+        for (let idx = 0; idx < sequence.length; idx++) {
+            const sym = sequence[idx];
+            const isFullOff = (typeof isFullOffSymbol === 'function')
+                ? isFullOffSymbol(sym)
+                : (sym === '休' || sym === '-' || sym.includes('リフ') || sym.startsWith('上') || sym.startsWith('下') || sym === '特休' || sym === '慶弔');
+            if (sym === '' || isFullOff) {
+                if (currentStreak.length > 0) {
+                    streakBlocks.push(currentStreak);
+                    currentStreak = [];
+                }
+            } else {
+                currentStreak.push(idx);
+            }
+        }
+        if (currentStreak.length > 0) {
+            streakBlocks.push(currentStreak);
+        }
+
+        streakBlocks.forEach(streak => {
+            if (streak.length > maxAllowed) {
+                const sIdxSeq = streak[0];
+                const eIdxSeq = streak[streak.length - 1];
+                const sLabel = sIdxSeq < 5 ? `前${5 - sIdxSeq}日` : formatDate(sIdxSeq - 5);
+                const eLabel = eIdxSeq < 5 ? `前${5 - eIdxSeq}日` : formatDate(eIdxSeq - 5);
+                const ruleMsg = allow6Consec ? '6連勤許可（7日以上連続は不可）' : '最大5連勤（6日以上連続は不可）';
+                errors.push(`【${sName}】${sLabel}〜${eLabel}で公休なし${streak.length}連勤となっています（要件: ${ruleMsg}）。`);
+                streak.forEach(seqDay => {
+                    if (seqDay >= 5) {
+                        addConflict(seqDay - 5, `公休なし${streak.length}連勤（上限: ${maxAllowed}日）`);
+                    }
+                });
+            }
+        });
+
+        // 4. 5連勤後の2連休チェック
+        if (!allow6Consec && !isSectionChief) {
+            streakBlocks.forEach(streak => {
+                if (streak.length >= 5) {
+                    const endIdx = streak[streak.length - 1];
+                    for (let offOffset = 1; offOffset <= 2; offOffset++) {
+                        const checkIdx = endIdx + offOffset;
+                        if (checkIdx < sequence.length) {
+                            const nSym = sequence[checkIdx];
+                            const isHol = (typeof isHolidaySymbol === 'function')
+                                ? isHolidaySymbol(nSym)
+                                : (nSym === '休' || nSym === '有' || nSym.includes('リフ') || nSym.startsWith('上') || nSym.startsWith('下') || nSym === '特休' || nSym === '慶弔');
+                            if (nSym !== '' && !isHol) {
+                                const targetD = checkIdx - 5;
+                                const targetLabel = (targetD >= 0 && targetD < numDays) ? formatDate(targetD) : `${targetD + 1}日目`;
+                                errors.push(`【${sName}】連勤直後の${targetLabel}は2連休（休・有・リフ）が必要です（現在:「${nSym}」）。`);
+                                if (targetD >= 0 && targetD < numDays) {
+                                    addConflict(targetD, `連勤直後は2連休が必要です（現在:「${nSym}」）`);
+                                }
+                            }
+                        }
+                    }
+                }
+            });
+        }
+
+        // 5. 週（日〜土）出勤制限チェック（出張・半休除き最大5出勤、allow6Consecがfalseのスタッフ）
+        if (!allow6Consec) {
+            const weekSpans = (typeof getSunToSatWeekSpans === 'function')
+                ? getSunToSatWeekSpans(dates, numDays)
+                : [];
+            weekSpans.forEach((wSpan, wIdx) => {
+                let weekWorkCount = 0;
+                const workDaysInWeek = [];
+                wSpan.forEach(d => {
+                    const sym = getSym(d);
+                    const isWork = (typeof isWorkSymbol === 'function') ? isWorkSymbol(sym) : (sym === '○' || sym === '早' || sym === '遅' || sym === 'E' || sym === '8時');
+                    const isHalf = (typeof isHalfDuty === 'function') ? isHalfDuty(sym) : (sym.includes('/'));
+                    if (sym && isWork && sym !== '張' && sym !== '出張' && !isHalf) {
+                        weekWorkCount++;
+                        workDaysInWeek.push(d);
+                    }
+                });
+                if (weekWorkCount > 5) {
+                    const sDay = formatDate(wSpan[0]);
+                    const eDay = formatDate(wSpan[wSpan.length - 1]);
+                    errors.push(`【${sName}】第${wIdx + 1}週（${sDay}〜${eDay}の日〜土）に出勤が${weekWorkCount}日あります（週休2日が必要です。出張・半休を除く）。`);
+                    workDaysInWeek.forEach(d => {
+                        addConflict(d, `第${wIdx + 1}週（日〜土）に出勤${weekWorkCount}日（週休2日違反）`);
+                    });
+                }
+            });
+        }
+
+        return { dayConflicts, errors };
+    }
+
 function renderMasterIntegrationView() {
         const checkThead = document.getElementById('checkTableHead');
         const checkTbody = document.getElementById('checkTableBody');
@@ -6956,6 +7139,7 @@ function renderMasterIntegrationView() {
 
         // ★ マスターテーブル「勤務分析・平準化ダッシュボード」用の全フロアスタッフ統計集計用
         const allMasterStaffStats = [];
+        const allMasterErrors = []; // ★ ユーザー指示: マスターテーブルリアルタイム制約違反エラー集約
         const allRefSyms = ['上1', '上2', '上3', '上4', '上5', '下1', '下2', '下3'];
         const masterRefBreakdownMap = {};
         allRefSyms.forEach(sym => {
@@ -7420,6 +7604,17 @@ function renderMasterIntegrationView() {
                 const isZero = !!(s.isZeroCount || s.lifeSection === '管理' || s.lifeSection === 'Cl1');
                 const isHalf = !!s.isHalf;
 
+                // ★ ユーザー指示: マスターテーブルリアルタイム制約チェック実行
+                const sRowSyms = [];
+                for (let d = 0; d < numDays; d++) {
+                    const c = item.gridRow ? item.gridRow[d] : null;
+                    sRowSyms.push((c && typeof c === 'object') ? (c.symbol || '') : (c || ''));
+                }
+                const sCheck = evaluateStaffScheduleRow(s, sRowSyms, term.dates);
+                if (sCheck.errors && sCheck.errors.length > 0) {
+                    allMasterErrors.push(...sCheck.errors);
+                }
+
                 for (let d = 0; d < numDays; d++) {
                     const thickCls = getDayBorderClass(d);
                     const cell = item.gridRow ? item.gridRow[d] : null;
@@ -7470,16 +7665,25 @@ function renderMasterIntegrationView() {
                     if (sym === '早') specialCls = ' cell-special-early';
                     else if (sym === '遅') specialCls = ' cell-special-late';
                     else if (sym === 'E') specialCls = ' cell-special-eve';
-                    const bgStyle = (sym === '早' || sym === '遅' || sym === 'E') ? '' : 'background:#ffffff;';
+
+                    // ★ ユーザー指示: 制約違反セル（連勤10や週休2日違反、特殊勤務翌日休違反等）に青い網掛け（.conflict-highlight）を適用
+                    const hasConflict = !!(sCheck.dayConflicts && sCheck.dayConflicts[d] && sCheck.dayConflicts[d].length > 0);
+                    const conflictCls = hasConflict ? ' conflict-highlight' : '';
+                    const conflictReasons = hasConflict ? sCheck.dayConflicts[d].join(' / ') : '';
+                    const conflictTitle = hasConflict ? `⚠️ 【制約違反】${conflictReasons}` : '';
+                    const titleText = conflictTitle || (isCellFixed ? '🔒 事前固定希望枠（赤字・クリックで修正可能）' : 'システム自動配置（クリックで修正可能）');
+                    const bgStyle = (hasConflict || sym === '早' || sym === '遅' || sym === 'E') ? '' : 'background:#ffffff;';
 
                     const fixedCls = isCellFixed ? 'fixed-cell' : (isRef ? 'auto-ref-cell' : 'auto-cell');
-                    const titleText = isCellFixed ? '🔒 事前固定希望枠（赤字・クリックで修正可能）' : 'システム自動配置（クリックで修正可能）';
 
-                    html += `<td class="${thickCls} ${fixedCls}${specialCls} master-editable-cell col-day-fixed" data-sym="${sym}" data-floor="${fc.id}" data-is-st="${item.isST ? '1' : '0'}" data-is-ha="${item.isHa ? '1' : '0'}" data-ha-idx="${item.lifeStaffIdx !== undefined ? item.lifeStaffIdx : -1}" data-staff-id="${s.id || ''}" data-staff-name="${escapeHtmlText(s.name)}" data-day="${d}" title="${titleText}" style="width:52px; min-width:52px; max-width:52px; ${bgStyle} color:${color}; font-weight:700; border-bottom:1px solid #e2e8f0; text-align:center; cursor:pointer;">${sym}</td>`;
+                    html += `<td class="${thickCls} ${fixedCls}${specialCls}${conflictCls} master-editable-cell col-day-fixed" data-sym="${sym}" data-floor="${fc.id}" data-is-st="${item.isST ? '1' : '0'}" data-is-ha="${item.isHa ? '1' : '0'}" data-ha-idx="${item.lifeStaffIdx !== undefined ? item.lifeStaffIdx : -1}" data-staff-id="${s.id || ''}" data-staff-name="${escapeHtmlText(s.name)}" data-day="${d}" data-conflict-reason="${escapeHtmlText(conflictReasons)}" title="${escapeHtmlText(titleText)}" style="width:52px; min-width:52px; max-width:52px; ${bgStyle} color:${color}; font-weight:700; border-bottom:1px solid #e2e8f0; text-align:center; cursor:pointer;">${sym}</td>`;
                 }
 
                 // ★ ユーザー指示: 公休を丸にするなどして公休数が8日以外になった場合、ブルー網掛けでエラー検知
                 const isOffConflict = (!s.isUnused && !isZero && Number(sOff.toFixed(1)) !== 8);
+                if (isOffConflict) {
+                    allMasterErrors.push(`【${s.name}】公休日数が8日ではありません（現在:${Number(sOff.toFixed(1))}日 / 定数:8日）。`);
+                }
                 const offCls = isOffConflict ? 'conflict-highlight' : '';
                 const offStyle = isOffConflict ? 'background:#dbeafe !important; color:#1d4ed8 !important;' : 'background:#ffffff; color:#1e293b;';
                 const offTitle = isOffConflict ? `title="⚠️ 公休が8日ではありません（現在:${Number(sOff.toFixed(1))}日 / 定数:8日）"` : 'title="公休8日"';
@@ -7711,6 +7915,17 @@ function renderMasterIntegrationView() {
             const isZero = !!(s.isZeroCount || s.lifeSection === '管理' || s.lifeSection === 'Cl1');
             const isHalf = !!s.isHalf;
 
+            // ★ ユーザー指示: マスターテーブルリアルタイム制約チェック実行（生活期スタッフ）
+            const sRowSyms = [];
+            for (let d = 0; d < numDays; d++) {
+                const c = row ? row[d] : null;
+                sRowSyms.push((c && typeof c === 'object') ? (c.symbol || '') : (c || ''));
+            }
+            const sCheck = evaluateStaffScheduleRow(s, sRowSyms, term.dates);
+            if (sCheck.errors && sCheck.errors.length > 0) {
+                allMasterErrors.push(...sCheck.errors);
+            }
+
             for (let d = 0; d < numDays; d++) {
                 const thickCls = getDayBorderClass(d);
                 const cell = row ? row[d] : null;
@@ -7734,14 +7949,24 @@ function renderMasterIntegrationView() {
                 if (sym === '早') specialCls = ' cell-special-early';
                 else if (sym === '遅') specialCls = ' cell-special-late';
                 else if (sym === 'E') specialCls = ' cell-special-eve';
-                const bgStyle = (sym === '早' || sym === '遅' || sym === 'E') ? '' : 'background:#ffffff;';
-                const fixedCls = isCellFixed ? 'fixed-cell' : (isRefCell ? 'auto-ref-cell' : 'auto-cell');
-                const titleText = isCellFixed ? '🔒 事前固定希望枠（赤字・クリックで修正可能）' : 'システム自動配置（クリックで修正可能）';
 
-                html += `<td class="${thickCls} ${fixedCls}${specialCls} master-editable-cell col-day-fixed" data-sym="${sym}" data-floor="life" data-is-st="0" data-is-ha="0" data-staff-id="${s.id || ''}" data-staff-name="${escapeHtmlText(s.name)}" data-day="${d}" title="${titleText}" style="width:52px; min-width:52px; max-width:52px; ${bgStyle} color:${color}; font-weight:700; border-bottom:1px solid #e2e8f0; text-align:center; cursor:pointer;">${sym}</td>`;
+                // ★ ユーザー指示: 制約違反セル（連勤10や週休2日違反、特殊勤務翌日休違反等）に青い網掛け（.conflict-highlight）を適用
+                const hasConflict = !!(sCheck.dayConflicts && sCheck.dayConflicts[d] && sCheck.dayConflicts[d].length > 0);
+                const conflictCls = hasConflict ? ' conflict-highlight' : '';
+                const conflictReasons = hasConflict ? sCheck.dayConflicts[d].join(' / ') : '';
+                const conflictTitle = hasConflict ? `⚠️ 【制約違反】${conflictReasons}` : '';
+                const titleText = conflictTitle || (isCellFixed ? '🔒 事前固定希望枠（赤字・クリックで修正可能）' : 'システム自動配置（クリックで修正可能）');
+                const bgStyle = (hasConflict || sym === '早' || sym === '遅' || sym === 'E') ? '' : 'background:#ffffff;';
+
+                const fixedCls = isCellFixed ? 'fixed-cell' : (isRefCell ? 'auto-ref-cell' : 'auto-cell');
+
+                html += `<td class="${thickCls} ${fixedCls}${specialCls}${conflictCls} master-editable-cell col-day-fixed" data-sym="${sym}" data-floor="life" data-is-st="0" data-is-ha="0" data-staff-id="${s.id || ''}" data-staff-name="${escapeHtmlText(s.name)}" data-day="${d}" data-conflict-reason="${escapeHtmlText(conflictReasons)}" title="${escapeHtmlText(titleText)}" style="width:52px; min-width:52px; max-width:52px; ${bgStyle} color:${color}; font-weight:700; border-bottom:1px solid #e2e8f0; text-align:center; cursor:pointer;">${sym}</td>`;
             }
 
             const isOffConflict = (!s.isUnused && !isZero && Number(sOff.toFixed(1)) !== 8);
+            if (isOffConflict) {
+                allMasterErrors.push(`【${s.name}】公休日数が8日ではありません（現在:${Number(sOff.toFixed(1))}日 / 定数:8日）。`);
+            }
             const offCls = isOffConflict ? 'conflict-highlight' : '';
             const offStyle = isOffConflict ? 'background:#dbeafe !important; color:#1d4ed8 !important;' : 'background:#ffffff; color:#1e293b;';
             const offTitle = isOffConflict ? `title="⚠️ 公休が8日ではありません（現在:${Number(sOff.toFixed(1))}日 / 定数:8日）"` : 'title="公休8日"';
@@ -7943,6 +8168,39 @@ function renderMasterIntegrationView() {
         html += `<td colspan="9" style="background:#f8fafc;"></td></tr>`;
 
         checkTbody.innerHTML = html;
+
+        // ★ ユーザー指示: マスターテーブル上部のアラートバナーに制約指摘事項を表示
+        const masterBanner = document.getElementById('checkConflictAlertBanner');
+        if (masterBanner) {
+            if (allMasterErrors.length > 0) {
+                masterBanner.classList.add('show');
+                const errorListHtml = allMasterErrors.slice(0, 10).map(err => `<li style="margin-bottom:2px;">${err}</li>`).join('');
+                const moreMsg = allMasterErrors.length > 10 ? `<li style="color:#64748b; font-style:italic;">...他 ${allMasterErrors.length - 10} 件の指摘事項</li>` : '';
+                masterBanner.innerHTML = `
+                    <div style="display:flex; justify-content:space-between; align-items:flex-start; width:100%;">
+                        <div style="display:flex; align-items:flex-start; gap:10px;">
+                            <span style="font-size:1.4rem;">⚠️</span>
+                            <div>
+                                <strong style="color:#1e3a8a; font-size:0.95rem;">
+                                    マスターテーブル制約チェック: ${allMasterErrors.length}件の指摘事項（青い網掛けセル）
+                                </strong>
+                                <div style="font-size:0.82rem; color:#2563eb; margin: 3px 0 6px 0;">
+                                    該当セルをクリックまたはコピペで勤務や休日を修正してください。条件が解決すると網掛けは自動的に消えます。（最終判断としてこのまま保存・印刷することも可能です）
+                                </div>
+                                <ul style="font-size:0.8rem; color:#1e293b; margin:0; padding-left:18px; max-height:130px; overflow-y:auto;">
+                                    ${errorListHtml}
+                                    ${moreMsg}
+                                </ul>
+                            </div>
+                        </div>
+                        <button class="btn btn-outline" style="font-size:0.75rem; padding:4px 10px; margin-left:12px; white-space:nowrap;" onclick="document.getElementById('checkConflictAlertBanner').classList.remove('show');">閉じる</button>
+                    </div>
+                `;
+            } else {
+                masterBanner.classList.remove('show');
+                masterBanner.innerHTML = '';
+            }
+        }
 
         // トグルボタンのイベントリスナー付与（masterExpandedFloorsに展開状態を記録し、再描画時も100%維持）
         document.querySelectorAll('.toggle-master-floor-btn').forEach(btn => {
