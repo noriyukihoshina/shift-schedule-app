@@ -1453,43 +1453,158 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     }
 
-    // 指定した直前タームから最終5日間の実績を staffList の prevDays に反映する
+    // ==========================================
+    // ★ ユーザー指示: 統括マスターテーブルから全スタッフの最新確定最終5日データを自動集約・保存
+    // マスターテーブルで施された微調整（早・遅の変更、公休移動等）を確実に保持
+    // ==========================================
+    function saveMasterConfirmedLast5Days(termStartDate) {
+        if (!termStartDate) return;
+        try {
+            const term = getTermInfo(termStartDate);
+            const numDays = term.dates.length;
+            const confirmedMap = {};
+
+            // 各フロア（1f, 2f, 3f, south）の最終確定グリッドから最終5日を抽出
+            ['1f', '2f', '3f', 'south'].forEach(flId => {
+                const raw = localStorage.getItem(`shift_schedule_${flId}_term_${termStartDate}`);
+                if (raw) {
+                    try {
+                        const data = JSON.parse(raw);
+                        if (Array.isArray(data.staffList) && Array.isArray(data.outputGrid)) {
+                            data.staffList.forEach((st, sIdx) => {
+                                const name = (st.name || '').trim();
+                                const row = data.outputGrid[sIdx];
+                                if (name && Array.isArray(row) && row.length >= 5) {
+                                    const rLen = row.length;
+                                    confirmedMap[name] = [
+                                        (row[rLen - 5]?.symbol || row[rLen - 5] || ''),
+                                        (row[rLen - 4]?.symbol || row[rLen - 4] || ''),
+                                        (row[rLen - 3]?.symbol || row[rLen - 3] || ''),
+                                        (row[rLen - 2]?.symbol || row[rLen - 2] || ''),
+                                        (row[rLen - 1]?.symbol || row[rLen - 1] || '')
+                                    ];
+                                }
+                            });
+                        }
+                    } catch (e) {}
+                }
+            });
+
+            // STスタッフの最終5日
+            const rawSt = localStorage.getItem(`shift_schedule_st_term_${termStartDate}`);
+            if (rawSt) {
+                try {
+                    const stData = JSON.parse(rawSt);
+                    if (Array.isArray(stData.staffList) && Array.isArray(stData.outputGrid)) {
+                        stData.staffList.forEach((st, sIdx) => {
+                            const name = (st.name || '').trim();
+                            const row = stData.outputGrid[sIdx];
+                            if (name && Array.isArray(row) && row.length >= 5) {
+                                const rLen = row.length;
+                                confirmedMap[name] = [
+                                    (row[rLen - 5]?.symbol || row[rLen - 5] || ''),
+                                    (row[rLen - 4]?.symbol || row[rLen - 4] || ''),
+                                    (row[rLen - 3]?.symbol || row[rLen - 3] || ''),
+                                    (row[rLen - 2]?.symbol || row[rLen - 2] || ''),
+                                    (row[rLen - 1]?.symbol || row[rLen - 1] || '')
+                                ];
+                            }
+                        });
+                    }
+                } catch (e) {}
+            }
+
+            // 生活期スタッフの最終5日
+            const rawLife = localStorage.getItem(`shift_schedule_life_term_${termStartDate}`);
+            if (rawLife) {
+                try {
+                    const lifeData = JSON.parse(rawLife);
+                    if (Array.isArray(lifeData.staffList) && Array.isArray(lifeData.outputGrid)) {
+                        lifeData.staffList.forEach((st, sIdx) => {
+                            const name = (st.name || '').trim();
+                            const row = lifeData.outputGrid[sIdx];
+                            if (name && Array.isArray(row) && row.length >= 5) {
+                                const rLen = row.length;
+                                confirmedMap[name] = [
+                                    (row[rLen - 5]?.symbol || row[rLen - 5] || ''),
+                                    (row[rLen - 4]?.symbol || row[rLen - 4] || ''),
+                                    (row[rLen - 3]?.symbol || row[rLen - 3] || ''),
+                                    (row[rLen - 2]?.symbol || row[rLen - 2] || ''),
+                                    (row[rLen - 1]?.symbol || row[rLen - 1] || '')
+                                ];
+                            }
+                        });
+                    }
+                } catch (e) {}
+            }
+
+            localStorage.setItem(`shift_schedule_master_confirmed_last5_${termStartDate}`, JSON.stringify(confirmedMap));
+        } catch (e) {
+            console.warn('saveMasterConfirmedLast5Days error:', e);
+        }
+    }
+
+    // ★ ユーザー指示: 直前タームの最終5日間実績を反映する（マスターテーブルで微調整されたデータを最優先で引っ張る！）
     function applyPreviousTermHistory(prevStartDateStr, showToastMsg = true) {
         try {
-            const raw = localStorage.getItem(`${STORAGE_KEY_PREFIX}${prevStartDateStr}`);
-            if (!raw) return false;
-            const prevData = JSON.parse(raw);
-            if (!prevData) return false;
-
             let appliedCount = 0;
-
-            // 前タームのスタッフを氏名（正規化）でマップ化
             const prevStaffByName = new Map();
-            if (Array.isArray(prevData.staffList)) {
-                prevData.staffList.forEach((pst, pIdx) => {
-                    const normName = (pst.name || '').trim();
-                    if (!normName) return;
-                    let last5 = ['', '', '', '', ''];
-                    if (prevData.outputGrid && prevData.outputGrid[pIdx] && prevData.outputGrid[pIdx].length >= NUM_DAYS) {
-                        const row = prevData.outputGrid[pIdx];
-                        last5 = [
-                            row[NUM_DAYS - 5]?.symbol || '',
-                            row[NUM_DAYS - 4]?.symbol || '',
-                            row[NUM_DAYS - 3]?.symbol || '',
-                            row[NUM_DAYS - 2]?.symbol || '',
-                            row[NUM_DAYS - 1]?.symbol || ''
-                        ];
-                    } else if (Array.isArray(pst.days)) {
-                        last5 = [
-                            pst.days[NUM_DAYS - 5] || '',
-                            pst.days[NUM_DAYS - 4] || '',
-                            pst.days[NUM_DAYS - 3] || '',
-                            pst.days[NUM_DAYS - 2] || '',
-                            pst.days[NUM_DAYS - 1] || ''
-                        ];
+            let usedSource = 'フロア保存データ';
+
+            // 1. 【最優先】マスターテーブル統括ファイルで確定・微調整された最終5日間実績をチェック
+            const rawMasterConfirmed = localStorage.getItem(`shift_schedule_master_confirmed_last5_${prevStartDateStr}`);
+            if (rawMasterConfirmed) {
+                try {
+                    const masterMap = JSON.parse(rawMasterConfirmed);
+                    if (masterMap && typeof masterMap === 'object') {
+                        Object.keys(masterMap).forEach(name => {
+                            if (Array.isArray(masterMap[name]) && masterMap[name].length === 5) {
+                                prevStaffByName.set(name.trim(), masterMap[name]);
+                            }
+                        });
+                        if (prevStaffByName.size > 0) {
+                            usedSource = '👑 マスターテーブル統括データ（微調整反映済）';
+                        }
                     }
-                    prevStaffByName.set(normName, last5);
-                });
+                } catch (e) {}
+            }
+
+            // 2. マスター確定データがない場合のフォールバック（フロアの保存データ）
+            if (prevStaffByName.size === 0) {
+                const raw = localStorage.getItem(`${STORAGE_KEY_PREFIX}${prevStartDateStr}`);
+                if (raw) {
+                    try {
+                        const prevData = JSON.parse(raw);
+                        if (prevData && Array.isArray(prevData.staffList)) {
+                            prevData.staffList.forEach((pst, pIdx) => {
+                                const normName = (pst.name || '').trim();
+                                if (!normName) return;
+                                let last5 = ['', '', '', '', ''];
+                                if (prevData.outputGrid && prevData.outputGrid[pIdx] && prevData.outputGrid[pIdx].length >= 5) {
+                                    const row = prevData.outputGrid[pIdx];
+                                    const rLen = row.length;
+                                    last5 = [
+                                        row[rLen - 5]?.symbol || row[rLen - 5] || '',
+                                        row[rLen - 4]?.symbol || row[rLen - 4] || '',
+                                        row[rLen - 3]?.symbol || row[rLen - 3] || '',
+                                        row[rLen - 2]?.symbol || row[rLen - 2] || '',
+                                        row[rLen - 1]?.symbol || row[rLen - 1] || ''
+                                    ];
+                                } else if (Array.isArray(pst.days)) {
+                                    const dLen = pst.days.length;
+                                    last5 = [
+                                        pst.days[dLen - 5] || '',
+                                        pst.days[dLen - 4] || '',
+                                        pst.days[dLen - 3] || '',
+                                        pst.days[dLen - 2] || '',
+                                        pst.days[dLen - 1] || ''
+                                    ];
+                                }
+                                prevStaffByName.set(normName, last5);
+                            });
+                        }
+                    } catch (e) {}
+                }
             }
 
             for (let s = 0; s < NUM_STAFF; s++) {
@@ -1516,7 +1631,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 const prevEndD = new Date(prevD);
                 prevEndD.setDate(prevEndD.getDate() + 27);
                 const titleStr = `${prevD.getMonth() + 1}/${prevD.getDate()}～${prevEndD.getMonth() + 1}/${prevEndD.getDate()}`;
-                showToast(`🔗 直前ターム（${titleStr}）の最終5日間実績を取り込みました（${appliedCount}名分反映）`);
+                showToast(`🔗 直前ターム（${titleStr}）の最終5日実績を【${usedSource}】から取り込みました（${appliedCount}名分反映）`);
             }
             return true;
         } catch (e) {
@@ -8345,6 +8460,12 @@ function renderMasterIntegrationView() {
 
         renderStatsDashboard(masterStats);
         updateUndoRedoUI();
+
+        // ★ ユーザー指示: マスターテーブル最新確定最終5日データを自動集約・保存
+        // （次ターム作成時に各階がマスターテーブルで微調整された最新実績を引っ張れるようにする）
+        if (typeof saveMasterConfirmedLast5Days === 'function') {
+            saveMasterConfirmedLast5Days(curStartDate);
+        }
     }
 
     // ★ 添付1要件: 修正作業エリア／最終チェックでのSTセル直接修正

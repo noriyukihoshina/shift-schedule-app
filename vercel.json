@@ -7,7 +7,15 @@
     { "source": "/south", "destination": "/south.html" },
     { "source": "/st", "destination": "/ST.html" },
     { "source": "/ST", "destination": "/ST.html" },
-    { "source": "/st.html", "destination": "/ST.html" }
+    { "source": "/st.html", "destination": "/ST.html" },
+    { "source": "/life", "destination": "/life.html" },
+    { "source": "/master", "destination": "/マスターテーブル.html" },
+    { "source": "/1階病棟", "destination": "/1階病棟.html" },
+    { "source": "/2階病棟", "destination": "/2階病棟.html" },
+    { "source": "/3階病棟", "destination": "/3階病棟.html" },
+    { "source": "/南病棟", "destination": "/南病棟.html" },
+    { "source": "/生活期", "destination": "/生活期.html" },
+    { "source": "/マスターテーブル", "destination": "/マスターテーブル.html" }
   ],
   "headers": [
     {
