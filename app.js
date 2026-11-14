@@ -521,9 +521,9 @@ document.addEventListener('DOMContentLoaded', () => {
     let autoAssignedRefKeys = new Set(); // "s,d" 自動配分されたリフセル（通常文字・編集自由扱い）
     let autoAssignedStaffIds = new Set(); // 自動配分対象となったスタッフID（誤消去検知用）
 
-    // ★ 日別出勤増減枠のデフォルト生成（STテーブルは常に全日0、通常POは土日祝日-2・平日0）
+    // ★ 日別出勤増減枠のデフォルト生成（STテーブルおよび生活期・通所は全稼働日均一のため全日0、通常病棟POは土日祝日-2・平日0）
     function createDefaultDayOffsets(dates) {
-        if (isST) {
+        if (isST || isLife) {
             return new Array(NUM_DAYS).fill(0);
         }
         const curDates = dates || (typeof getTermInfo === 'function' ? getTermInfo().dates : null);
@@ -1209,14 +1209,14 @@ document.addEventListener('DOMContentLoaded', () => {
                     staffList[idx].allow6Consec = !!s.allow6Consec;
                     enforceRoleExclusivity(staffList[idx]);
 
-                    let pDays = Array.isArray(s.prevDays) ? [...s.prevDays] : [];
+                    let pDays = Array.isArray(s.prevDays) ? s.prevDays.map(v => extractCellSymbol(v)) : [];
                     if (pDays.length < 7) {
                         while (pDays.length < 7) pDays.unshift('');
                     } else if (pDays.length > 7) {
                         pDays = pDays.slice(-7);
                     }
                     staffList[idx].prevDays = pDays;
-                    const loadedDays = Array.isArray(s.days) ? [...s.days] : [];
+                    const loadedDays = Array.isArray(s.days) ? s.days.map(v => extractCellSymbol(v)) : [];
                     while (loadedDays.length < NUM_DAYS) loadedDays.push('');
                     staffList[idx].days = loadedDays.slice(0, NUM_DAYS);
                 }
@@ -1239,8 +1239,8 @@ document.addEventListener('DOMContentLoaded', () => {
 
             // 2.5 日別出勤増減枠（dayOffsets）の復元
             const defaultOffsets = createDefaultDayOffsets(term.dates);
-            if (isST) {
-                // ★ STテーブルはユーザー要望により日付の上下矢印（dayOffsets）は全日デフォルト0に固定
+            if (isST || isLife) {
+                // ★ STテーブルおよび生活期テーブルはユーザー要望により日付の上下矢印（dayOffsets）は全日デフォルト0に固定
                 dayOffsets = new Array(NUM_DAYS).fill(0);
             } else if (Array.isArray(data.dayOffsets) && data.dayOffsets.length >= 28) {
                 const hasAnyNonZero = data.dayOffsets.some(v => v !== 0);
@@ -1466,6 +1466,16 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     }
 
+    // セルまたはオブジェクトから安全に文字列シンボルを抽出するヘルパー（[object Object] の混入を100%防止）
+    function extractCellSymbol(cell) {
+        if (cell === null || cell === undefined) return '';
+        if (typeof cell === 'object') {
+            return (cell.symbol !== undefined && cell.symbol !== null) ? String(cell.symbol).trim() : '';
+        }
+        const str = String(cell).trim();
+        return (str === '[object Object]') ? '' : str;
+    }
+
     // ==========================================
     // ★ ユーザー指示: 統括マスターテーブルから全スタッフの最新確定最終7日データを自動集約・保存
     // マスターテーブルで施された微調整（早・遅の変更、公休移動等）を確実に保持
@@ -1490,13 +1500,13 @@ document.addEventListener('DOMContentLoaded', () => {
                                 if (name && Array.isArray(row) && row.length >= 7) {
                                     const rLen = row.length;
                                     confirmedMap[name] = [
-                                        (row[rLen - 7]?.symbol || row[rLen - 7] || ''),
-                                        (row[rLen - 6]?.symbol || row[rLen - 6] || ''),
-                                        (row[rLen - 5]?.symbol || row[rLen - 5] || ''),
-                                        (row[rLen - 4]?.symbol || row[rLen - 4] || ''),
-                                        (row[rLen - 3]?.symbol || row[rLen - 3] || ''),
-                                        (row[rLen - 2]?.symbol || row[rLen - 2] || ''),
-                                        (row[rLen - 1]?.symbol || row[rLen - 1] || '')
+                                        extractCellSymbol(row[rLen - 7]),
+                                        extractCellSymbol(row[rLen - 6]),
+                                        extractCellSymbol(row[rLen - 5]),
+                                        extractCellSymbol(row[rLen - 4]),
+                                        extractCellSymbol(row[rLen - 3]),
+                                        extractCellSymbol(row[rLen - 2]),
+                                        extractCellSymbol(row[rLen - 1])
                                     ];
                                 }
                             });
@@ -1517,13 +1527,13 @@ document.addEventListener('DOMContentLoaded', () => {
                             if (name && Array.isArray(row) && row.length >= 7) {
                                 const rLen = row.length;
                                 confirmedMap[name] = [
-                                    (row[rLen - 7]?.symbol || row[rLen - 7] || ''),
-                                    (row[rLen - 6]?.symbol || row[rLen - 6] || ''),
-                                    (row[rLen - 5]?.symbol || row[rLen - 5] || ''),
-                                    (row[rLen - 4]?.symbol || row[rLen - 4] || ''),
-                                    (row[rLen - 3]?.symbol || row[rLen - 3] || ''),
-                                    (row[rLen - 2]?.symbol || row[rLen - 2] || ''),
-                                    (row[rLen - 1]?.symbol || row[rLen - 1] || '')
+                                    extractCellSymbol(row[rLen - 7]),
+                                    extractCellSymbol(row[rLen - 6]),
+                                    extractCellSymbol(row[rLen - 5]),
+                                    extractCellSymbol(row[rLen - 4]),
+                                    extractCellSymbol(row[rLen - 3]),
+                                    extractCellSymbol(row[rLen - 2]),
+                                    extractCellSymbol(row[rLen - 1])
                                 ];
                             }
                         });
@@ -1543,13 +1553,13 @@ document.addEventListener('DOMContentLoaded', () => {
                             if (name && Array.isArray(row) && row.length >= 7) {
                                 const rLen = row.length;
                                 confirmedMap[name] = [
-                                    (row[rLen - 7]?.symbol || row[rLen - 7] || ''),
-                                    (row[rLen - 6]?.symbol || row[rLen - 6] || ''),
-                                    (row[rLen - 5]?.symbol || row[rLen - 5] || ''),
-                                    (row[rLen - 4]?.symbol || row[rLen - 4] || ''),
-                                    (row[rLen - 3]?.symbol || row[rLen - 3] || ''),
-                                    (row[rLen - 2]?.symbol || row[rLen - 2] || ''),
-                                    (row[rLen - 1]?.symbol || row[rLen - 1] || '')
+                                    extractCellSymbol(row[rLen - 7]),
+                                    extractCellSymbol(row[rLen - 6]),
+                                    extractCellSymbol(row[rLen - 5]),
+                                    extractCellSymbol(row[rLen - 4]),
+                                    extractCellSymbol(row[rLen - 3]),
+                                    extractCellSymbol(row[rLen - 2]),
+                                    extractCellSymbol(row[rLen - 1])
                                 ];
                             }
                         });
@@ -1585,7 +1595,7 @@ document.addEventListener('DOMContentLoaded', () => {
                         Object.keys(masterMap).forEach(name => {
                             let arr = masterMap[name];
                             if (Array.isArray(arr)) {
-                                let last7 = [...arr];
+                                let last7 = arr.map(v => extractCellSymbol(v));
                                 while (last7.length < 7) last7.unshift('');
                                 if (last7.length > 7) last7 = last7.slice(-7);
                                 prevStaffByName.set(name.trim(), last7);
@@ -1613,24 +1623,24 @@ document.addEventListener('DOMContentLoaded', () => {
                                     const row = prevData.outputGrid[pIdx];
                                     const rLen = row.length;
                                     last7 = [
-                                        row[rLen - 7]?.symbol || row[rLen - 7] || '',
-                                        row[rLen - 6]?.symbol || row[rLen - 6] || '',
-                                        row[rLen - 5]?.symbol || row[rLen - 5] || '',
-                                        row[rLen - 4]?.symbol || row[rLen - 4] || '',
-                                        row[rLen - 3]?.symbol || row[rLen - 3] || '',
-                                        row[rLen - 2]?.symbol || row[rLen - 2] || '',
-                                        row[rLen - 1]?.symbol || row[rLen - 1] || ''
+                                        extractCellSymbol(row[rLen - 7]),
+                                        extractCellSymbol(row[rLen - 6]),
+                                        extractCellSymbol(row[rLen - 5]),
+                                        extractCellSymbol(row[rLen - 4]),
+                                        extractCellSymbol(row[rLen - 3]),
+                                        extractCellSymbol(row[rLen - 2]),
+                                        extractCellSymbol(row[rLen - 1])
                                     ];
                                 } else if (Array.isArray(pst.days) && pst.days.length >= 7) {
                                     const dLen = pst.days.length;
                                     last7 = [
-                                        pst.days[dLen - 7] || '',
-                                        pst.days[dLen - 6] || '',
-                                        pst.days[dLen - 5] || '',
-                                        pst.days[dLen - 4] || '',
-                                        pst.days[dLen - 3] || '',
-                                        pst.days[dLen - 2] || '',
-                                        pst.days[dLen - 1] || ''
+                                        extractCellSymbol(pst.days[dLen - 7]),
+                                        extractCellSymbol(pst.days[dLen - 6]),
+                                        extractCellSymbol(pst.days[dLen - 5]),
+                                        extractCellSymbol(pst.days[dLen - 4]),
+                                        extractCellSymbol(pst.days[dLen - 3]),
+                                        extractCellSymbol(pst.days[dLen - 2]),
+                                        extractCellSymbol(pst.days[dLen - 1])
                                     ];
                                 }
                                 prevStaffByName.set(normName, last7);
@@ -1648,8 +1658,8 @@ document.addEventListener('DOMContentLoaded', () => {
                 // 照合優先: 1. 現在の氏名、2. 改姓・旧姓（prevName）
                 let last7 = prevStaffByName.get(curName) || (prevName ? prevStaffByName.get(prevName) : null);
                 if (last7) {
-                    staffList[s].prevDays = [...last7];
-                    if (last7.some(v => v !== '')) appliedCount++;
+                    staffList[s].prevDays = last7.map(v => extractCellSymbol(v));
+                    if (staffList[s].prevDays.some(v => v !== '')) appliedCount++;
                 } else {
                     // 過去に該当名がない新規中途採用等のスタッフ
                     staffList[s].prevDays = new Array(7).fill('');
@@ -2309,7 +2319,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
             // 前7日間
             for (let p = 0; p < 7; p++) {
-                const val = staff.prevDays[p] || '';
+                const val = extractCellSymbol(staff.prevDays ? staff.prevDays[p] : '');
                 let specialCls = '';
                 if (val === '早' || val === 'ハヤ') specialCls = ' cell-special-early';
                 else if (val === '遅') specialCls = ' cell-special-late';
@@ -2320,7 +2330,7 @@ document.addEventListener('DOMContentLoaded', () => {
             // 当ターム 1日〜28日
             const curStartDate = document.getElementById('termStartDate')?.value || currentWorkingStartDate;
             for (let d = 0; d < NUM_DAYS; d++) {
-                const val = staff.days[d] || '';
+                const val = extractCellSymbol(staff.days ? staff.days[d] : '');
                 const isRef = isRefreshHolidaySymbol(val);
                 // ★ ユーザー指示: リフレッシュ休暇「上1〜5」「下1〜3」はいかなる場合も赤字固定にせず通常黒字（編集自由）！
                 const isFixed = (val && !isRef) ? true : false;

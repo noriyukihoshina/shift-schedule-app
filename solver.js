@@ -1780,6 +1780,10 @@ class ShiftScheduler {
         const stdHols = this.options.standardHolidays || 8;
         const dates = this.dates || [];
 
+        // ★ ユーザー指示: 通所実数は土曜日を少なくせず全稼働日（月〜土）で完全に均一にする！
+        // 生活期では病棟用の土日祝日-2オフセットを完全無効化（全日0）にして処理
+        this.dayOffsets = new Array(this.numDays).fill(0);
+
         // 1. 各スタッフの事前希望枠を初期設定（土日固定・日曜固定を事前反映）
         for (let s = 0; s < this.numStaff; s++) {
             const staff = this.staffList[s];
@@ -1924,7 +1928,7 @@ class ShiftScheduler {
         }
 
         if (patBStaff.length > 0 && tsushoWorkingDays.length >= 2) {
-            for (let iter = 0; iter < 80; iter++) {
+            for (let iter = 0; iter < 150; iter++) {
                 // 通所出勤実数を計算（通所トグルON + CLトグルON + ハ3/ハ南トグルON(0.5換算)）
                 const dailyLoads = tsushoWorkingDays.map(d => {
                     let real = 0;
@@ -1946,9 +1950,9 @@ class ShiftScheduler {
                 if (maxItem.real - minItem.real <= 0.6) break;
 
                 let swapped = false;
-                for (let h = 0; h < Math.min(4, dailyLoads.length); h++) {
+                for (let h = 0; h < Math.min(8, dailyLoads.length); h++) {
                     const maxD = dailyLoads[h].day;
-                    for (let l = dailyLoads.length - 1; l >= Math.max(0, dailyLoads.length - 4); l--) {
+                    for (let l = dailyLoads.length - 1; l >= Math.max(0, dailyLoads.length - 8); l--) {
                         const minD = dailyLoads[l].day;
                         if (dailyLoads[h].real - dailyLoads[l].real <= 0.6) continue;
 
