@@ -1,64 +1,14 @@
 {
   "cleanUrls": true,
   "rewrites": [
-    { "source": "/", "destination": "/index.html" },
     { "source": "/1f", "destination": "/1f.html" },
-    { "source": "/1F", "destination": "/1f.html" },
-    { "source": "/1階病棟", "destination": "/1f.html" },
-    { "source": "/1階病棟.html", "destination": "/1f.html" },
-    { "source": "/1%E9%9A%8E%E7%97%85%E6%A3%9F", "destination": "/1f.html" },
-    { "source": "/1%E9%9A%8E%E7%97%85%E6%A3%9F.html", "destination": "/1f.html" },
-    { "source": "/1%e9%9a%8e%e7%97%85%e6%a3%9f", "destination": "/1f.html" },
-    { "source": "/1%e9%9a%8e%e7%97%85%e6%a3%9f.html", "destination": "/1f.html" },
-
     { "source": "/2f", "destination": "/2f.html" },
-    { "source": "/2F", "destination": "/2f.html" },
-    { "source": "/2階病棟", "destination": "/2f.html" },
-    { "source": "/2階病棟.html", "destination": "/2f.html" },
-    { "source": "/2%E9%9A%8E%E7%97%85%E6%A3%9F", "destination": "/2f.html" },
-    { "source": "/2%E9%9A%8E%E7%97%85%E6%A3%9F.html", "destination": "/2f.html" },
-    { "source": "/2%e9%9a%8e%e7%97%85%e6%a3%9f", "destination": "/2f.html" },
-    { "source": "/2%e9%9a%8e%e7%97%85%e6%a3%9f.html", "destination": "/2f.html" },
-
     { "source": "/3f", "destination": "/3f.html" },
-    { "source": "/3F", "destination": "/3f.html" },
-    { "source": "/3階病棟", "destination": "/3f.html" },
-    { "source": "/3階病棟.html", "destination": "/3f.html" },
-    { "source": "/3%E9%9A%8E%E7%97%85%E6%A3%9F", "destination": "/3f.html" },
-    { "source": "/3%E9%9A%8E%E7%97%85%E6%A3%9F.html", "destination": "/3f.html" },
-    { "source": "/3%e9%9a%8e%e7%97%85%e6%a3%9f", "destination": "/3f.html" },
-    { "source": "/3%e9%9a%8e%e7%97%85%e6%a3%9f.html", "destination": "/3f.html" },
-
     { "source": "/south", "destination": "/south.html" },
-    { "source": "/南", "destination": "/south.html" },
-    { "source": "/南病棟", "destination": "/south.html" },
-    { "source": "/南病棟.html", "destination": "/south.html" },
-    { "source": "/%E5%8D%97", "destination": "/south.html" },
-    { "source": "/%E5%8D%97%E7%97%85%E6%A3%9F", "destination": "/south.html" },
-    { "source": "/%E5%8D%97%E7%97%85%E6%A3%9F.html", "destination": "/south.html" },
-    { "source": "/%e5%8d%97%e7%97%85%e6%a3%9f", "destination": "/south.html" },
-    { "source": "/%e5%8d%97%e7%97%85%e6%a3%9f.html", "destination": "/south.html" },
-
     { "source": "/st", "destination": "/ST.html" },
     { "source": "/ST", "destination": "/ST.html" },
-    { "source": "/st.html", "destination": "/ST.html" },
-
     { "source": "/life", "destination": "/life.html" },
-    { "source": "/生活期", "destination": "/life.html" },
-    { "source": "/生活期.html", "destination": "/life.html" },
-    { "source": "/%E7%94%9F%E6%B4%BB%E6%9C%9F", "destination": "/life.html" },
-    { "source": "/%E7%94%9F%E6%B4%BB%E6%9C%9F.html", "destination": "/life.html" },
-    { "source": "/%e7%94%9f%e6%b4%bb%e6%9c%9f", "destination": "/life.html" },
-    { "source": "/%e7%94%9f%e6%b4%bb%e6%9c%9f.html", "destination": "/life.html" },
-
-    { "source": "/master", "destination": "/index.html" },
-    { "source": "/マスター", "destination": "/index.html" },
-    { "source": "/マスターテーブル", "destination": "/index.html" },
-    { "source": "/マスターテーブル.html", "destination": "/index.html" },
-    { "source": "/%E3%83%9E%E3%82%B9%E3%82%BF%E3%83%BC%E3%83%86%E3%83%BC%E3%83%96%E3%83%AB", "destination": "/index.html" },
-    { "source": "/%E3%83%9E%E3%82%B9%E3%82%BF%E3%83%BC%E3%83%86%E3%83%BC%E3%83%96%E3%83%AB.html", "destination": "/index.html" },
-    { "source": "/%e3%83%9e%e3%82%b9%e3%82%bf%e3%83%bc%e3%83%86%e3%83%bc%e3%83%96%e3%83%ab", "destination": "/index.html" },
-    { "source": "/%e3%83%9e%e3%82%b9%e3%82%bf%e3%83%bc%e3%83%86%e3%83%bc%e3%83%96%e3%83%ab.html", "destination": "/index.html" }
+    { "source": "/master", "destination": "/index.html" }
   ],
   "headers": [
     {
