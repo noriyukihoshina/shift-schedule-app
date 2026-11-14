@@ -4069,10 +4069,107 @@ class ShiftScheduler {
         }
 
         let bestSchedule = null;
+        let searchSteps = 0;
+        const MAX_SEARCH_STEPS = 2000;
 
-        for (const dist of distributionPatterns) {
-            function searchWeek(wIdx, assignedOffDays) {
+        // ★ 枝刈り高速化: 評価スコア上位12配分パターンに限定
+        const patternsToTry = distributionPatterns.length > 12 ? distributionPatterns.slice(0, 12) : distributionPatterns;
+
+        // ★ 即時連勤枝刈り（Pruning）判定ヘルパー: verifyStaffScheduleと100%完全同期
+        function isPartialConsecutiveValid(wIdx, assignedDaysSet) {
+            const wSpan = weekSpans[wIdx];
+            const endDay = wSpan[wSpan.length - 1];
+
+            const partialSeq = [];
+            const pDays = staff.prevDays || [];
+            const pLen = pDays.length;
+            const firstDateObj = (self.dates && self.dates[0]) ? new Date(self.dates[0].dateStr + 'T00:00:00') : null;
+            for (let p = 0; p < pLen; p++) {
+                let pSym = pDays[p] || '';
+                let isSatOrSun = false;
+                if (firstDateObj) {
+                    const prevD = new Date(firstDateObj);
+                    prevD.setDate(prevD.getDate() - (pLen - p));
+                    const dow = prevD.getDay();
+                    if (dow === 0 || dow === 6) isSatOrSun = true;
+                } else {
+                    if (pLen === 7 && (p === 3 || p === 4)) isSatOrSun = true;
+                    if (pLen === 5 && (p === 1 || p === 2)) isSatOrSun = true;
+                }
+                if (staff.isSectionChief && isSatOrSun && isWorkSymbol(pSym)) {
+                    pSym = SYMBOLS.OFF;
+                }
+                partialSeq.push(pSym);
+            }
+
+            for (let d = 0; d <= endDay; d++) {
+                let sym = '';
+                if (self.grid[s][d].isFixed || self.grid[s][d].isAfterPreSpecial) {
+                    sym = self.grid[s][d].symbol;
+                } else if (assignedDaysSet.has(d)) {
+                    sym = SYMBOLS.OFF;
+                } else {
+                    sym = SYMBOLS.WORK;
+                }
+                partialSeq.push(sym);
+            }
+
+            // 1. 特殊勤務翌日休制約
+            if (!staff.isSectionChief) {
+                for (let i = 0; i < partialSeq.length - 1; i++) {
+                    if (isRestrictedSpecial(partialSeq[i]) && !isHolidaySymbol(partialSeq[i + 1])) {
+                        const dCur = i - pLen;
+                        const dNext = dCur + 1;
+                        const isFixedConflict = (dCur >= 0 && dNext < self.numDays && self.grid[s][dCur].isFixed && self.grid[s][dNext].isFixed);
+                        if (!isFixedConflict) return false;
+                    }
+                }
+            }
+
+            // 2. 連勤制限（公休間隔カウント。有休やリフがあっても公休ではないためカウント継続）
+            let consec = 0;
+            for (let i = 0; i < partialSeq.length; i++) {
+                if (partialSeq[i] === '') {
+                    consec = 0;
+                } else if (!isPurePublicOffSymbol(partialSeq[i])) {
+                    consec++;
+                    if (consec > maxConsec) return false;
+                } else {
+                    consec = 0;
+                }
+            }
+
+            // 3. 5連勤後の2連休制約（allow6Consec以外）
+            if (!staff.allow6Consec) {
+                let workStreak = 0;
+                for (let i = 0; i < partialSeq.length; i++) {
+                    if (isWorkSymbol(partialSeq[i])) {
+                        workStreak++;
+                        if (workStreak === 5) {
+                            for (let offOffset = 1; offOffset <= 2; offOffset++) {
+                                const checkIdx = i + offOffset;
+                                if (checkIdx < partialSeq.length) {
+                                    const sym = partialSeq[checkIdx];
+                                    if (sym !== '' && !isHolidaySymbol(sym)) return false;
+                                }
+                            }
+                        }
+                    } else {
+                        workStreak = 0;
+                    }
+                }
+            }
+
+            return true;
+        }
+
+        for (const dist of patternsToTry) {
+            if (bestSchedule !== null || searchSteps > MAX_SEARCH_STEPS) break;
+
+            function searchWeek(wIdx, assignedOffDays, assignedSet) {
                 if (bestSchedule !== null) return;
+                searchSteps++;
+                if (searchSteps > MAX_SEARCH_STEPS) return;
 
                 if (wIdx === totalWeeks) {
                     const gridSymbols = new Array(numDays);
@@ -4082,7 +4179,7 @@ class ShiftScheduler {
                             gridSymbols[d] = self.grid[s][d].symbol;
                             if (gridSymbols[d] === SYMBOLS.OFF) currentOff += 1.0;
                             else if (gridSymbols[d] === SYMBOLS.HALF_WORK_OFF || gridSymbols[d] === SYMBOLS.HALF_OFF_WORK) currentOff += 0.5;
-                        } else if (assignedOffDays.includes(d)) {
+                        } else if (assignedSet.has(d)) {
                             gridSymbols[d] = SYMBOLS.OFF;
                             currentOff += 1.0;
                         } else {
@@ -4104,13 +4201,21 @@ class ShiftScheduler {
                 const neededInThisWeek = dist[wIdx];
                 const choices = getWeekHolidayChoices(wIdx, neededInThisWeek);
                 for (const choice of choices) {
+                    // ★ 週跨ぎ連勤枝刈り: choice を追加した部分スケジュールが連勤違反なら即枝刈り
+                    const nextSet = new Set(assignedSet);
+                    for (const cd of choice) nextSet.add(cd);
+
+                    if (!isPartialConsecutiveValid(wIdx, nextSet)) {
+                        continue; // ★ 即座に枝刈り！無駄な深掘り再帰を完全遮断
+                    }
+
                     const nextAssigned = assignedOffDays.concat(choice);
-                    searchWeek(wIdx + 1, nextAssigned);
+                    searchWeek(wIdx + 1, nextAssigned, nextSet);
                     if (bestSchedule !== null) return;
                 }
             }
 
-            searchWeek(0, []);
+            searchWeek(0, [], new Set());
             if (bestSchedule !== null) break;
         }
 
