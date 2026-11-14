@@ -6365,11 +6365,24 @@ document.addEventListener('DOMContentLoaded', () => {
         const term = getTermInfo(curStartDate);
         const numDays = term.dates.length;
 
+        // ★ ユーザー指示: 何回でも押して試せるよう、targetGrid を画面・メモリ・ストレージから確実に復元
         let targetGrid = null;
         if (lastSolveResult && lastSolveResult.grid && lastSolveResult.grid.length > 0) {
             targetGrid = lastSolveResult.grid;
         } else if (lastScheduler && lastScheduler.grid && lastScheduler.grid.length > 0) {
             targetGrid = lastScheduler.grid;
+        } else if (typeof extractCurrentOutputGrid === 'function') {
+            targetGrid = extractCurrentOutputGrid();
+        }
+        if (!targetGrid || targetGrid.length === 0) {
+            const key = `shift_schedule_${deptPrefix}term_${curStartDate}`;
+            const raw = localStorage.getItem(key);
+            if (raw) {
+                try {
+                    const parsed = JSON.parse(raw);
+                    targetGrid = parsed.outputGrid || parsed.grid;
+                } catch(e) {}
+            }
         }
 
         if (!targetGrid || targetGrid.length === 0) {
@@ -6391,6 +6404,22 @@ document.addEventListener('DOMContentLoaded', () => {
             return;
         }
 
+        // スタッフの所属チーム（A or B / 南2 or 南3）判定
+        const getStaffTeam = (s) => {
+            if (isSouth) {
+                const st = staffList[s];
+                if (!st) return (s % 2 === 0) ? 'A' : 'B';
+                const sec = st.section || '';
+                if (sec.includes('2') || sec === 'PT A' || sec === 'OT A') return 'A'; // 南2
+                if (sec.includes('3') || sec === 'PT B' || sec === 'OT B') return 'B'; // 南3
+                return (s % 2 === 0) ? 'A' : 'B';
+            }
+            const sec = staffList[s]?.section || '';
+            if (sec === 'PT A' || sec === 'OT A' || sec.includes('A')) return 'A';
+            if (sec === 'PT B' || sec === 'OT B' || sec.includes('B')) return 'B';
+            return '';
+        };
+
         function getDailyReal(d) {
             let r = 0;
             staffList.forEach((st, s) => {
@@ -6405,6 +6434,22 @@ document.addEventListener('DOMContentLoaded', () => {
                 }
             });
             return r;
+        }
+
+        function getDailyTeamLoads(d) {
+            let tA = 0, tB = 0;
+            staffList.forEach((st, s) => {
+                if (st.isUnused) return;
+                const cell = targetGrid[s] ? targetGrid[s][d] : null;
+                const sym = (cell && typeof cell === 'object') ? (cell.symbol || '') : (cell || '');
+                if (isWorkSymbol(sym)) {
+                    const tm = getStaffTeam(s);
+                    const w = (st.isHalf || sym.includes('/')) ? 0.5 : 1.0;
+                    if (tm === 'A') tA += w;
+                    else if (tm === 'B') tB += w;
+                }
+            });
+            return { tA, tB, diff: tA - tB, absDiff: Math.abs(tA - tB) };
         }
 
         function canSwapStaff(s, workD, offD) {
@@ -6445,7 +6490,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
             // 仮想スワップして検証
             targetGrid[s][workD] = { symbol: SYMBOLS.OFF, isFixed: false };
-            targetGrid[s][offD] = { symbol: SYMBOLS.WORK, isFixed: false };
+            targetGrid[s][offD] = { symbol: symWork, isFixed: false };
 
             // 1. 公休間隔6日以内チェック
             const intervalOk = checkPureOffIntervalForStaff(targetGrid, s, numDays, st);
@@ -6498,9 +6543,16 @@ document.addEventListener('DOMContentLoaded', () => {
         }
 
         let totalSwaps = 0;
-        const maxIter = 40;
 
-        for (let iter = 0; iter < maxIter; iter++) {
+        // ★ ユーザー指示: 何回でも試行できるよう、スタッフ探索順を毎回適度にシャッフルして多様な安全パターンを探索
+        const staffIndices = staffList.map((_, i) => i);
+        staffIndices.sort(() => Math.random() - 0.5);
+
+        // =====================================================================
+        // フェーズ1: 全体出勤実数のブレ最小化（高負荷日 ⇄ 低負荷日）
+        // =====================================================================
+        const maxIterOverall = 40;
+        for (let iter = 0; iter < maxIterOverall; iter++) {
             const loads = targetDays.map(d => ({ day: d, load: getDailyReal(d) }));
             loads.sort((a, b) => b.load - a.load);
 
@@ -6510,13 +6562,13 @@ document.addEventListener('DOMContentLoaded', () => {
             if (maxItem.load - minItem.load <= 0.6) break;
 
             let swapped = false;
-            for (let h = 0; h < Math.min(3, loads.length); h++) {
+            for (let h = 0; h < Math.min(4, loads.length); h++) {
                 const maxD = loads[h].day;
-                for (let l = loads.length - 1; l >= Math.max(0, loads.length - 3); l--) {
+                for (let l = loads.length - 1; l >= Math.max(0, loads.length - 4); l--) {
                     const minD = loads[l].day;
                     if (loads[h].load - loads[l].load <= 0.6) continue;
 
-                    for (let s = 0; s < staffList.length; s++) {
+                    for (const s of staffIndices) {
                         if (canSwapStaff(s, maxD, minD)) {
                             const origSym = (targetGrid[s][maxD] && targetGrid[s][maxD].symbol) || SYMBOLS.WORK;
                             targetGrid[s][maxD] = { symbol: SYMBOLS.OFF, isFixed: false };
@@ -6531,6 +6583,98 @@ document.addEventListener('DOMContentLoaded', () => {
                 if (swapped) break;
             }
             if (!swapped) break;
+        }
+
+        // =====================================================================
+        // フェーズ2: Aチーム vs Bチーム（南病棟は南2階 vs 南3階）の出勤人数平準化
+        // （全体実数を1ミリも変えずに、AとBの差が2名以上の日の偏りを均等化！）
+        // =====================================================================
+        const maxIterTeam = 60;
+        for (let iter = 0; iter < maxIterTeam; iter++) {
+            const teamLoads = targetDays.map(d => {
+                const tl = getDailyTeamLoads(d);
+                return { day: d, ...tl };
+            });
+
+            // Aチームが過剰な日とBチームが過剰な日を抽出
+            teamLoads.sort((a, b) => b.diff - a.diff);
+            const mostA = teamLoads[0];
+            const mostB = teamLoads[teamLoads.length - 1];
+
+            if (mostA.absDiff <= 1.0 && mostB.absDiff <= 1.0) break; // 全日1名差以内で完璧達成！
+
+            let teamSwapped = false;
+
+            // 1. 2名同時クロススワップ（全体実数維持: d1でA減・B増、d2でA増・B減）
+            for (let h = 0; h < Math.min(6, teamLoads.length); h++) {
+                const d1 = teamLoads[h].day;
+                if (teamLoads[h].diff <= 1.0) continue; // Aが多すぎない日はスキップ
+
+                for (let l = teamLoads.length - 1; l >= Math.max(0, teamLoads.length - 6); l--) {
+                    const d2 = teamLoads[l].day;
+                    if (teamLoads[l].diff >= -1.0) continue; // Bが多すぎない日はスキップ
+                    if (teamLoads[h].diff - teamLoads[l].diff <= 1.5) continue;
+
+                    for (const sA of staffIndices) {
+                        if (getStaffTeam(sA) !== 'A') continue;
+                        if (!canSwapStaff(sA, d1, d2)) continue;
+
+                        for (const sB of staffIndices) {
+                            if (getStaffTeam(sB) !== 'B') continue;
+                            if (!canSwapStaff(sB, d2, d1)) continue;
+
+                            // 2名同時にスワップ適用
+                            const origSymA = (targetGrid[sA][d1] && targetGrid[sA][d1].symbol) || SYMBOLS.WORK;
+                            const origSymB = (targetGrid[sB][d2] && targetGrid[sB][d2].symbol) || SYMBOLS.WORK;
+                            targetGrid[sA][d1] = { symbol: SYMBOLS.OFF, isFixed: false };
+                            targetGrid[sA][d2] = { symbol: origSymA, isFixed: false };
+                            targetGrid[sB][d2] = { symbol: SYMBOLS.OFF, isFixed: false };
+                            targetGrid[sB][d1] = { symbol: origSymB, isFixed: false };
+
+                            totalSwaps += 2;
+                            teamSwapped = true;
+                            break;
+                        }
+                        if (teamSwapped) break;
+                    }
+                    if (teamSwapped) break;
+                }
+                if (teamSwapped) break;
+            }
+
+            // 2. 単独スタッフの同週内スワップ（全体実数のブレ許容内での微調整）
+            if (!teamSwapped) {
+                for (const tm of ['A', 'B']) {
+                    const highDays = teamLoads.filter(x => tm === 'A' ? (x.diff >= 2.0) : (x.diff <= -2.0)).map(x => x.day);
+                    const lowDays = teamLoads.filter(x => tm === 'A' ? (x.diff <= -0.5) : (x.diff >= 0.5)).map(x => x.day);
+
+                    for (const dH of highDays) {
+                        for (const dL of lowDays) {
+                            for (const s of staffIndices) {
+                                if (getStaffTeam(s) !== tm) continue;
+                                if (canSwapStaff(s, dH, dL)) {
+                                    // スワップ後の全体実数がブレ範囲内か
+                                    const rH = getDailyReal(dH);
+                                    const rL = getDailyReal(dL);
+                                    if (rH - 1.0 < rL) { // 全体バランスを崩さない
+                                        const origSym = (targetGrid[s][dH] && targetGrid[s][dH].symbol) || SYMBOLS.WORK;
+                                        targetGrid[s][dH] = { symbol: SYMBOLS.OFF, isFixed: false };
+                                        targetGrid[s][dL] = { symbol: origSym, isFixed: false };
+                                        totalSwaps++;
+                                        teamSwapped = true;
+                                        break;
+                                    }
+                                }
+                            }
+                            if (teamSwapped) break;
+                        }
+                        if (teamSwapped) break;
+                    }
+                    if (teamSwapped) break;
+                }
+            }
+
+            if (!teamSwapped) break;
         }
 
         const updatedStats = calculateGridStats(targetGrid);
@@ -6548,10 +6692,11 @@ document.addEventListener('DOMContentLoaded', () => {
         }
         saveCurrentTermToStorage();
 
+        const teamLabel = isSouth ? '南2階/南3階' : 'A/Bチーム';
         if (totalSwaps > 0) {
-            showToast(`⚡ ${modeTitle}を実施しました（計 ${totalSwaps} 箇所の公休を安全微調整）`);
+            showToast(`⚡ ${modeTitle}を実施しました（計 ${totalSwaps} 箇所調整: 全体人数および${teamLabel}人数を均等化）`);
         } else {
-            showToast(`✅ すでに${modeTitle}は最小ブレ（均等状態）に保たれています`);
+            showToast(`✅ すでに${modeTitle}は最小ブレ（全体実数および${teamLabel}人数ともに差1名以内の均等状態）に保たれています`);
         }
     }
 

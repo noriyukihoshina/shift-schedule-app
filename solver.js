@@ -4409,7 +4409,12 @@ class ShiftScheduler {
      * 当日 d の各セクション（PT A, PT B, OT A, OT B）および A/Bチーム（PT A+OT A, PT B+OT B）の出勤人数・実数を取得
      */
     getDailySectionWorkMap(d) {
-        const map = { 'PT A': 0, 'PT B': 0, 'OT A': 0, 'OT B': 0, 'その他': 0, teamA: 0, teamB: 0, total: 0 };
+        const isSouth = !!this.isSouth;
+        const map = {
+            'PT A': 0, 'PT B': 0, 'OT A': 0, 'OT B': 0,
+            'PT 2': 0, 'PT 3': 0, 'OT 2': 0, 'OT 3': 0,
+            '南2': 0, '南3': 0, 'その他': 0, teamA: 0, teamB: 0, total: 0
+        };
         for (let s = 0; s < this.numStaff; s++) {
             if (this.staffList[s].isUnused) continue;
             const sym = this.grid[s][d].symbol;
@@ -4421,15 +4426,39 @@ class ShiftScheduler {
             }
             if (amt > 0) {
                 const sec = this.staffList[s].section || 'その他';
-                if (sec in map) {
-                    map[sec] += amt;
+                if (isSouth) {
+                    const sub = this.getSubFloor(s);
+                    if (sub === '南2') {
+                        map['南2'] += amt;
+                        map.teamA += amt;
+                        if (sec === 'OT 2' || sec === 'OT A') map['OT 2'] += amt;
+                        else map['PT 2'] += amt;
+                    } else {
+                        map['南3'] += amt;
+                        map.teamB += amt;
+                        if (sec === 'OT 3' || sec === 'OT B') map['OT 3'] += amt;
+                        else map['PT 3'] += amt;
+                    }
                 } else {
-                    map['その他'] += amt;
+                    if (sec in map) {
+                        map[sec] += amt;
+                    } else {
+                        map['その他'] += amt;
+                    }
+                    if (sec === 'PT A' || sec === 'OT A' || sec.includes('A')) {
+                        map.teamA += amt;
+                    } else if (sec === 'PT B' || sec === 'OT B' || sec.includes('B')) {
+                        map.teamB += amt;
+                    } else {
+                        map['その他'] += amt;
+                    }
                 }
             }
         }
-        map.teamA = map['PT A'] + map['OT A'];
-        map.teamB = map['PT B'] + map['OT B'];
+        if (!isSouth) {
+            map.teamA = map['PT A'] + map['OT A'];
+            map.teamB = map['PT B'] + map['OT B'];
+        }
         map.total = map.teamA + map.teamB + map['その他'];
         return map;
     }
@@ -4530,33 +4559,55 @@ class ShiftScheduler {
      * - 異なる週の間の中継日(midDay)を介したクロススワップ
      */
     balanceSectionAndTeamWorkforce() {
-        const targetSecs = ['PT A', 'PT B', 'OT A', 'OT B'];
-        const activeBySec = { 'PT A': 0, 'PT B': 0, 'OT A': 0, 'OT B': 0 };
+        const isSouth = !!this.isSouth;
+        const targetSecs = isSouth ? ['PT 2', 'PT 3', 'OT 2', 'OT 3'] : ['PT A', 'PT B', 'OT A', 'OT B'];
+
+        const getStaffSec = (s) => {
+            if (isSouth) {
+                const sub = this.getSubFloor(s);
+                const rawSec = this.staffList[s].section || '';
+                const isOT = rawSec.includes('OT');
+                if (sub === '南2') return isOT ? 'OT 2' : 'PT 2';
+                return isOT ? 'OT 3' : 'PT 3';
+            }
+            return this.staffList[s].section || 'その他';
+        };
+
+        const getStaffTeam = (s) => {
+            if (isSouth) return this.getSubFloor(s) === '南2' ? 'A' : 'B';
+            const sec = this.staffList[s].section || '';
+            if (sec === 'PT A' || sec === 'OT A' || sec.includes('A')) return 'A';
+            if (sec === 'PT B' || sec === 'OT B' || sec.includes('B')) return 'B';
+            return '';
+        };
+
         let totalActiveSecStaff = 0;
+        let totalStaffA = 0, totalStaffB = 0;
         for (let s = 0; s < this.numStaff; s++) {
             if (this.staffList[s].isUnused) continue;
-            const sec = this.staffList[s].section || '';
-            if (sec in activeBySec) {
-                activeBySec[sec]++;
-                totalActiveSecStaff++;
-            }
+            totalActiveSecStaff++;
+            const tm = getStaffTeam(s);
+            if (tm === 'A') totalStaffA++;
+            else if (tm === 'B') totalStaffB++;
         }
         if (totalActiveSecStaff === 0) return;
 
+        const idealTeamRatio = (totalStaffA + totalStaffB > 0) ? (totalStaffA / (totalStaffA + totalStaffB)) : 0.5;
+
         // 28日間の各セクション・各チームの平均出勤数を計算
         const computeTargets = () => {
-            const sumSec = { 'PT A': 0, 'PT B': 0, 'OT A': 0, 'OT B': 0, teamA: 0, teamB: 0, total: 0 };
-            const sumNoOffsetSec = { 'PT A': 0, 'PT B': 0, 'OT A': 0, 'OT B': 0, teamA: 0, teamB: 0, total: 0 };
+            const sumSec = { 'PT A': 0, 'PT B': 0, 'OT A': 0, 'OT B': 0, 'PT 2': 0, 'PT 3': 0, 'OT 2': 0, 'OT 3': 0, teamA: 0, teamB: 0, total: 0 };
+            const sumNoOffsetSec = { 'PT A': 0, 'PT B': 0, 'OT A': 0, 'OT B': 0, 'PT 2': 0, 'PT 3': 0, 'OT 2': 0, 'OT 3': 0, teamA: 0, teamB: 0, total: 0 };
             let noOffsetDays = 0;
             for (let d = 0; d < this.numDays; d++) {
                 const m = this.getDailySectionWorkMap(d);
                 const off = (this.dayOffsets && this.dayOffsets[d]) ? this.dayOffsets[d] : 0;
-                for (const k of targetSecs) sumSec[k] += m[k];
+                for (const k of targetSecs) sumSec[k] = (sumSec[k] || 0) + (m[k] || 0);
                 sumSec.teamA += m.teamA;
                 sumSec.teamB += m.teamB;
                 sumSec.total += m.total;
                 if (off === 0) {
-                    for (const k of targetSecs) sumNoOffsetSec[k] += m[k];
+                    for (const k of targetSecs) sumNoOffsetSec[k] = (sumNoOffsetSec[k] || 0) + (m[k] || 0);
                     sumNoOffsetSec.teamA += m.teamA;
                     sumNoOffsetSec.teamB += m.teamB;
                     sumNoOffsetSec.total += m.total;
@@ -4566,13 +4617,13 @@ class ShiftScheduler {
             const avg = {};
             const denom = noOffsetDays >= 10 ? noOffsetDays : this.numDays;
             const src = noOffsetDays >= 10 ? sumNoOffsetSec : sumSec;
-            for (const k of targetSecs) avg[k] = src[k] / denom;
+            for (const k of targetSecs) avg[k] = (src[k] || 0) / denom;
             avg.teamA = src.teamA / denom;
             avg.teamB = src.teamB / denom;
             avg.total = Math.max(1, src.total / denom);
             // 28日全体の純粋平均も保持
             avg.allDays = {};
-            for (const k of targetSecs) avg.allDays[k] = sumSec[k] / this.numDays;
+            for (const k of targetSecs) avg.allDays[k] = (sumSec[k] || 0) / this.numDays;
             avg.allDays.teamA = sumSec.teamA / this.numDays;
             avg.allDays.teamB = sumSec.teamB / this.numDays;
             avg.allDays.total = Math.max(1, sumSec.total / this.numDays);
@@ -4589,34 +4640,47 @@ class ShiftScheduler {
             return p;
         };
 
-        // 日 d のセクション単体（PT A, PT B, OT A, OT B）＋チーム合算（PT A+OT A, PT B+OT B）の不均衡コスト
+        // 日 d のセクション単体＋チーム合算（Aチーム vs Bチーム / 南2階 vs 南3階）の不均衡コスト
         const calcDayImbalanceCost = (d, avgInfo, mapOverride = null) => {
             const m = mapOverride || this.getDailySectionWorkMap(d);
             const offset = (this.dayOffsets && this.dayOffsets[d]) ? this.dayOffsets[d] : 0;
-            const scale = m.total / avgInfo.allDays.total;
+            const scale = avgInfo.allDays.total > 0 ? (m.total / avgInfo.allDays.total) : 1.0;
             let cost = 0;
+
+            // ★ ユーザー指示: 1〜3階はAチームとBチーム、南病棟は南2階と南3階の出勤人数が各日でほぼ同じ人数（差0〜1名）になること！
+            const activeTeamTotal = m.teamA + m.teamB;
+            if (activeTeamTotal > 0) {
+                const idealA = activeTeamTotal * idealTeamRatio;
+                const idealB = activeTeamTotal * (1.0 - idealTeamRatio);
+                const diffA = Math.abs(m.teamA - idealA);
+                const diffB = Math.abs(m.teamB - idealB);
+                const directTeamDiff = Math.abs(m.teamA - m.teamB);
+
+                // AとB（または南2と南3）の直接人数差が1名を超える場合、強烈なペナルティを課して同数（±1名以内）に収束させる
+                if (directTeamDiff > 1.0) {
+                    cost += Math.pow(directTeamDiff - 1.0, 2) * 60.0 + directTeamDiff * 35.0;
+                }
+                cost += (diffA * diffA + diffB * diffB) * 20.0;
+            }
 
             if (offset === 0) {
                 // 調整矢印が発動していない通常日：28日間のブレ（最大-最小幅）が最小になるよう固定平均と日別比例値の両方に強く引き寄せる
                 for (const sec of targetSecs) {
-                    const idealFixed = avgInfo.allDays[sec];
-                    const idealProp = avgInfo.allDays[sec] * scale;
+                    const idealFixed = avgInfo.allDays[sec] || 0;
+                    const idealProp = idealFixed * scale;
                     const target = 0.70 * idealFixed + 0.30 * idealProp;
-                    cost += calcPenaltyFn(m[sec] - target) * 1.35;
+                    cost += calcPenaltyFn((m[sec] || 0) - target) * 1.35;
                 }
                 const targetTeamA = 0.70 * avgInfo.allDays.teamA + 0.30 * (avgInfo.allDays.teamA * scale);
                 const targetTeamB = 0.70 * avgInfo.allDays.teamB + 0.30 * (avgInfo.allDays.teamB * scale);
                 cost += calcPenaltyFn(m.teamA - targetTeamA) * 1.15;
                 cost += calcPenaltyFn(m.teamB - targetTeamB) * 1.15;
             } else {
-                // ★ マイナスやプラスの調整矢印（dayOffsets）が発動している日：
-                // 「調整矢印が発動している時は調整しやすい方で調整してくれてよい」に基づき、
-                // その日の増減後全体人数に応じた比例ターゲットを基準としつつ、重みを緩和(0.45倍)して調整しやすいセクションで吸収可能にする
                 for (const sec of targetSecs) {
-                    const propTarget = avgInfo.allDays[sec] * scale;
-                    const fixedTarget = avgInfo.allDays[sec];
+                    const propTarget = (avgInfo.allDays[sec] || 0) * scale;
+                    const fixedTarget = avgInfo.allDays[sec] || 0;
                     const target = 0.75 * propTarget + 0.25 * fixedTarget;
-                    cost += calcPenaltyFn(m[sec] - target) * 0.55;
+                    cost += calcPenaltyFn((m[sec] || 0) - target) * 0.55;
                 }
                 const propTeamA = avgInfo.allDays.teamA * scale;
                 const propTeamB = avgInfo.allDays.teamB * scale;
@@ -4696,12 +4760,19 @@ class ShiftScheduler {
                         const m2 = Object.assign({}, mapD2);
                         m1[sec1] = (m1[sec1] || 0) - 1;
                         m1[sec2] = (m1[sec2] || 0) + 1;
-                        m1.teamA = m1['PT A'] + m1['OT A'];
-                        m1.teamB = m1['PT B'] + m1['OT B'];
                         m2[sec1] = (m2[sec1] || 0) + 1;
                         m2[sec2] = (m2[sec2] || 0) - 1;
-                        m2.teamA = m2['PT A'] + m2['OT A'];
-                        m2.teamB = m2['PT B'] + m2['OT B'];
+                        if (isSouth) {
+                            m1.teamA = (m1['PT 2'] || 0) + (m1['OT 2'] || 0) + (m1['南2'] || 0);
+                            m1.teamB = (m1['PT 3'] || 0) + (m1['OT 3'] || 0) + (m1['南3'] || 0);
+                            m2.teamA = (m2['PT 2'] || 0) + (m2['OT 2'] || 0) + (m2['南2'] || 0);
+                            m2.teamB = (m2['PT 3'] || 0) + (m2['OT 3'] || 0) + (m2['南3'] || 0);
+                        } else {
+                            m1.teamA = (m1['PT A'] || 0) + (m1['OT A'] || 0);
+                            m1.teamB = (m1['PT B'] || 0) + (m1['OT B'] || 0);
+                            m2.teamA = (m2['PT A'] || 0) + (m2['OT A'] || 0);
+                            m2.teamB = (m2['PT B'] || 0) + (m2['OT B'] || 0);
+                        }
                         const afterC = calcDayImbalanceCost(d1, avgInfo, m1) + calcDayImbalanceCost(d2, avgInfo, m2);
                         const g = beforePairCost - afterC;
                         secPairGainCache[key] = g;
@@ -4710,14 +4781,14 @@ class ShiftScheduler {
 
                     // セクション間の過不足が改善するペアのみを高速フィルタリングして検証
                     for (const s1 of cands1) {
-                        const sec1 = this.staffList[s1].section || 'その他';
+                        const sec1 = getStaffSec(s1);
                         const half1 = !!this.staffList[s1].isHalf;
                         let s1Checked = false;
                         let s1Valid = false;
 
                         for (const s2 of cands2) {
                             if (!!this.staffList[s2].isHalf !== half1) continue;
-                            const sec2 = this.staffList[s2].section || 'その他';
+                            const sec2 = getStaffSec(s2);
                             if (sec1 === sec2) continue;
 
                             const gain = evalSecPairGain(sec1, sec2);
