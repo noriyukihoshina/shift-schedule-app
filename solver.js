@@ -4018,9 +4018,12 @@ class ShiftScheduler {
         const totalTeamOffSum = dailySameTeamOffCounts.reduce((acc, v) => acc + v, 0);
         const expectedTeamAvgOffAfterSelf = (totalTeamOffSum + neededOff) / numDays;
 
-        function calcChoiceScore(days, isConsecutive = false) {
+        // ★ ユーザー指示:「勤務が短くなるように可能な限り2〜3日に一度公休を入れる」
+        // 2連休の無条件優遇を撤廃し、2〜3日おきに公休が配置される分散公休を優先
+        function calcChoiceScore(days, isConsecutive = false, isDistributed = false) {
             let score = 0;
-            if (isConsecutive) score += 80;
+            if (isDistributed) score += 60;
+            if (isConsecutive) score -= 25; // 2連休は残りが5連勤になりやすいため抑制
 
             for (const d of days) {
                 const currentOff = dailyOffCounts[d];
@@ -4067,10 +4070,12 @@ class ShiftScheduler {
                 }
                 if (staff.isFullTime) score -= dailyFullTimeOffCounts[d] * 25;
 
-                const prev = (d === 0) ? ((staff.prevDays && staff.prevDays.length) ? staff.prevDays[staff.prevDays.length - 1] : '') : self.grid[s][d - 1].symbol;
-                const next = (d + 1 < numDays) ? self.grid[s][d + 1].symbol : '';
-                if (isHolidaySymbol(prev)) score += 20;
-                if (isHolidaySymbol(next)) score += 20;
+                // 2〜3日前後に公休がある場合（適度な分散）にボーナス
+                const dPrev2 = d - 2, dPrev3 = d - 3, dNext2 = d + 2, dNext3 = d + 3;
+                if (dPrev2 >= 0 && isHolidaySymbol(self.grid[s][dPrev2].symbol)) score += 25;
+                if (dPrev3 >= 0 && isHolidaySymbol(self.grid[s][dPrev3].symbol)) score += 25;
+                if (dNext2 < numDays && isHolidaySymbol(self.grid[s][dNext2].symbol)) score += 25;
+                if (dNext3 < numDays && isHolidaySymbol(self.grid[s][dNext3].symbol)) score += 25;
             }
             return score;
         }
@@ -4087,27 +4092,22 @@ class ShiftScheduler {
 
             if (countNeeded === 1) {
                 blankDays.forEach(d => {
-                    choices.push({ days: [d], score: calcChoiceScore([d], false) });
+                    choices.push({ days: [d], score: calcChoiceScore([d], false, false) });
                 });
                 choices.sort((a, b) => b.score - a.score);
                 return choices.map(c => c.days);
             }
 
             if (countNeeded === 2) {
+                // ★ ユーザー指示:「勤務が短くなるように可能な限り2〜3日に一度公休を入れる」
+                // d2 - d1 が 2〜4日（間隔2〜3日出勤）の分散パターンを最優先
                 for (let i = 0; i < blankDays.length; i++) {
                     for (let j = i + 1; j < blankDays.length; j++) {
                         const d1 = blankDays[i], d2 = blankDays[j];
-                        if (d2 === d1 + 1) {
-                            choices.push({ days: [d1, d2], score: calcChoiceScore([d1, d2], true) });
-                        }
-                    }
-                }
-                for (let i = 0; i < blankDays.length; i++) {
-                    for (let j = i + 1; j < blankDays.length; j++) {
-                        const d1 = blankDays[i], d2 = blankDays[j];
-                        if (d2 !== d1 + 1) {
-                            choices.push({ days: [d1, d2], score: calcChoiceScore([d1, d2], false) });
-                        }
+                        const gap = d2 - d1;
+                        const isDist = (gap >= 2 && gap <= 4);
+                        const isConsec = (gap === 1);
+                        choices.push({ days: [d1, d2], score: calcChoiceScore([d1, d2], isConsec, isDist) });
                     }
                 }
                 choices.sort((a, b) => b.score - a.score);
