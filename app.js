@@ -5403,7 +5403,20 @@ document.addEventListener('DOMContentLoaded', () => {
                         if (displaySym === '早') specialCls = ' cell-special-early';
                         else if (displaySym === '遅') specialCls = ' cell-special-late';
                         else if (displaySym === 'E') specialCls = ' cell-special-eve';
-                        bodyHtml += `<td class="${cls} ${thickCls}${specialCls}" data-sym="${displaySym}" data-s="${s}" data-d="${d}">${displaySym}</td>`;
+
+                        // ★ ユーザー指示: 1勤（前後が休日となる単発勤務）の網掛けハイライト表示
+                        let isSingleWork = false;
+                        if (isWorkSymbol(displaySym)) {
+                            const prevSym = (d === 0) ? ((staff.prevDays && staff.prevDays.length) ? staff.prevDays[staff.prevDays.length - 1] : '') : (grid[s][d - 1] ? (grid[s][d - 1].symbol || '') : '');
+                            const nextSym = (d + 1 < NUM_DAYS) ? (grid[s][d + 1] ? (grid[s][d + 1].symbol || '') : '') : '';
+                            if (isHolidaySymbol(prevSym) && (d + 1 < NUM_DAYS ? isHolidaySymbol(nextSym) : true)) {
+                                isSingleWork = true;
+                            }
+                        }
+                        const singleWorkCls = isSingleWork ? ' cell-single-work' : '';
+                        const titleText = isSingleWork ? '💡 【1勤（単発勤務）】前日・翌日が休日となっています（原則作らないが回避不能時は許容）' : (isFixedCell ? '🔒 事前固定希望枠（赤字・太字保持）' : (isRef ? '🌴 自動配分リフ（通常編集自由）' : 'システム自動配置'));
+
+                        bodyHtml += `<td class="${cls} ${thickCls}${specialCls}${singleWorkCls}" data-sym="${displaySym}" data-s="${s}" data-d="${d}" title="${titleText}">${displaySym}</td>`;
                     }
                     bodyHtml += `
                         <td class="stat-cell" data-s="${s}" data-stat="work">${staffStat.workDays}</td>
@@ -5442,8 +5455,20 @@ document.addEventListener('DOMContentLoaded', () => {
                     if (displaySym === '早') specialCls = ' cell-special-early';
                     else if (displaySym === '遅') specialCls = ' cell-special-late';
                     else if (displaySym === 'E') specialCls = ' cell-special-eve';
-                    const titleText = isCellFixed ? '🔒 事前固定希望枠（赤字・太字保持）' : (isRef ? '🌴 自動配分リフ（通常編集自由）' : 'システム自動配置');
-                    bodyHtml += `<td class="${cls} ${thickCls} ${rowBottomCls}${specialCls}" data-sym="${displaySym}" data-s="${s}" data-d="${d}" title="${titleText}">${displaySym}</td>`;
+
+                    // ★ ユーザー指示: 1勤（前後が休日となる単発勤務）の網掛けハイライト表示
+                    let isSingleWork = false;
+                    if (isWorkSymbol(displaySym)) {
+                        const prevSym = (d === 0) ? ((staff.prevDays && staff.prevDays.length) ? staff.prevDays[staff.prevDays.length - 1] : '') : (grid[s][d - 1] ? (grid[s][d - 1].symbol || '') : '');
+                        const nextSym = (d + 1 < NUM_DAYS) ? (grid[s][d + 1] ? (grid[s][d + 1].symbol || '') : '') : '';
+                        if (isHolidaySymbol(prevSym) && (d + 1 < NUM_DAYS ? isHolidaySymbol(nextSym) : true)) {
+                            isSingleWork = true;
+                        }
+                    }
+                    const singleWorkCls = isSingleWork ? ' cell-single-work' : '';
+                    const titleText = isSingleWork ? '💡 【1勤（単発勤務）】前日・翌日が休日となっています（原則作らないが回避不能時は許容）' : (isCellFixed ? '🔒 事前固定希望枠（赤字・太字保持）' : (isRef ? '🌴 自動配分リフ（通常編集自由）' : 'システム自動配置'));
+
+                    bodyHtml += `<td class="${cls} ${thickCls} ${rowBottomCls}${specialCls}${singleWorkCls}" data-sym="${displaySym}" data-s="${s}" data-d="${d}" title="${titleText}">${displaySym}</td>`;
                 }
 
                 bodyHtml += `
@@ -8082,12 +8107,25 @@ function renderMasterIntegrationView() {
                     const conflictCls = hasConflict ? ' conflict-highlight' : '';
                     const conflictReasons = hasConflict ? sCheck.dayConflicts[d].join(' / ') : '';
                     const conflictTitle = hasConflict ? `⚠️ 【制約違反】${conflictReasons}` : '';
-                    const titleText = conflictTitle || (isCellFixed ? '🔒 事前固定希望枠（赤字・クリックで修正可能）' : 'システム自動配置（クリックで修正可能）');
-                    const bgStyle = (hasConflict || sym === '早' || sym === '遅' || sym === 'E') ? '' : 'background:#ffffff;';
+
+                    // ★ ユーザー指示: 1勤（前後が休日となる単発勤務）の網掛けハイライト表示
+                    let isSingleWork = false;
+                    if (!hasConflict && isWorkSymbol(sym)) {
+                        const prevSym = (d === 0) ? ((s.prevDays && s.prevDays.length) ? s.prevDays[s.prevDays.length - 1] : '') : sRowSyms[d - 1];
+                        const nextSym = (d + 1 < numDays) ? sRowSyms[d + 1] : '';
+                        if (isHolidaySymbol(prevSym) && (d + 1 < numDays ? isHolidaySymbol(nextSym) : true)) {
+                            isSingleWork = true;
+                        }
+                    }
+                    const singleWorkCls = isSingleWork ? ' cell-single-work' : '';
+                    const singleWorkTitle = isSingleWork ? '💡 【1勤（単発勤務）】前日・翌日が休日となっています（原則作らないが回避不能時は許容）' : '';
+
+                    const titleText = conflictTitle || singleWorkTitle || (isCellFixed ? '🔒 事前固定希望枠（赤字・クリックで修正可能）' : 'システム自動配置（クリックで修正可能）');
+                    const bgStyle = (hasConflict || isSingleWork || sym === '早' || sym === '遅' || sym === 'E') ? '' : 'background:#ffffff;';
 
                     const fixedCls = isCellFixed ? 'fixed-cell' : (isRef ? 'auto-ref-cell' : 'auto-cell');
 
-                    html += `<td class="${thickCls} ${fixedCls}${specialCls}${conflictCls} master-editable-cell col-day-fixed" data-sym="${sym}" data-floor="${fc.id}" data-is-st="${item.isST ? '1' : '0'}" data-is-ha="${item.isHa ? '1' : '0'}" data-ha-idx="${item.lifeStaffIdx !== undefined ? item.lifeStaffIdx : -1}" data-staff-id="${s.id || ''}" data-staff-name="${escapeHtmlText(s.name)}" data-day="${d}" data-conflict-reason="${escapeHtmlText(conflictReasons)}" title="${escapeHtmlText(titleText)}" style="width:52px; min-width:52px; max-width:52px; ${bgStyle} color:${color}; font-weight:700; border-bottom:1px solid #e2e8f0; text-align:center; cursor:pointer;">${sym}</td>`;
+                    html += `<td class="${thickCls} ${fixedCls}${specialCls}${conflictCls}${singleWorkCls} master-editable-cell col-day-fixed" data-sym="${sym}" data-floor="${fc.id}" data-is-st="${item.isST ? '1' : '0'}" data-is-ha="${item.isHa ? '1' : '0'}" data-ha-idx="${item.lifeStaffIdx !== undefined ? item.lifeStaffIdx : -1}" data-staff-id="${s.id || ''}" data-staff-name="${escapeHtmlText(s.name)}" data-day="${d}" data-conflict-reason="${escapeHtmlText(conflictReasons)}" title="${escapeHtmlText(titleText)}" style="width:52px; min-width:52px; max-width:52px; ${bgStyle} color:${color}; font-weight:700; border-bottom:1px solid #e2e8f0; text-align:center; cursor:pointer;">${sym}</td>`;
                 }
 
                 // ★ ユーザー指示: 公休を丸にするなどして公休数が8日以外になった場合、ブルー網掛けでエラー検知

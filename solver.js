@@ -4018,11 +4018,12 @@ class ShiftScheduler {
         const totalTeamOffSum = dailySameTeamOffCounts.reduce((acc, v) => acc + v, 0);
         const expectedTeamAvgOffAfterSelf = (totalTeamOffSum + neededOff) / numDays;
 
-        // ★ ユーザー指示:「勤務が短くなるように可能な限り2〜3日に一度公休を入れる」
-        // 2連休の無条件優遇を撤廃し、2〜3日おきに公休が配置される分散公休を優先
-        function calcChoiceScore(days, isConsecutive = false, isDistributed = false) {
+        // ★ ユーザー指示:「勤務が短くなるように可能な限り2〜3日に一度公休を入れる」「1勤務も原則作らない」
+        // 2連休の無条件優遇を撤廃し、2〜3連勤を挟んだ分散公休を優先。1勤（単発勤務）を強力に抑制。
+        function calcChoiceScore(days, isConsecutive = false, isDistributed = false, isSingleWorkTrap = false) {
             let score = 0;
-            if (isDistributed) score += 60;
+            if (isDistributed) score += 70; // 2〜3連勤を挟む理想的分散配置
+            if (isSingleWorkTrap) score -= 80; // 中間に1勤（単発）ができてしまうパターンを強力抑制
             if (isConsecutive) score -= 25; // 2連休は残りが5連勤になりやすいため抑制
 
             for (const d of days) {
@@ -4070,12 +4071,17 @@ class ShiftScheduler {
                 }
                 if (staff.isFullTime) score -= dailyFullTimeOffCounts[d] * 25;
 
-                // 2〜3日前後に公休がある場合（適度な分散）にボーナス
-                const dPrev2 = d - 2, dPrev3 = d - 3, dNext2 = d + 2, dNext3 = d + 3;
-                if (dPrev2 >= 0 && isHolidaySymbol(self.grid[s][dPrev2].symbol)) score += 25;
-                if (dPrev3 >= 0 && isHolidaySymbol(self.grid[s][dPrev3].symbol)) score += 25;
-                if (dNext2 < numDays && isHolidaySymbol(self.grid[s][dNext2].symbol)) score += 25;
-                if (dNext3 < numDays && isHolidaySymbol(self.grid[s][dNext3].symbol)) score += 25;
+                // 1勤（単発勤務: 休 ○ 休）の抑制: 前後2日離れたセルに公休があると中間が1勤になるためペナルティ
+                const dPrev2 = d - 2, dNext2 = d + 2;
+                if (dPrev2 >= 0 && isHolidaySymbol(self.grid[s][dPrev2].symbol)) score -= 70;
+                if (dNext2 < numDays && isHolidaySymbol(self.grid[s][dNext2].symbol)) score -= 70;
+
+                // 3〜4日離れた公休（間が2〜3連勤）には加点ボーナス
+                const dPrev3 = d - 3, dPrev4 = d - 4, dNext3 = d + 3, dNext4 = d + 4;
+                if (dPrev3 >= 0 && isHolidaySymbol(self.grid[s][dPrev3].symbol)) score += 35;
+                if (dPrev4 >= 0 && isHolidaySymbol(self.grid[s][dPrev4].symbol)) score += 30;
+                if (dNext3 < numDays && isHolidaySymbol(self.grid[s][dNext3].symbol)) score += 35;
+                if (dNext4 < numDays && isHolidaySymbol(self.grid[s][dNext4].symbol)) score += 30;
             }
             return score;
         }
@@ -4092,22 +4098,23 @@ class ShiftScheduler {
 
             if (countNeeded === 1) {
                 blankDays.forEach(d => {
-                    choices.push({ days: [d], score: calcChoiceScore([d], false, false) });
+                    choices.push({ days: [d], score: calcChoiceScore([d], false, false, false) });
                 });
                 choices.sort((a, b) => b.score - a.score);
                 return choices.map(c => c.days);
             }
 
             if (countNeeded === 2) {
-                // ★ ユーザー指示:「勤務が短くなるように可能な限り2〜3日に一度公休を入れる」
-                // d2 - d1 が 2〜4日（間隔2〜3日出勤）の分散パターンを最優先
+                // ★ ユーザー指示:「勤務が短くなるように可能な限り2〜3日に一度公休を入れる」「1勤務も原則作らない」
+                // gap===3（間が2連勤）または gap===4（間が3連勤）を最優先
                 for (let i = 0; i < blankDays.length; i++) {
                     for (let j = i + 1; j < blankDays.length; j++) {
                         const d1 = blankDays[i], d2 = blankDays[j];
                         const gap = d2 - d1;
-                        const isDist = (gap >= 2 && gap <= 4);
+                        const isIdealDist = (gap === 3 || gap === 4);
+                        const isSingleWorkTrap = (gap === 2);
                         const isConsec = (gap === 1);
-                        choices.push({ days: [d1, d2], score: calcChoiceScore([d1, d2], isConsec, isDist) });
+                        choices.push({ days: [d1, d2], score: calcChoiceScore([d1, d2], isConsec, isIdealDist, isSingleWorkTrap) });
                     }
                 }
                 choices.sort((a, b) => b.score - a.score);
