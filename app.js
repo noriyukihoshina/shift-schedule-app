@@ -7096,9 +7096,10 @@ document.addEventListener('DOMContentLoaded', () => {
             if (st.isUnused || st.isSectionChief) return;
             const sec = st.lifeSection || '';
             const ha = st.haSection || '';
-            if (sec === '通所' || sec === 'Cl2' || ha === 'ハ3' || ha === 'ハ南' || ha === 'ハ4') {
+            const isCl2 = (sec === 'Cl2') || (st.isCL2 === true) || (st.isCl2 === true);
+            if (sec === '通所' || isCl2 || ha === 'ハ3' || ha === 'ハ南' || ha === 'ハ4') {
                 tsushoStaff.push(s);
-                if (sec === 'Cl2') cl2Staff.push(s);
+                if (isCl2) cl2Staff.push(s);
             }
         });
 
@@ -7229,6 +7230,61 @@ document.addEventListener('DOMContentLoaded', () => {
                 if (swapped) break;
             }
             if (!swapped) break;
+        }
+
+        // ★ Cl2スタッフ（2名以上）の同日休み（月〜土）の最終安全チェック & 自動修復
+        if (cl2Staff.length >= 2) {
+            for (const d of tsushoWorkingDays) {
+                const allOff = cl2Staff.every(s => {
+                    const cell = targetGrid[s][d];
+                    const sym = (cell && typeof cell === 'object') ? cell.symbol : (cell || '');
+                    return isHolidaySymbol(sym);
+                });
+                if (allOff) {
+                    for (const s of cl2Staff) {
+                        const cellD = targetGrid[s][d];
+                        const symD = (cellD && typeof cellD === 'object') ? cellD.symbol : (cellD || '');
+                        if (cellD && cellD.isFixed) continue;
+                        if (symD !== SYMBOLS.OFF) continue;
+
+                        for (const dOther of tsushoWorkingDays) {
+                            if (dOther === d) continue;
+                            const cellOther = targetGrid[s][dOther];
+                            const symOther = (cellOther && typeof cellOther === 'object') ? cellOther.symbol : (cellOther || '');
+                            if (cellOther && cellOther.isFixed) continue;
+                            if (symOther !== SYMBOLS.WORK) continue;
+
+                            const otherCl2WorkingAtOther = cl2Staff.some(o => {
+                                if (o === s) return false;
+                                const oCell = targetGrid[o][dOther];
+                                const oSym = (oCell && typeof oCell === 'object') ? oCell.symbol : (oCell || '');
+                                return isWorkSymbol(oSym);
+                            });
+                            if (!otherCl2WorkingAtOther) continue;
+
+                            // スワップ試行
+                            targetGrid[s][d] = { symbol: SYMBOLS.WORK, isFixed: false };
+                            targetGrid[s][dOther] = { symbol: SYMBOLS.OFF, isFixed: false };
+
+                            let valid = false;
+                            if (lastScheduler && typeof lastScheduler.isStaffHardValid === 'function') {
+                                const origGrid = lastScheduler.grid;
+                                lastScheduler.grid = targetGrid;
+                                valid = lastScheduler.isStaffHardValid(s);
+                                lastScheduler.grid = origGrid;
+                            }
+                            if (valid) {
+                                totalSwaps++;
+                                break;
+                            } else {
+                                targetGrid[s][d] = cellD;
+                                targetGrid[s][dOther] = cellOther;
+                            }
+                        }
+                        break;
+                    }
+                }
+            }
         }
 
         const updatedStats = calculateGridStats(targetGrid);

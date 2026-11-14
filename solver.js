@@ -1883,21 +1883,87 @@ class ShiftScheduler {
             }
         }
 
-        // 4. Cl2 スタッフのリストアップ
+        // 4. Cl2 スタッフのリストアップ（lifeSection === 'Cl2' または isCL2 トグルON）
         const cl2Staff = [];
         for (let s = 0; s < this.numStaff; s++) {
             if (this.staffList[s].isUnused) continue;
-            if (this.staffList[s].lifeSection === 'Cl2') cl2Staff.push(s);
+            const st = this.staffList[s];
+            if (st.lifeSection === 'Cl2' || st.isCL2 === true || st.isCl2 === true) {
+                cl2Staff.push(s);
+            }
         }
+
+        // ★ 通所トレーナー（Cl2）同士の稼働日同日休み（リフ・有休・公休）を物理的に解消
+        this.repairCl2SimultaneousOff(cl2Staff);
 
         // 5. 通所出勤実数の厳格平準化（月〜土の通所出勤ブレを極小化）
         this.balanceLifeWorkforceDirectly(cl2Staff);
+
+        // ★ 平準化後にも再度Cl2同日休みがないかを最終保証
+        this.repairCl2SimultaneousOff(cl2Staff);
 
         return {
             success: true,
             grid: this.grid,
             stats: this.calculateStats()
         };
+    }
+
+    /**
+     * 生活期: 通所トレーナー（Cl2）同士の稼働日（月〜土）同日休み（リフ・有休・公休）を物理的に解消・直交化
+     */
+    repairCl2SimultaneousOff(cl2Staff = []) {
+        if (!cl2Staff || cl2Staff.length < 2) return;
+        const dates = this.dates || [];
+
+        // 月〜土の稼働日
+        const workingDays = [];
+        for (let d = 0; d < this.numDays; d++) {
+            const di = dates[d];
+            const isSun = di ? (di.wIdx === 6) : (d % 7 === 6);
+            if (!isSun) workingDays.push(d);
+        }
+
+        // 月〜土で、Cl2スタッフ全員が同時に休んでいる（公休・有休・リフ等）日を検出・スワップ
+        for (let pass = 0; pass < 10; pass++) {
+            let conflictFound = false;
+
+            for (const d of workingDays) {
+                const allOff = cl2Staff.every(s => isHolidaySymbol(this.grid[s][d].symbol));
+                if (!allOff) continue;
+
+                conflictFound = true;
+                // 未固定の公休を持っているCl2スタッフを探し、出勤可能な他稼働日とスワップ
+                let repaired = false;
+                for (const s of cl2Staff) {
+                    if (this.grid[s][d].isFixed || this.grid[s][d].symbol !== SYMBOLS.OFF) continue;
+
+                    for (const dOther of workingDays) {
+                        if (dOther === d) continue;
+                        if (this.grid[s][dOther].symbol !== SYMBOLS.WORK || this.grid[s][dOther].isFixed) continue;
+
+                        // dOther で、別のCl2スタッフが出勤している日を優先
+                        const otherWorking = cl2Staff.some(o => o !== s && isWorkSymbol(this.grid[o][dOther].symbol));
+                        if (!otherWorking) continue;
+
+                        // スワップ試行
+                        this.setSymbol(s, d, SYMBOLS.WORK, false);
+                        this.setSymbol(s, dOther, SYMBOLS.OFF, false);
+
+                        if (this.isStaffHardValid(s)) {
+                            repaired = true;
+                            break;
+                        } else {
+                            // ロールバック
+                            this.setSymbol(s, d, SYMBOLS.OFF, false);
+                            this.setSymbol(s, dOther, SYMBOLS.WORK, false);
+                        }
+                    }
+                    if (repaired) break;
+                }
+            }
+            if (!conflictFound) break;
+        }
     }
 
     /**
@@ -3223,18 +3289,31 @@ class ShiftScheduler {
                     }
                 }
             } else {
-                // 安全なフォールバック: 各週の未固定セルに公休を必ず割り振る（公休0日放置の完全排除）
+                // 安全なフォールバック: 各週の未固定セルに公休を必ず均等に割り振る（各週2日・合計8.0日厳格死守）
                 let curOff = 0;
                 for (let d = 0; d < this.numDays; d++) {
-                    if (this.grid[s][d].isFixed && isHolidaySymbol(this.grid[s][d].symbol)) curOff += 1.0;
+                    const sym = this.grid[s][d].symbol;
+                    if (this.grid[s][d].isFixed) {
+                        if (sym === SYMBOLS.OFF) curOff += 1.0;
+                        else if (isHalfDuty(sym)) curOff += 0.5;
+                    }
                 }
                 const neededMore = Math.max(0, Math.round(stdHolidays - curOff));
 
                 let added = 0;
+                // 第1週〜第4週の全週において最低2日の公休を確保する
                 for (let w = 0; w < this.weekSpans.length && added < neededMore; w++) {
                     const wSpan = this.weekSpans[w];
+                    let wOff = 0;
+                    wSpan.forEach(d => {
+                        const sym = this.grid[s][d].symbol;
+                        if (sym === SYMBOLS.OFF) wOff += 1.0;
+                        else if (isHalfDuty(sym)) wOff += 0.5;
+                    });
+                    const targetWOff = (wSpan.length >= 6) ? 2 : 1;
+                    const wNeeded = Math.max(0, targetWOff - wOff);
                     const blanks = wSpan.filter(d => !this.grid[s][d].isFixed && this.grid[s][d].symbol === '');
-                    const toAdd = Math.min(blanks.length, Math.min(neededMore - added, wSpan.length >= 6 ? 2 : 1));
+                    const toAdd = Math.min(blanks.length, Math.min(neededMore - added, wNeeded));
                     for (let b = 0; b < toAdd; b++) {
                         this.setSymbol(s, blanks[b], SYMBOLS.OFF, false);
                         added++;
@@ -4069,107 +4148,10 @@ class ShiftScheduler {
         }
 
         let bestSchedule = null;
-        let searchSteps = 0;
-        const MAX_SEARCH_STEPS = 2000;
 
-        // ★ 枝刈り高速化: 評価スコア上位12配分パターンに限定
-        const patternsToTry = distributionPatterns.length > 12 ? distributionPatterns.slice(0, 12) : distributionPatterns;
-
-        // ★ 即時連勤枝刈り（Pruning）判定ヘルパー: verifyStaffScheduleと100%完全同期
-        function isPartialConsecutiveValid(wIdx, assignedDaysSet) {
-            const wSpan = weekSpans[wIdx];
-            const endDay = wSpan[wSpan.length - 1];
-
-            const partialSeq = [];
-            const pDays = staff.prevDays || [];
-            const pLen = pDays.length;
-            const firstDateObj = (self.dates && self.dates[0]) ? new Date(self.dates[0].dateStr + 'T00:00:00') : null;
-            for (let p = 0; p < pLen; p++) {
-                let pSym = pDays[p] || '';
-                let isSatOrSun = false;
-                if (firstDateObj) {
-                    const prevD = new Date(firstDateObj);
-                    prevD.setDate(prevD.getDate() - (pLen - p));
-                    const dow = prevD.getDay();
-                    if (dow === 0 || dow === 6) isSatOrSun = true;
-                } else {
-                    if (pLen === 7 && (p === 3 || p === 4)) isSatOrSun = true;
-                    if (pLen === 5 && (p === 1 || p === 2)) isSatOrSun = true;
-                }
-                if (staff.isSectionChief && isSatOrSun && isWorkSymbol(pSym)) {
-                    pSym = SYMBOLS.OFF;
-                }
-                partialSeq.push(pSym);
-            }
-
-            for (let d = 0; d <= endDay; d++) {
-                let sym = '';
-                if (self.grid[s][d].isFixed || self.grid[s][d].isAfterPreSpecial) {
-                    sym = self.grid[s][d].symbol;
-                } else if (assignedDaysSet.has(d)) {
-                    sym = SYMBOLS.OFF;
-                } else {
-                    sym = SYMBOLS.WORK;
-                }
-                partialSeq.push(sym);
-            }
-
-            // 1. 特殊勤務翌日休制約
-            if (!staff.isSectionChief) {
-                for (let i = 0; i < partialSeq.length - 1; i++) {
-                    if (isRestrictedSpecial(partialSeq[i]) && !isHolidaySymbol(partialSeq[i + 1])) {
-                        const dCur = i - pLen;
-                        const dNext = dCur + 1;
-                        const isFixedConflict = (dCur >= 0 && dNext < self.numDays && self.grid[s][dCur].isFixed && self.grid[s][dNext].isFixed);
-                        if (!isFixedConflict) return false;
-                    }
-                }
-            }
-
-            // 2. 連勤制限（公休間隔カウント。有休やリフがあっても公休ではないためカウント継続）
-            let consec = 0;
-            for (let i = 0; i < partialSeq.length; i++) {
-                if (partialSeq[i] === '') {
-                    consec = 0;
-                } else if (!isPurePublicOffSymbol(partialSeq[i])) {
-                    consec++;
-                    if (consec > maxConsec) return false;
-                } else {
-                    consec = 0;
-                }
-            }
-
-            // 3. 5連勤後の2連休制約（allow6Consec以外）
-            if (!staff.allow6Consec) {
-                let workStreak = 0;
-                for (let i = 0; i < partialSeq.length; i++) {
-                    if (isWorkSymbol(partialSeq[i])) {
-                        workStreak++;
-                        if (workStreak === 5) {
-                            for (let offOffset = 1; offOffset <= 2; offOffset++) {
-                                const checkIdx = i + offOffset;
-                                if (checkIdx < partialSeq.length) {
-                                    const sym = partialSeq[checkIdx];
-                                    if (sym !== '' && !isHolidaySymbol(sym)) return false;
-                                }
-                            }
-                        }
-                    } else {
-                        workStreak = 0;
-                    }
-                }
-            }
-
-            return true;
-        }
-
-        for (const dist of patternsToTry) {
-            if (bestSchedule !== null || searchSteps > MAX_SEARCH_STEPS) break;
-
-            function searchWeek(wIdx, assignedOffDays, assignedSet) {
+        for (const dist of distributionPatterns) {
+            function searchWeek(wIdx, assignedOffDays) {
                 if (bestSchedule !== null) return;
-                searchSteps++;
-                if (searchSteps > MAX_SEARCH_STEPS) return;
 
                 if (wIdx === totalWeeks) {
                     const gridSymbols = new Array(numDays);
@@ -4179,7 +4161,7 @@ class ShiftScheduler {
                             gridSymbols[d] = self.grid[s][d].symbol;
                             if (gridSymbols[d] === SYMBOLS.OFF) currentOff += 1.0;
                             else if (gridSymbols[d] === SYMBOLS.HALF_WORK_OFF || gridSymbols[d] === SYMBOLS.HALF_OFF_WORK) currentOff += 0.5;
-                        } else if (assignedSet.has(d)) {
+                        } else if (assignedOffDays.includes(d)) {
                             gridSymbols[d] = SYMBOLS.OFF;
                             currentOff += 1.0;
                         } else {
@@ -4201,21 +4183,13 @@ class ShiftScheduler {
                 const neededInThisWeek = dist[wIdx];
                 const choices = getWeekHolidayChoices(wIdx, neededInThisWeek);
                 for (const choice of choices) {
-                    // ★ 週跨ぎ連勤枝刈り: choice を追加した部分スケジュールが連勤違反なら即枝刈り
-                    const nextSet = new Set(assignedSet);
-                    for (const cd of choice) nextSet.add(cd);
-
-                    if (!isPartialConsecutiveValid(wIdx, nextSet)) {
-                        continue; // ★ 即座に枝刈り！無駄な深掘り再帰を完全遮断
-                    }
-
                     const nextAssigned = assignedOffDays.concat(choice);
-                    searchWeek(wIdx + 1, nextAssigned, nextSet);
+                    searchWeek(wIdx + 1, nextAssigned);
                     if (bestSchedule !== null) return;
                 }
             }
 
-            searchWeek(0, [], new Set());
+            searchWeek(0, []);
             if (bestSchedule !== null) break;
         }
 
@@ -4276,16 +4250,29 @@ class ShiftScheduler {
             }
         }
 
-        // 2. 連勤制限（公休間隔カウント。有休やリフがあっても公休ではないためカウント継続！）
-        let consec = 0;
+        // 2. 連勤制限（連続勤務日数: 出勤日（○、早、遅、E、8時等）の連続。休・有・リフは出勤ではないため連勤リセット！）
+        let workStreak = 0;
         for (let i = 0; i < sequence.length; i++) {
-            if (sequence[i] === '') {
-                consec = 0;
-            } else if (!isPurePublicOffSymbol(sequence[i])) {
-                consec++;
-                if (consec > maxConsec) return false;
+            if (sequence[i] !== '' && isWorkSymbol(sequence[i])) {
+                workStreak++;
+                if (workStreak > maxConsec) return false;
             } else {
-                consec = 0;
+                workStreak = 0;
+            }
+        }
+
+        // 2-2. 公休間隔原則（公休から公休の間隔は最大6日以内）
+        // ※ 有給休暇やリフレッシュ休暇は労働基準法上の休日に該当しないため、公休間隔をリセットできない
+        let publicOffGap = 0;
+        for (let i = 0; i < sequence.length; i++) {
+            const sym = sequence[i];
+            if (sym === '') {
+                publicOffGap = 0;
+            } else if (!isPurePublicOffSymbol(sym)) {
+                publicOffGap++;
+                if (publicOffGap > 6) return false;
+            } else {
+                publicOffGap = 0;
             }
         }
 
@@ -5430,7 +5417,7 @@ class ShiftScheduler {
         // --- 4. 単発勤務「休 ○ 休」の再撲滅 ---
         this.eliminateSingleDayWork();
 
-        // --- 5. 連勤違反（公休間隔上限超過・上限5連勤違反）のスマート自動リペア ---
+        // --- 5. 連勤違反（上限5連勤違反）のスマート自動リペア ---
         // ユーザー指示:「公休をひとつずらせば済む話です。組んだ後に微修正するシステムは組めないの？」
         for (let pass = 0; pass < 3; pass++) {
             let fixedConsec = false;
@@ -5448,7 +5435,7 @@ class ShiftScheduler {
                     let vEndSeq = -1;
                     const maxAllowed = this.staffList[s].allow6Consec ? 6 : 5;
                     for (let idx = 0; idx < sequence.length; idx++) {
-                        if (!isPurePublicOffSymbol(sequence[idx])) {
+                        if (sequence[idx] !== '' && isWorkSymbol(sequence[idx])) {
                             streak++;
                             if (streak > maxAllowed) {
                                 vEndSeq = idx;
@@ -6015,17 +6002,29 @@ class ShiftScheduler {
             }
         }
 
-        // 連勤制限 (公休から公休の間のカウント。通常最大5日、allow6Consecなら最大6日)
+        // 連勤制限 (出勤連続日数のカウント。通常最大5日、allow6Consecなら最大6日。休・有・リフは出勤ではないため連勤リセット)
         const maxConsec = staff.allow6Consec ? 6 : 5;
-        let consec = 0;
+        let workConsec = 0;
         for (let idx = 0; idx < sequence.length; idx++) {
-            if (sequence[idx] === '') {
-                consec = 0;
-            } else if (!isPurePublicOffSymbol(sequence[idx])) {
-                consec++;
-                if (consec > maxConsec) return false;
+            if (sequence[idx] !== '' && isWorkSymbol(sequence[idx])) {
+                workConsec++;
+                if (workConsec > maxConsec) return false;
             } else {
-                consec = 0;
+                workConsec = 0;
+            }
+        }
+
+        // 公休間隔原則（公休から公休の間隔は最大6日以内。有休やリフは公休にあたらないため公休間隔をリセットしない）
+        let publicOffGap = 0;
+        for (let idx = 0; idx < sequence.length; idx++) {
+            const sym = sequence[idx];
+            if (sym === '') {
+                publicOffGap = 0;
+            } else if (!isPurePublicOffSymbol(sym)) {
+                publicOffGap++;
+                if (publicOffGap > 6) return false;
+            } else {
+                publicOffGap = 0;
             }
         }
 
@@ -6203,27 +6202,41 @@ class ShiftScheduler {
             }
             for (let d = 0; d < this.numDays; d++) sequence.push(this.grid[s][d].symbol);
 
-            let streak = 0;
-            let startIdx = 0;
+            // 3-1. 公休間隔チェック（最大6日以内。有休やリフは公休にあたらないため公休間隔をリセットしない）
+            let publicOffGap = 0;
+            let gapStartIdx = 0;
             for (let idx = 0; idx < sequence.length; idx++) {
                 if (sequence[idx] === '') {
-                    streak = 0;
+                    publicOffGap = 0;
                 } else if (!isPurePublicOffSymbol(sequence[idx])) {
-                    if (streak === 0) startIdx = idx;
-                    streak++;
-                    if (streak > 6) {
-                        const sLabel = startIdx < pLen ? `前${pLen - startIdx}日` : this.formatDateLabel(startIdx - pLen);
+                    if (publicOffGap === 0) gapStartIdx = idx;
+                    publicOffGap++;
+                    if (publicOffGap > 6) {
+                        const sLabel = gapStartIdx < pLen ? `前${pLen - gapStartIdx}日` : this.formatDateLabel(gapStartIdx - pLen);
                         const eLabel = idx < pLen ? `前${pLen - idx}日` : this.formatDateLabel(idx - pLen);
-                        errors.push(`【スタッフ No.${staff.id} ${staff.name}】${sLabel}〜${eLabel}で公休（休）のない連続期間が${streak}日連続（労基法・全スタッフ共通ハード制約: 公休から公休の間は最大6日以内です。有休やリフは公休にあたりません）です。`);
-                        break;
-                    } else if (streak > maxAllowed && isWorkSymbol(sequence[idx])) {
-                        const sLabel = startIdx < pLen ? `前${pLen - startIdx}日` : this.formatDateLabel(startIdx - pLen);
-                        const eLabel = idx < pLen ? `前${pLen - idx}日` : this.formatDateLabel(idx - pLen);
-                        errors.push(`【スタッフ No.${staff.id} ${staff.name}】${sLabel}〜${eLabel}で上限${maxAllowed}連勤違反（${streak}日連続勤務）です。`);
+                        errors.push(`【スタッフ No.${staff.id} ${staff.name}】${sLabel}〜${eLabel}で公休（休）のない連続期間が${publicOffGap}日連続（労基法・全スタッフ共通ハード制約: 公休から公休の間は最大6日以内です。有休やリフは公休にあたりません）です。`);
                         break;
                     }
                 } else {
-                    streak = 0;
+                    publicOffGap = 0;
+                }
+            }
+
+            // 3-2. 連勤日数チェック（最大5連勤、allow6Consecのみ6連勤。公休・有休・リフは出勤ではないため連勤リセット）
+            let workStreak = 0;
+            let workStartIdx = 0;
+            for (let idx = 0; idx < sequence.length; idx++) {
+                if (sequence[idx] !== '' && isWorkSymbol(sequence[idx])) {
+                    if (workStreak === 0) workStartIdx = idx;
+                    workStreak++;
+                    if (workStreak > maxAllowed) {
+                        const sLabel = workStartIdx < pLen ? `前${pLen - workStartIdx}日` : this.formatDateLabel(workStartIdx - pLen);
+                        const eLabel = idx < pLen ? `前${pLen - idx}日` : this.formatDateLabel(idx - pLen);
+                        errors.push(`【スタッフ No.${staff.id} ${staff.name}】${sLabel}〜${eLabel}で上限${maxAllowed}連勤違反（${workStreak}日連続勤務）です。`);
+                        break;
+                    }
+                } else {
+                    workStreak = 0;
                 }
             }
         }
@@ -7660,7 +7673,10 @@ if (typeof module !== 'undefined' && module.exports) {
         getTermRefreshGroups,
         REFRESH_HOLIDAY_CONFIG,
         SYMBOLS,
-        isJapaneseHoliday
+        isJapaneseHoliday,
+        isWorkSymbol,
+        isHolidaySymbol,
+        isPurePublicOffSymbol
     };
 } else {
     window.ShiftScheduler = ShiftScheduler;
@@ -7671,5 +7687,8 @@ if (typeof module !== 'undefined' && module.exports) {
     window.REFRESH_HOLIDAY_CONFIG = REFRESH_HOLIDAY_CONFIG;
     window.SYMBOLS = SYMBOLS;
     window.isJapaneseHoliday = isJapaneseHoliday;
+    window.isWorkSymbol = isWorkSymbol;
+    window.isHolidaySymbol = isHolidaySymbol;
+    window.isPurePublicOffSymbol = isPurePublicOffSymbol;
 }
 
