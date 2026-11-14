@@ -611,7 +611,7 @@ document.addEventListener('DOMContentLoaded', () => {
                     isSunOff: false,    // 6連勤可
                     prevName: '',           // 旧姓
                     remarks: '',            // 備考メモ
-                    prevDays: ['', '', '', '', ''],
+                    prevDays: new Array(7).fill(''),
                     days: new Array(NUM_DAYS).fill('')
                 });
             } else {
@@ -647,7 +647,7 @@ document.addEventListener('DOMContentLoaded', () => {
                     isSunOff: false,                 // ★ 6連勤可
                     prevName: '',                        // ★ 旧姓（改姓時の引き継ぎ用）
                     remarks: '',                         // ★ 備考メモ（AG列）
-                    prevDays: ['', '', '', '', ''],
+                    prevDays: new Array(7).fill(''),
                     days: new Array(NUM_DAYS).fill('')
                 });
             }
@@ -1209,7 +1209,13 @@ document.addEventListener('DOMContentLoaded', () => {
                     staffList[idx].allow6Consec = !!s.allow6Consec;
                     enforceRoleExclusivity(staffList[idx]);
 
-                    staffList[idx].prevDays = Array.isArray(s.prevDays) ? [...s.prevDays] : ['', '', '', '', ''];
+                    let pDays = Array.isArray(s.prevDays) ? [...s.prevDays] : [];
+                    if (pDays.length < 7) {
+                        while (pDays.length < 7) pDays.unshift('');
+                    } else if (pDays.length > 7) {
+                        pDays = pDays.slice(-7);
+                    }
+                    staffList[idx].prevDays = pDays;
                     const loadedDays = Array.isArray(s.days) ? [...s.days] : [];
                     while (loadedDays.length < NUM_DAYS) loadedDays.push('');
                     staffList[idx].days = loadedDays.slice(0, NUM_DAYS);
@@ -1461,17 +1467,17 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     // ==========================================
-    // ★ ユーザー指示: 統括マスターテーブルから全スタッフの最新確定最終5日データを自動集約・保存
+    // ★ ユーザー指示: 統括マスターテーブルから全スタッフの最新確定最終7日データを自動集約・保存
     // マスターテーブルで施された微調整（早・遅の変更、公休移動等）を確実に保持
     // ==========================================
-    function saveMasterConfirmedLast5Days(termStartDate) {
+    function saveMasterConfirmedLast7Days(termStartDate) {
         if (!termStartDate) return;
         try {
             const term = getTermInfo(termStartDate);
             const numDays = term.dates.length;
             const confirmedMap = {};
 
-            // 各フロア（1f, 2f, 3f, south）の最終確定グリッドから最終5日を抽出
+            // 各フロア（1f, 2f, 3f, south）の最終確定グリッドから最終7日を抽出
             ['1f', '2f', '3f', 'south'].forEach(flId => {
                 const raw = localStorage.getItem(`shift_schedule_${flId}_term_${termStartDate}`);
                 if (raw) {
@@ -1481,9 +1487,11 @@ document.addEventListener('DOMContentLoaded', () => {
                             data.staffList.forEach((st, sIdx) => {
                                 const name = (st.name || '').trim();
                                 const row = data.outputGrid[sIdx];
-                                if (name && Array.isArray(row) && row.length >= 5) {
+                                if (name && Array.isArray(row) && row.length >= 7) {
                                     const rLen = row.length;
                                     confirmedMap[name] = [
+                                        (row[rLen - 7]?.symbol || row[rLen - 7] || ''),
+                                        (row[rLen - 6]?.symbol || row[rLen - 6] || ''),
                                         (row[rLen - 5]?.symbol || row[rLen - 5] || ''),
                                         (row[rLen - 4]?.symbol || row[rLen - 4] || ''),
                                         (row[rLen - 3]?.symbol || row[rLen - 3] || ''),
@@ -1497,7 +1505,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 }
             });
 
-            // STスタッフの最終5日
+            // STスタッフの最終7日
             const rawSt = localStorage.getItem(`shift_schedule_st_term_${termStartDate}`);
             if (rawSt) {
                 try {
@@ -1506,9 +1514,11 @@ document.addEventListener('DOMContentLoaded', () => {
                         stData.staffList.forEach((st, sIdx) => {
                             const name = (st.name || '').trim();
                             const row = stData.outputGrid[sIdx];
-                            if (name && Array.isArray(row) && row.length >= 5) {
+                            if (name && Array.isArray(row) && row.length >= 7) {
                                 const rLen = row.length;
                                 confirmedMap[name] = [
+                                    (row[rLen - 7]?.symbol || row[rLen - 7] || ''),
+                                    (row[rLen - 6]?.symbol || row[rLen - 6] || ''),
                                     (row[rLen - 5]?.symbol || row[rLen - 5] || ''),
                                     (row[rLen - 4]?.symbol || row[rLen - 4] || ''),
                                     (row[rLen - 3]?.symbol || row[rLen - 3] || ''),
@@ -1521,7 +1531,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 } catch (e) {}
             }
 
-            // 生活期スタッフの最終5日
+            // 生活期スタッフの最終7日
             const rawLife = localStorage.getItem(`shift_schedule_life_term_${termStartDate}`);
             if (rawLife) {
                 try {
@@ -1530,9 +1540,11 @@ document.addEventListener('DOMContentLoaded', () => {
                         lifeData.staffList.forEach((st, sIdx) => {
                             const name = (st.name || '').trim();
                             const row = lifeData.outputGrid[sIdx];
-                            if (name && Array.isArray(row) && row.length >= 5) {
+                            if (name && Array.isArray(row) && row.length >= 7) {
                                 const rLen = row.length;
                                 confirmedMap[name] = [
+                                    (row[rLen - 7]?.symbol || row[rLen - 7] || ''),
+                                    (row[rLen - 6]?.symbol || row[rLen - 6] || ''),
                                     (row[rLen - 5]?.symbol || row[rLen - 5] || ''),
                                     (row[rLen - 4]?.symbol || row[rLen - 4] || ''),
                                     (row[rLen - 3]?.symbol || row[rLen - 3] || ''),
@@ -1545,28 +1557,38 @@ document.addEventListener('DOMContentLoaded', () => {
                 } catch (e) {}
             }
 
+            localStorage.setItem(`shift_schedule_master_confirmed_last7_${termStartDate}`, JSON.stringify(confirmedMap));
+            // 過去コードとの互換性用
             localStorage.setItem(`shift_schedule_master_confirmed_last5_${termStartDate}`, JSON.stringify(confirmedMap));
         } catch (e) {
-            console.warn('saveMasterConfirmedLast5Days error:', e);
+            console.warn('saveMasterConfirmedLast7Days error:', e);
         }
     }
+    const saveMasterConfirmedLast5Days = saveMasterConfirmedLast7Days;
 
-    // ★ ユーザー指示: 直前タームの最終5日間実績を反映する（マスターテーブルで微調整されたデータを最優先で引っ張る！）
+    // ★ ユーザー指示: 直前タームの最終7日間実績を反映する（マスターテーブルで微調整されたデータを最優先で引っ張る！）
     function applyPreviousTermHistory(prevStartDateStr, showToastMsg = true) {
         try {
             let appliedCount = 0;
             const prevStaffByName = new Map();
             let usedSource = 'フロア保存データ';
 
-            // 1. 【最優先】マスターテーブル統括ファイルで確定・微調整された最終5日間実績をチェック
-            const rawMasterConfirmed = localStorage.getItem(`shift_schedule_master_confirmed_last5_${prevStartDateStr}`);
+            // 1. 【最優先】マスターテーブル統括ファイルで確定・微調整された最終7日間実績をチェック
+            let rawMasterConfirmed = localStorage.getItem(`shift_schedule_master_confirmed_last7_${prevStartDateStr}`);
+            if (!rawMasterConfirmed) {
+                rawMasterConfirmed = localStorage.getItem(`shift_schedule_master_confirmed_last5_${prevStartDateStr}`);
+            }
             if (rawMasterConfirmed) {
                 try {
                     const masterMap = JSON.parse(rawMasterConfirmed);
                     if (masterMap && typeof masterMap === 'object') {
                         Object.keys(masterMap).forEach(name => {
-                            if (Array.isArray(masterMap[name]) && masterMap[name].length === 5) {
-                                prevStaffByName.set(name.trim(), masterMap[name]);
+                            let arr = masterMap[name];
+                            if (Array.isArray(arr)) {
+                                let last7 = [...arr];
+                                while (last7.length < 7) last7.unshift('');
+                                if (last7.length > 7) last7 = last7.slice(-7);
+                                prevStaffByName.set(name.trim(), last7);
                             }
                         });
                         if (prevStaffByName.size > 0) {
@@ -1586,20 +1608,24 @@ document.addEventListener('DOMContentLoaded', () => {
                             prevData.staffList.forEach((pst, pIdx) => {
                                 const normName = (pst.name || '').trim();
                                 if (!normName) return;
-                                let last5 = ['', '', '', '', ''];
-                                if (prevData.outputGrid && prevData.outputGrid[pIdx] && prevData.outputGrid[pIdx].length >= 5) {
+                                let last7 = new Array(7).fill('');
+                                if (prevData.outputGrid && prevData.outputGrid[pIdx] && prevData.outputGrid[pIdx].length >= 7) {
                                     const row = prevData.outputGrid[pIdx];
                                     const rLen = row.length;
-                                    last5 = [
+                                    last7 = [
+                                        row[rLen - 7]?.symbol || row[rLen - 7] || '',
+                                        row[rLen - 6]?.symbol || row[rLen - 6] || '',
                                         row[rLen - 5]?.symbol || row[rLen - 5] || '',
                                         row[rLen - 4]?.symbol || row[rLen - 4] || '',
                                         row[rLen - 3]?.symbol || row[rLen - 3] || '',
                                         row[rLen - 2]?.symbol || row[rLen - 2] || '',
                                         row[rLen - 1]?.symbol || row[rLen - 1] || ''
                                     ];
-                                } else if (Array.isArray(pst.days)) {
+                                } else if (Array.isArray(pst.days) && pst.days.length >= 7) {
                                     const dLen = pst.days.length;
-                                    last5 = [
+                                    last7 = [
+                                        pst.days[dLen - 7] || '',
+                                        pst.days[dLen - 6] || '',
                                         pst.days[dLen - 5] || '',
                                         pst.days[dLen - 4] || '',
                                         pst.days[dLen - 3] || '',
@@ -1607,7 +1633,7 @@ document.addEventListener('DOMContentLoaded', () => {
                                         pst.days[dLen - 1] || ''
                                     ];
                                 }
-                                prevStaffByName.set(normName, last5);
+                                prevStaffByName.set(normName, last7);
                             });
                         }
                     } catch (e) {}
@@ -1620,13 +1646,13 @@ document.addEventListener('DOMContentLoaded', () => {
                 const prevName = (staffList[s].prevName || '').trim();
 
                 // 照合優先: 1. 現在の氏名、2. 改姓・旧姓（prevName）
-                let last5 = prevStaffByName.get(curName) || (prevName ? prevStaffByName.get(prevName) : null);
-                if (last5) {
-                    staffList[s].prevDays = [...last5];
-                    if (last5.some(v => v !== '')) appliedCount++;
+                let last7 = prevStaffByName.get(curName) || (prevName ? prevStaffByName.get(prevName) : null);
+                if (last7) {
+                    staffList[s].prevDays = [...last7];
+                    if (last7.some(v => v !== '')) appliedCount++;
                 } else {
                     // 過去に該当名がない新規中途採用等のスタッフ
-                    staffList[s].prevDays = ['', '', '', '', ''];
+                    staffList[s].prevDays = new Array(7).fill('');
                 }
             }
 
@@ -1638,7 +1664,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 const prevEndD = new Date(prevD);
                 prevEndD.setDate(prevEndD.getDate() + 27);
                 const titleStr = `${prevD.getMonth() + 1}/${prevD.getDate()}～${prevEndD.getMonth() + 1}/${prevEndD.getDate()}`;
-                showToast(`🔗 直前ターム（${titleStr}）の最終5日実績を【${usedSource}】から取り込みました（${appliedCount}名分反映）`);
+                showToast(`🔗 直前ターム（${titleStr}）の最終7日実績を【${usedSource}】から取り込みました（${appliedCount}名分反映）`);
             }
             return true;
         } catch (e) {
@@ -1665,7 +1691,7 @@ document.addEventListener('DOMContentLoaded', () => {
         staffList.forEach(s => {
             enforceRoleExclusivity(s);
             s.remarks = '';
-            s.prevDays = ['', '', '', '', ''];
+            s.prevDays = new Array(7).fill('');
             s.days = new Array(NUM_DAYS).fill('');
         });
         autoAssignedRefKeys.clear();
@@ -1681,7 +1707,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
         dayOffsets = createDefaultDayOffsets(term.dates);
 
-        // ★ 直前タームが存在すれば、その最終5日間の勤務実績を自動連携！
+        // ★ 直前タームが存在すれば、その最終7日間の勤務実績を自動連携！
         const prevTerm = findPreviousTerm(newStartDate);
         if (prevTerm) {
             applyPreviousTermHistory(prevTerm, false);
@@ -2165,7 +2191,7 @@ document.addEventListener('DOMContentLoaded', () => {
             <tr>
                 <th class="sticky-col-1" rowspan="2" title="不使用時にONにする（勤務表・出力から除外）">不使用</th>
                 <th class="sticky-col-2" rowspan="2">氏名</th>
-                <th class="prev-col-header" colspan="5">前ターム最終5日間実績</th>
+                <th class="prev-col-header" colspan="7">前ターム最終7日間実績</th>
                 <th colspan="${NUM_DAYS}">当ターム（${term.title}）希望休・事前固定枠（🔒手動以外は変更不可）</th>
         `;
 
@@ -2245,6 +2271,8 @@ document.addEventListener('DOMContentLoaded', () => {
         headHtml += `
             </tr>
             <tr>
+                <th class="prev-col-header">前7</th>
+                <th class="prev-col-header">前6</th>
                 <th class="prev-col-header">前5</th>
                 <th class="prev-col-header">前4</th>
                 <th class="prev-col-header">前3</th>
@@ -2279,8 +2307,8 @@ document.addEventListener('DOMContentLoaded', () => {
                 <input type="text" class="staff-name-input" value="${escapeHtmlText(staff.name)}" data-s="${sIdx}" style="width:100%; border:none; background:transparent; font-weight:600; outline:none;">
             </td>`;
 
-            // 前5日間
-            for (let p = 0; p < 5; p++) {
+            // 前7日間
+            for (let p = 0; p < 7; p++) {
                 const val = staff.prevDays[p] || '';
                 let specialCls = '';
                 if (val === '早' || val === 'ハヤ') specialCls = ' cell-special-early';
@@ -6033,7 +6061,7 @@ document.addEventListener('DOMContentLoaded', () => {
     function checkPureOffIntervalForStaff(grid, s, numDays, staffObj) {
         let streak = 0;
         if (staffObj && staffObj.prevDays) {
-            for (let p = 4; p >= 0; p--) {
+            for (let p = staffObj.prevDays.length - 1; p >= 0; p--) {
                 if (!isPurePublicOffSymbol(staffObj.prevDays[p])) streak++;
                 else break;
             }
@@ -6196,7 +6224,7 @@ document.addEventListener('DOMContentLoaded', () => {
             // 2. 連勤・週休チェック
             const simSeq = [];
             if (st.prevDays) {
-                for (let p = 0; p < 5; p++) simSeq.push(st.prevDays[p]);
+                for (let p = 0; p < st.prevDays.length; p++) simSeq.push(st.prevDays[p]);
             }
             for (let d = 0; d < numDays; d++) {
                 const c = fl.grid[s][d];
@@ -6420,7 +6448,7 @@ document.addEventListener('DOMContentLoaded', () => {
             // 2. 連勤・週休チェック
             const simSeq = [];
             if (st.prevDays) {
-                for (let p = 0; p < 5; p++) simSeq.push(st.prevDays[p]);
+                for (let p = 0; p < st.prevDays.length; p++) simSeq.push(st.prevDays[p]);
             }
             for (let d = 0; d < numDays; d++) {
                 const c = targetGrid[s][d];
@@ -7146,9 +7174,22 @@ document.addEventListener('DOMContentLoaded', () => {
 
         // 3. 連勤チェック（公休なし連続期間、allow6Consecなら6、通常5）
         const sequence = [];
-        for (let p = 0; p < 5; p++) {
-            let pSym = (staff.prevDays && staff.prevDays[p]) ? staff.prevDays[p] : '';
-            if (isSectionChief && (p === 1 || p === 2) && (typeof isWorkSymbol === 'function' ? isWorkSymbol(pSym) : pSym === '○')) pSym = '休';
+        const pDays = staff.prevDays || [];
+        const pLen = pDays.length;
+        const firstDateObj = (dates && dates[0]) ? new Date(dates[0].dateStr + 'T00:00:00') : null;
+        for (let p = 0; p < pLen; p++) {
+            let pSym = pDays[p] || '';
+            let isSatOrSun = false;
+            if (firstDateObj) {
+                const prevD = new Date(firstDateObj);
+                prevD.setDate(prevD.getDate() - (pLen - p));
+                const dow = prevD.getDay();
+                if (dow === 0 || dow === 6) isSatOrSun = true;
+            } else {
+                if (pLen === 7 && (p === 3 || p === 4)) isSatOrSun = true;
+                if (pLen === 5 && (p === 1 || p === 2)) isSatOrSun = true;
+            }
+            if (isSectionChief && isSatOrSun && (typeof isWorkSymbol === 'function' ? isWorkSymbol(pSym) : pSym === '○')) pSym = '休';
             sequence.push(pSym);
         }
         for (let d = 0; d < numDays; d++) sequence.push(getSym(d));
@@ -7177,13 +7218,13 @@ document.addEventListener('DOMContentLoaded', () => {
             if (streak.length > maxAllowed) {
                 const sIdxSeq = streak[0];
                 const eIdxSeq = streak[streak.length - 1];
-                const sLabel = sIdxSeq < 5 ? `前${5 - sIdxSeq}日` : formatDate(sIdxSeq - 5);
-                const eLabel = eIdxSeq < 5 ? `前${5 - eIdxSeq}日` : formatDate(eIdxSeq - 5);
+                const sLabel = sIdxSeq < pLen ? `前${pLen - sIdxSeq}日` : formatDate(sIdxSeq - pLen);
+                const eLabel = eIdxSeq < pLen ? `前${pLen - eIdxSeq}日` : formatDate(eIdxSeq - pLen);
                 const ruleMsg = allow6Consec ? '6連勤許可（7日以上連続は不可）' : '最大5連勤（6日以上連続は不可）';
                 errors.push(`【${sName}】${sLabel}〜${eLabel}で公休なし${streak.length}連勤となっています（要件: ${ruleMsg}）。`);
                 streak.forEach(seqDay => {
-                    if (seqDay >= 5) {
-                        addConflict(seqDay - 5, `公休なし${streak.length}連勤（上限: ${maxAllowed}日）`);
+                    if (seqDay >= pLen) {
+                        addConflict(seqDay - pLen, `公休なし${streak.length}連勤（上限: ${maxAllowed}日）`);
                     }
                 });
             }
@@ -7202,7 +7243,7 @@ document.addEventListener('DOMContentLoaded', () => {
                                 ? isHolidaySymbol(nSym)
                                 : (nSym === '休' || nSym === '有' || nSym.includes('リフ') || nSym.startsWith('上') || nSym.startsWith('下') || nSym === '特休' || nSym === '慶弔');
                             if (nSym !== '' && !isHol) {
-                                const targetD = checkIdx - 5;
+                                const targetD = checkIdx - pLen;
                                 const targetLabel = (targetD >= 0 && targetD < numDays) ? formatDate(targetD) : `${targetD + 1}日目`;
                                 errors.push(`【${sName}】連勤直後の${targetLabel}は2連休（休・有・リフ）が必要です（現在:「${nSym}」）。`);
                                 if (targetD >= 0 && targetD < numDays) {
@@ -8468,10 +8509,10 @@ function renderMasterIntegrationView() {
         renderStatsDashboard(masterStats);
         updateUndoRedoUI();
 
-        // ★ ユーザー指示: マスターテーブル最新確定最終5日データを自動集約・保存
+        // ★ ユーザー指示: マスターテーブル最新確定最終7日データを自動集約・保存
         // （次ターム作成時に各階がマスターテーブルで微調整された最新実績を引っ張れるようにする）
-        if (typeof saveMasterConfirmedLast5Days === 'function') {
-            saveMasterConfirmedLast5Days(curStartDate);
+        if (typeof saveMasterConfirmedLast7Days === 'function') {
+            saveMasterConfirmedLast7Days(curStartDate);
         }
     }
 
@@ -9183,7 +9224,7 @@ function renderMasterIntegrationView() {
                 staffList.forEach(s => {
                     enforceRoleExclusivity(s);
                     s.remarks = '';
-                    s.prevDays = ['', '', '', '', ''];
+                    s.prevDays = new Array(7).fill('');
                     s.days = new Array(NUM_DAYS).fill('');
                 });
                 autoAssignedRefKeys.clear();

@@ -3,7 +3,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>勤務予定表 自動作成システム - 南病棟</title>
-    <link rel="stylesheet" href="style.css?v=20261114_183104">
+    <link rel="stylesheet" href="style.css?v=20261114_185042">
 </head>
 <body class="theme-south">
 
@@ -118,7 +118,7 @@
                         <button class="btn btn-outline" id="viewRefStatusBtn" title="全スタッフのリフレッシュ休暇（上1〜上5, 下1〜下3）の消化状況・過去取得履歴を一覧確認します" style="font-size: 0.82rem; padding: 5px 12px; color: #0f766e; border-color: #99f6e4; background: #f0fdfa; font-weight: 700;">
                             📊 リフ消化一覧
                         </button>
-                        <button class="btn btn-outline" id="syncPrevTermHistoryBtn" title="直前の保存済み勤務表（例: 4/1～4/28）の最終5日間の勤務実績を、自動で「前ターム最終5日間実績」に取り込みます" style="font-size: 0.82rem; padding: 5px 12px; color: #9a3412; border-color: #fdba74; background: #fff7ed; font-weight: 700;">
+                        <button class="btn btn-outline" id="syncPrevTermHistoryBtn" title="直前の保存済み勤務表（例: 4/1～4/28）の最終7日間の勤務実績を、自動で「前ターム最終7日間実績」に取り込みます" style="font-size: 0.82rem; padding: 5px 12px; color: #9a3412; border-color: #fdba74; background: #fff7ed; font-weight: 700;">
                             🔗 前ターム実績を自動取込
                         </button>
                         <button class="btn btn-outline" id="downloadBlankTemplateBtn" title="スタッフに配布して希望勤務をPC入力してもらうためのプルダウン付きExcel勤務表をダウンロード" style="font-size: 0.82rem; padding: 5px 12px; color: #166534; border-color: #86efac; background: #f0fdf4; font-weight: 700;">
@@ -206,7 +206,7 @@
             <tr>
                 <th class="sticky-col-1" rowspan="2" title="不使用時にONにする（勤務表・出力から除外）">不使用</th>
                 <th class="sticky-col-2" rowspan="2">氏名</th>
-                <th class="prev-col-header" colspan="5">前ターム最終5日間実績</th>
+                <th class="prev-col-header" colspan="5">前ターム最終7日間実績</th>
                 <th colspan="28">当ターム（4/1～4/28勤務表）希望休・事前固定枠（🔒手動以外は変更不可）</th>
         
                 <th class="flag-col" rowspan="2" title="8時開始可能か（1〜9番のみON）">8時<br>可</th>
@@ -7187,8 +7187,8 @@
             theme: 'theme-south'
         };
     </script>
-    <script src="solver.js?v=20261114_183104"></script>
-    <script src="app.js?v=20261114_183104"></script>
+    <script src="solver.js?v=20261114_185042"></script>
+    <script src="app.js?v=20261114_185042"></script>
 
 
 
