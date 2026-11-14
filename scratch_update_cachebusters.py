@@ -1,6 +1,6 @@
-import glob, re
+import glob, re, datetime
 
-v = '20261112_0955'
+v = datetime.datetime.now().strftime('%Y%m%d_%H%M%S')
 count = 0
 for f in glob.glob('*.html'):
     with open(f, 'r', encoding='utf-8') as fp:
@@ -11,4 +11,4 @@ for f in glob.glob('*.html'):
     with open(f, 'w', encoding='utf-8') as fp:
         fp.write(c)
     count += 1
-print(f'Updated cache busters in {count} html files!')
+print(f'Updated cache busters in {count} html files to version {v}!')

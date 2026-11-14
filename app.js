@@ -7,6 +7,20 @@ function isRefreshHolidaySymbol(sym) {
     return false;
 }
 
+// ★ 有給休暇記号判定
+function isPaidHolidaySymbol(sym) {
+    if (!sym || typeof sym !== 'string') return false;
+    const cleanSym = sym.trim();
+    return cleanSym === '有' || cleanSym === '有休' || cleanSym === '有/休' || cleanSym === '休/有';
+}
+
+// ★ 純粋公休記号判定
+function isPublicOffSymbol(sym) {
+    if (!sym || typeof sym !== 'string') return false;
+    const cleanSym = sym.trim();
+    return cleanSym === '休';
+}
+
 /**
  * 勤務表作成システム - アプリケーションロジック (app.js)
  * 最新版:
@@ -2116,7 +2130,11 @@ document.addEventListener('DOMContentLoaded', () => {
             // 前5日間
             for (let p = 0; p < 5; p++) {
                 const val = staff.prevDays[p] || '';
-                bodyHtml += `<td class="day-cell prev-col-cell" data-type="prev" data-s="${sIdx}" data-p="${p}">${val}</td>`;
+                let specialCls = '';
+                if (val === '早' || val === 'ハヤ') specialCls = ' cell-special-early';
+                else if (val === '遅') specialCls = ' cell-special-late';
+                else if (val === 'E') specialCls = ' cell-special-eve';
+                bodyHtml += `<td class="day-cell prev-col-cell${specialCls}" data-sym="${val}" data-type="prev" data-s="${sIdx}" data-p="${p}">${val}</td>`;
             }
 
             // 当ターム 1日〜28日
@@ -2129,7 +2147,11 @@ document.addEventListener('DOMContentLoaded', () => {
                 const cls = isFixed ? 'day-cell fixed-cell' : (val ? 'day-cell auto-ref-cell' : 'day-cell');
                 const thickCls = getDayBorderClass(d);
                 const lockTitle = isFixed ? `事前固定枠: ${val}（自動上書きロック中）` : (val ? `自動配分リフ: ${val}（編集・変更自由）` : 'クリックで記号入力');
-                bodyHtml += `<td class="${cls} ${thickCls}" data-type="day" data-s="${sIdx}" data-d="${d}" title="${lockTitle}">${val}</td>`;
+                let specialCls = '';
+                if (val === '早' || val === 'ハヤ') specialCls = ' cell-special-early';
+                else if (val === '遅') specialCls = ' cell-special-late';
+                else if (val === 'E') specialCls = ' cell-special-eve';
+                bodyHtml += `<td class="${cls} ${thickCls}${specialCls}" data-sym="${val}" data-type="day" data-s="${sIdx}" data-d="${d}" title="${lockTitle}">${val}</td>`;
             }
 
             // 28日の右側: 属性フラグトグルスイッチ群
@@ -5030,7 +5052,11 @@ document.addEventListener('DOMContentLoaded', () => {
                         const cls = isFixedCell ? 'day-cell fixed-cell' : (isRef ? 'day-cell auto-ref-cell' : 'day-cell auto-cell');
                         const thickCls = getDayBorderClass(d);
                         const titleText = cell.isFixed ? '🔒 事前固定希望枠（赤字・太字保持）' : 'システム自動配置';
-                        bodyHtml += `<td class="${cls} ${thickCls}" data-s="${s}" data-d="${d}" title="${titleText}" style="${rowBorderB}">${displaySym}</td>`;
+                        let specialCls = '';
+                        if (displaySym === '早' || displaySym === 'ハヤ') specialCls = ' cell-special-early';
+                        else if (displaySym === '遅') specialCls = ' cell-special-late';
+                        else if (displaySym === 'E') specialCls = ' cell-special-eve';
+                        bodyHtml += `<td class="${cls} ${thickCls}${specialCls}" data-sym="${displaySym}" data-s="${s}" data-d="${d}" title="${titleText}" style="${rowBorderB}">${displaySym}</td>`;
                     }
 
                     bodyHtml += `
@@ -5182,7 +5208,14 @@ document.addEventListener('DOMContentLoaded', () => {
                         ? `STスタッフ（事前固定希望）: ${escapeHtmlText(st.name)} / ${sym}`
                         : `STスタッフ（自動配置）: ${escapeHtmlText(st.name)} / ${sym}`;
 
-                    bodyHtml += `<td class="${thickCls} ${cellCls} editable-st-cell" data-is-st="1" data-st-id="${st.id}" data-st-idx="${stIdx}" data-d="${d}" style="text-align:center; font-size:0.85rem; background:${stThemeBg}; cursor:pointer;" title="${cellTitle}">${sym}</td>`;
+                    let specialCls = '';
+                    let cellBg = stThemeBg;
+                    if (sym === '早' || sym === 'ハヤ') { specialCls = ' cell-special-early'; cellBg = ''; }
+                    else if (sym === '遅') { specialCls = ' cell-special-late'; cellBg = ''; }
+                    else if (sym === 'E') { specialCls = ' cell-special-eve'; cellBg = ''; }
+                    const bgStyle = cellBg ? `background:${cellBg};` : '';
+
+                    bodyHtml += `<td class="${thickCls} ${cellCls} editable-st-cell${specialCls}" data-sym="${sym}" data-is-st="1" data-st-id="${st.id}" data-st-idx="${stIdx}" data-d="${d}" style="text-align:center; font-size:0.85rem; ${bgStyle} cursor:pointer;" title="${cellTitle}">${sym}</td>`;
                 }
 
                 bodyHtml += `
@@ -5249,8 +5282,14 @@ document.addEventListener('DOMContentLoaded', () => {
                     const isCellFixed = !isRef && ((c && typeof c === 'object') ? !!c.isFixed : false);
                     const cellCls = isCellFixed ? 'day-cell fixed-cell' : (isRef ? 'day-cell auto-ref-cell' : 'day-cell auto-cell');
                     const cellTitle = `ハーフマン応援（生活期連携）: ${escapeHtmlText(st.name)} / ${sym}`;
+                    let specialCls = '';
+                    let cellBg = '#f0fdf4';
+                    if (sym === '早' || sym === 'ハヤ') { specialCls = ' cell-special-early'; cellBg = ''; }
+                    else if (sym === '遅') { specialCls = ' cell-special-late'; cellBg = ''; }
+                    else if (sym === 'E') { specialCls = ' cell-special-eve'; cellBg = ''; }
+                    const bgStyle = cellBg ? `background:${cellBg};` : '';
 
-                    bodyHtml += `<td class="${thickCls} ${cellCls} editable-ha-cell" data-is-ha="1" data-ha-id="${st.id || ''}" data-ha-idx="${stIdx}" data-d="${d}" style="text-align:center; font-size:0.85rem; background:#f0fdf4; cursor:pointer;" title="${cellTitle}">${sym}</td>`;
+                    bodyHtml += `<td class="${thickCls} ${cellCls} editable-ha-cell${specialCls}" data-sym="${sym}" data-is-ha="1" data-ha-id="${st.id || ''}" data-ha-idx="${stIdx}" data-d="${d}" style="text-align:center; font-size:0.85rem; ${bgStyle} cursor:pointer;" title="${cellTitle}">${sym}</td>`;
                 }
 
                 bodyHtml += `
@@ -7677,10 +7716,10 @@ function renderMasterIntegrationView() {
                 const cell = row ? row[d] : null;
                 const sym = (cell && typeof cell === 'object') ? (cell.symbol || '') : (cell || '');
                 if (sym) {
-                    if (isHolidaySymbol(sym)) sOff += 1.0;
+                    if (sym === '休') sOff += 1.0;
                     else if (isPaidHolidaySymbol(sym)) sPaid += 1.0;
                     else if (isRefreshHolidaySymbol(sym)) sRef += 1.0;
-                    else if (sym === '早') { sEarly++; if (!isZero) sWork += 1.0; }
+                    else if (sym === '早' || sym === 'ハヤ') { sEarly++; if (!isZero) sWork += 1.0; }
                     else if (sym === '遅') { sLate++; if (!isZero) sWork += 1.0; }
                     else if (sym === 'E') { sEve++; if (!isZero) sWork += 1.0; }
                     else if (sym === '8時') { sH8++; if (!isZero) sWork += 1.0; }

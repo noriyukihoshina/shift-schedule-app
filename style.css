@@ -452,54 +452,70 @@ td.col-day-fixed {
 
 /* =========================================================================
    ★ 特殊勤務セル（早・遅・E）目視確認用 目立つ背景色分け
-   ※全テーブル共通・各テーブルのテーマ色と混ざらない高視認性配色
+   ※全テーブル・全モード（希望入力・修正作業エリア・最終チェック・マスター）完全共通配色
    ========================================================================= */
 .cell-special-early,
 [data-sym="早"]:not(.stat-cell):not(th),
-td[data-sym="早"] {
+[data-sym="ハヤ"]:not(.stat-cell):not(th),
+td[data-sym="早"],
+td[data-sym="ハヤ"],
+td.cell-special-early {
     background-color: #fef08a !important; /* 目立つイエロー/アンバー系 */
+    background: #fef08a !important;
     color: #854d0e !important;            /* 濃いアンバー文字 */
     font-weight: 800 !important;
 }
 
 .cell-special-late,
 [data-sym="遅"]:not(.stat-cell):not(th),
-td[data-sym="遅"] {
+td[data-sym="遅"],
+td.cell-special-late {
     background-color: #a5f3fc !important; /* 目立つシアン/ターコイズ系 */
+    background: #a5f3fc !important;
     color: #164e63 !important;            /* 濃いシアンネイビー文字 */
     font-weight: 800 !important;
 }
 
 .cell-special-eve,
 [data-sym="E"]:not(.stat-cell):not(th),
-td[data-sym="E"] {
+td[data-sym="E"],
+td.cell-special-eve {
     background-color: #fbcfe8 !important; /* 目立つピンク/マゼンタ系 */
+    background: #fbcfe8 !important;
     color: #831843 !important;            /* 濃いワインレッド文字 */
     font-weight: 800 !important;
 }
 
 /* 事前固定希望枠（赤字）の場合は赤字を維持しつつ背景色を保持 */
 .cell-special-early.fixed-cell,
-[data-sym="早"].fixed-cell {
+td[data-sym="早"].fixed-cell,
+td[data-sym="ハヤ"].fixed-cell {
     color: #dc2626 !important;
     background-color: #fef08a !important;
+    background: #fef08a !important;
 }
 .cell-special-late.fixed-cell,
-[data-sym="遅"].fixed-cell {
+td[data-sym="遅"].fixed-cell {
     color: #dc2626 !important;
     background-color: #a5f3fc !important;
+    background: #a5f3fc !important;
 }
 .cell-special-eve.fixed-cell,
-[data-sym="E"].fixed-cell {
+td[data-sym="E"].fixed-cell {
     color: #dc2626 !important;
     background-color: #fbcfe8 !important;
+    background: #fbcfe8 !important;
 }
 
 /* エラー網掛け（.conflict-highlight）が重なった場合はエラー青網掛けを最優先 */
 .cell-special-early.conflict-highlight,
 .cell-special-late.conflict-highlight,
-.cell-special-eve.conflict-highlight {
+.cell-special-eve.conflict-highlight,
+td[data-sym="早"].conflict-highlight,
+td[data-sym="遅"].conflict-highlight,
+td[data-sym="E"].conflict-highlight {
     background-color: #bfdbfe !important;
+    background: #bfdbfe !important;
     color: #1e3a8a !important;
 }
 
