@@ -352,8 +352,8 @@ body {
     left: 45px;
     background: #f8fafc;
     z-index: 5;
-    width: 100px;
-    min-width: 100px;
+    width: 125px;
+    min-width: 125px;
     text-align: left !important;
     font-weight: 600;
 }

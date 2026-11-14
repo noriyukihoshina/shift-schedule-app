@@ -7364,7 +7364,7 @@ function renderMasterIntegrationView() {
             // テーブルヘッダー1: 日付ヘッダー（最右端まで太い横罫線を引く: border-top: 4px solid #334155 !important;）
             html += `<tr class="floor-boundary-row" style="background:${fc.headerBg}; font-weight:700;">
                 <th class="sticky-col-1" style="background:${fc.headerBg}; color:${fc.badgeColor}; width:44px; min-width:44px; max-width:44px; text-align:center; padding:2px; border-right:1px solid ${fc.border}; border-top: 4px solid #334155 !important;">階</th>
-                <th class="sticky-col-2" style="background:${fc.headerBg}; color:#1e293b; width:95px; min-width:95px; max-width:105px; text-align:left; padding:2px 4px; border-right:2px solid #475569; border-top: 4px solid #334155 !important;">項目</th>`;
+                <th class="sticky-col-2" style="background:${fc.headerBg}; color:#1e293b; width:125px; min-width:125px; max-width:125px; text-align:left; padding:2px 4px; border-right:2px solid #475569; border-top: 4px solid #334155 !important;">項目</th>`;
             for (let d = 0; d < numDays; d++) {
                 const di = term.dates[d];
                 const thickCls = getDayBorderClass(d);
@@ -7385,7 +7385,7 @@ function renderMasterIntegrationView() {
             // テーブルヘッダー2: 曜日ヘッダー
             html += `<tr style="background:${fc.headerBg}; font-weight:700;">
                 <th class="sticky-col-1" style="background:${fc.headerBg}; border-right:1px solid ${fc.border}; width:44px; min-width:44px; max-width:44px;"></th>
-                <th class="sticky-col-2" style="background:${fc.headerBg}; border-right:2px solid #475569; width:95px; min-width:95px; max-width:105px;"></th>`;
+                <th class="sticky-col-2" style="background:${fc.headerBg}; border-right:2px solid #475569; width:125px; min-width:125px; max-width:125px;"></th>`;
             for (let d = 0; d < numDays; d++) {
                 const di = term.dates[d];
                 const thickCls = getDayBorderClass(d);
@@ -7398,7 +7398,7 @@ function renderMasterIntegrationView() {
             // サマリー行1: ±補正 (5行目相当)
             html += `<tr style="background:${fc.bg}; font-weight:700;">
                 <td class="sticky-col-1" rowspan="8" style="background:${fc.headerBg}; color:${fc.badgeColor}; font-size:1.05rem; font-weight:800; vertical-align:middle; text-align:center; border-right:1px solid ${fc.border}; width:44px; min-width:44px; max-width:44px;">${fc.label}</td>
-                <td class="sticky-col-2" style="background:${fc.bg}; color:#1e293b; border-right:2px solid #475569; font-weight:700; width:95px; min-width:95px; max-width:105px;">±補正</td>`;
+                <td class="sticky-col-2" style="background:${fc.bg}; color:#1e293b; border-right:2px solid #475569; font-weight:700; width:125px; min-width:125px; max-width:125px;">±補正</td>`;
             for (let d = 0; d < numDays; d++) {
                 const thickCls = getDayBorderClass(d);
                 const off = dailyOffsets[d];
@@ -7410,7 +7410,7 @@ function renderMasterIntegrationView() {
 
             // サマリー行2: 出勤人数合計 (6行目相当) ★ご要望: 集計はグレー背景に！
             html += `<tr style="background:#f1f5f9; font-weight:700;">
-                <td class="sticky-col-2" style="background:#f1f5f9; color:#0f172a; border-right:2px solid #475569; font-weight:800; width:95px; min-width:95px; max-width:105px;">出勤人数合計</td>`;
+                <td class="sticky-col-2" style="background:#f1f5f9; color:#0f172a; border-right:2px solid #475569; font-weight:800; width:125px; min-width:125px; max-width:125px;">出勤人数合計</td>`;
             for (let d = 0; d < numDays; d++) {
                 const thickCls = getDayBorderClass(d);
                 html += `<td class="${thickCls} col-day-fixed" style="width:52px; min-width:52px; max-width:52px; background:#f1f5f9; color:#0f172a; font-weight:800; border-bottom:1px solid #cbd5e1; text-align:center;">${dailyTotal[d]}</td>`;
@@ -7419,7 +7419,7 @@ function renderMasterIntegrationView() {
 
             // サマリー行3: 実数合計 (7行目相当) ★ご要望: 集計はグレー背景に！
             html += `<tr style="background:#e2e8f0; font-weight:700;">
-                <td class="sticky-col-2" style="background:#e2e8f0; color:#0369a1; border-right:2px solid #475569; font-weight:800; width:95px; min-width:95px; max-width:105px;">実数合計</td>`;
+                <td class="sticky-col-2" style="background:#e2e8f0; color:#0369a1; border-right:2px solid #475569; font-weight:800; width:125px; min-width:125px; max-width:125px;">実数合計</td>`;
             for (let d = 0; d < numDays; d++) {
                 const thickCls = getDayBorderClass(d);
                 html += `<td class="${thickCls} col-day-fixed" style="width:52px; min-width:52px; max-width:52px; background:#e2e8f0; color:#0369a1; font-weight:800; border-bottom:1px solid #cbd5e1; text-align:center;">${dailyReal[d]}</td>`;
@@ -7435,7 +7435,7 @@ function renderMasterIntegrationView() {
 
             // サマリー行4: 早 (8行目相当)
             html += `<tr style="background:${fc.bg}; font-weight:600;">
-                <td class="sticky-col-2" style="background:${fc.bg}; color:#1e293b; border-right:2px solid #475569; width:95px; min-width:95px; max-width:105px;">早</td>`;
+                <td class="sticky-col-2" style="background:${fc.bg}; color:#1e293b; border-right:2px solid #475569; width:125px; min-width:125px; max-width:125px;">早</td>`;
             for (let d = 0; d < numDays; d++) {
                 const thickCls = getDayBorderClass(d);
                 const cnt = dailyEarly[d];
@@ -7448,7 +7448,7 @@ function renderMasterIntegrationView() {
 
             // サマリー行5: 遅 (9行目相当)
             html += `<tr style="background:${fc.bg}; font-weight:600;">
-                <td class="sticky-col-2" style="background:${fc.bg}; color:#1e293b; border-right:2px solid #475569; width:95px; min-width:95px; max-width:105px;">遅</td>`;
+                <td class="sticky-col-2" style="background:${fc.bg}; color:#1e293b; border-right:2px solid #475569; width:125px; min-width:125px; max-width:125px;">遅</td>`;
             for (let d = 0; d < numDays; d++) {
                 const thickCls = getDayBorderClass(d);
                 const cnt = dailyLate[d];
@@ -7461,7 +7461,7 @@ function renderMasterIntegrationView() {
 
             // サマリー行6: E (10行目相当)
             html += `<tr style="background:${fc.bg}; font-weight:600;">
-                <td class="sticky-col-2" style="background:${fc.bg}; color:#1e293b; border-right:2px solid #475569; width:95px; min-width:95px; max-width:105px;">E</td>`;
+                <td class="sticky-col-2" style="background:${fc.bg}; color:#1e293b; border-right:2px solid #475569; width:125px; min-width:125px; max-width:125px;">E</td>`;
             for (let d = 0; d < numDays; d++) {
                 const thickCls = getDayBorderClass(d);
                 const cnt = dailyEve[d];
@@ -7474,7 +7474,7 @@ function renderMasterIntegrationView() {
 
             // サマリー行7: 8時 (11行目相当)
             html += `<tr style="background:${fc.bg}; font-weight:600;">
-                <td class="sticky-col-2" style="background:${fc.bg}; color:#1e293b; border-right:2px solid #475569; width:95px; min-width:95px; max-width:105px;">8時</td>`;
+                <td class="sticky-col-2" style="background:${fc.bg}; color:#1e293b; border-right:2px solid #475569; width:125px; min-width:125px; max-width:125px;">8時</td>`;
             for (let d = 0; d < numDays; d++) {
                 const thickCls = getDayBorderClass(d);
                 const cnt = dailyH8[d];
@@ -7489,7 +7489,7 @@ function renderMasterIntegrationView() {
 
             // サマリー行8: 「！表示する」トグルボタン行 (12行目相当)
             html += `<tr style="background:${fc.bg}; border-bottom: 2px solid ${fc.border};">
-                <td class="sticky-col-2" style="background:${fc.bg}; border-right:2px solid #475569; padding:4px 6px; width:95px; min-width:95px; max-width:105px;">
+                <td class="sticky-col-2" style="background:${fc.bg}; border-right:2px solid #475569; padding:4px 6px; width:125px; min-width:125px; max-width:125px;">
                     <button type="button" class="btn btn-outline toggle-master-floor-btn" data-floor="${fc.id}" style="width:100%; font-size:0.75rem; padding:2px 6px; font-weight:700; background:${isExp ? '#f1f5f9' : '#ffffff'}; color:${fc.badgeColor}; border-color:${fc.border}; box-shadow: 0 1px 2px rgba(0,0,0,0.05); cursor:pointer;">
                         ${isExp ? '▲折りたたむ' : '⚡表示する'}
                     </button>
@@ -7832,15 +7832,131 @@ function renderMasterIntegrationView() {
         });
 
         // ==========================================
-        // ★ ユーザー指示 (要求2): 南と集計の間に「生活期」の集計（添付2）を挿入
-        // （訪問出勤人数合計、訪問実数合計、通所出勤人数合計、通所実数合計、訪問8時）
+        // ★ ユーザー指示: マスターテーブル全館「集計」の表示変更（病棟6項目のみ厳選）
+        // 配置順序: 3階 → 南 → 集計 → 生活期
+        // ・(病棟)出勤人数合計
+        // ・(病棟)実数合計
+        // ・(病棟)早（定数: 11名、文字色・背景色は勤務表セルと統一）
+        // ・(病棟)遅（定数: 5名、文字色・背景色は勤務表セルと統一）
+        // ・(病棟)E（定数: 8名、文字色・背景色は勤務表セルと統一）
+        // ・(病棟)8時（定数: 4名、文字色・背景色は勤務表セルと統一）
+        // ※項目のフォント色は黒（#0f172a）、罫線はみ出し解消（width:125px）
+        // ==========================================
+        // 1. (病棟)出勤人数合計
+        html += `<tr style="background:#f1f5f9; font-weight:700; border-top: 3px solid #334155;">
+            <th class="sticky-col-1" rowspan="6" style="background:#e2e8f0; color:#0f172a; font-size:1.05rem; font-weight:900; vertical-align:middle; text-align:center; border-right:1px solid #cbd5e1; width:44px; min-width:44px; max-width:44px;">集計</th>
+            <td class="sticky-col-2" style="background:#f8fafc; color:#0f172a !important; border-right:2px solid #475569; font-weight:800; font-size:0.85rem; width:125px; min-width:125px; max-width:125px; padding:2px 4px; white-space:nowrap;">(病棟)出勤人数合計</td>`;
+        for (let d = 0; d < numDays; d++) {
+            const thickCls = getDayBorderClass(d);
+            html += `<td class="${thickCls} col-day-fixed" style="width:52px; min-width:52px; max-width:52px; background:#f8fafc; color:#0f172a; font-weight:800; font-size:0.95rem; border-bottom:1px solid #cbd5e1; text-align:center;">${grandTotal[d]}</td>`;
+        }
+        html += `<td colspan="9" style="background:#f8fafc;"></td></tr>`;
+
+        // 2. (病棟)実数合計
+        html += `<tr style="background:#f8fafc; font-weight:700;">
+            <td class="sticky-col-2" style="background:#f8fafc; color:#0f172a !important; border-right:2px solid #475569; font-weight:800; font-size:0.85rem; width:125px; min-width:125px; max-width:125px; padding:2px 4px; white-space:nowrap;">(病棟)実数合計</td>`;
+        for (let d = 0; d < numDays; d++) {
+            const thickCls = getDayBorderClass(d);
+            html += `<td class="${thickCls} col-day-fixed" style="width:52px; min-width:52px; max-width:52px; background:#f8fafc; color:#0f172a; font-weight:800; font-size:0.95rem; border-bottom:1px solid #cbd5e1; text-align:center;">${Number(grandReal[d].toFixed(1))}</td>`;
+        }
+        html += `<td colspan="9" style="background:#f8fafc;"></td></tr>`;
+
+        // 3. (病棟)早（全館定数: 11名、背景:#fef08a, 文字色:#854d0e）
+        html += `<tr style="background:#f8fafc; font-weight:700;">
+            <td class="sticky-col-2" style="background:#f8fafc; color:#0f172a !important; border-right:2px solid #475569; font-weight:800; font-size:0.85rem; width:125px; min-width:125px; max-width:125px; padding:2px 4px; white-space:nowrap;">(病棟)早</td>`;
+        for (let d = 0; d < numDays; d++) {
+            const thickCls = getDayBorderClass(d);
+            const cnt = grandEarly[d];
+            const isConflict = (cnt !== 11);
+            const bgStyle = isConflict ? 'background:#dbeafe !important; color:#1d4ed8 !important;' : 'background:#fef08a; color:#854d0e;';
+            const titleStr = isConflict ? `title="⚠️ 全館早番定数エラー: ${cnt}名（定数: 11名）"` : '';
+            html += `<td class="${thickCls} col-day-fixed ${isConflict ? 'conflict-highlight' : ''}" ${titleStr} style="width:52px; min-width:52px; max-width:52px; ${bgStyle} font-weight:800; border-bottom:1px solid #cbd5e1; text-align:center;">${cnt}</td>`;
+        }
+        html += `<td colspan="9" style="background:#f8fafc;"></td></tr>`;
+
+        // 4. (病棟)遅（全館定数: 5名、背景:#a5f3fc, 文字色:#164e63）
+        html += `<tr style="background:#f8fafc; font-weight:700;">
+            <td class="sticky-col-2" style="background:#f8fafc; color:#0f172a !important; border-right:2px solid #475569; font-weight:800; font-size:0.85rem; width:125px; min-width:125px; max-width:125px; padding:2px 4px; white-space:nowrap;">(病棟)遅</td>`;
+        for (let d = 0; d < numDays; d++) {
+            const thickCls = getDayBorderClass(d);
+            const cnt = grandLate[d];
+            const isConflict = (cnt !== 5);
+            const bgStyle = isConflict ? 'background:#dbeafe !important; color:#1d4ed8 !important;' : 'background:#a5f3fc; color:#164e63;';
+            const titleStr = isConflict ? `title="⚠️ 全館遅番定数エラー: ${cnt}名（定数: 5名）"` : '';
+            html += `<td class="${thickCls} col-day-fixed ${isConflict ? 'conflict-highlight' : ''}" ${titleStr} style="width:52px; min-width:52px; max-width:52px; ${bgStyle} font-weight:800; border-bottom:1px solid #cbd5e1; text-align:center;">${cnt}</td>`;
+        }
+        html += `<td colspan="9" style="background:#f8fafc;"></td></tr>`;
+
+        // 5. (病棟)E（全館定数: 8名、背景:#fbcfe8, 文字色:#831843）
+        html += `<tr style="background:#f8fafc; font-weight:700;">
+            <td class="sticky-col-2" style="background:#f8fafc; color:#0f172a !important; border-right:2px solid #475569; font-weight:800; font-size:0.85rem; width:125px; min-width:125px; max-width:125px; padding:2px 4px; white-space:nowrap;">(病棟)E</td>`;
+        for (let d = 0; d < numDays; d++) {
+            const thickCls = getDayBorderClass(d);
+            const cnt = grandEve[d];
+            const isConflict = (cnt !== 8);
+            const bgStyle = isConflict ? 'background:#dbeafe !important; color:#1d4ed8 !important;' : 'background:#fbcfe8; color:#831843;';
+            const titleStr = isConflict ? `title="⚠️ 全館E定数エラー: ${cnt}名（定数: 8名）"` : '';
+            html += `<td class="${thickCls} col-day-fixed ${isConflict ? 'conflict-highlight' : ''}" ${titleStr} style="width:52px; min-width:52px; max-width:52px; ${bgStyle} font-weight:800; border-bottom:1px solid #cbd5e1; text-align:center;">${cnt}</td>`;
+        }
+        html += `<td colspan="9" style="background:#f8fafc;"></td></tr>`;
+
+        // 6. (病棟)8時（全館定数: 4名、背景:#dcfce7, 文字色:#166534）
+        html += `<tr style="background:#f8fafc; font-weight:700; border-bottom:3px solid #334155;">
+            <td class="sticky-col-2" style="background:#f8fafc; color:#0f172a !important; border-right:2px solid #475569; font-weight:800; font-size:0.85rem; width:125px; min-width:125px; max-width:125px; padding:2px 4px; white-space:nowrap;">(病棟)8時</td>`;
+        for (let d = 0; d < numDays; d++) {
+            const thickCls = getDayBorderClass(d);
+            const cnt = grandH8[d];
+            const isConflict = (cnt !== 4);
+            const bgStyle = isConflict ? 'background:#dbeafe !important; color:#1d4ed8 !important;' : 'background:#dcfce7; color:#166534;';
+            const titleStr = isConflict ? `title="⚠️ 全館8時定数エラー: ${cnt}名（定数: 4名）"` : '';
+            html += `<td class="${thickCls} col-day-fixed ${isConflict ? 'conflict-highlight' : ''}" ${titleStr} style="width:52px; min-width:52px; max-width:52px; ${bgStyle} font-weight:800; border-bottom:1px solid #cbd5e1; text-align:center;">${cnt}</td>`;
+        }
+        html += `<td colspan="9" style="background:#f8fafc;"></td></tr>`;
+
+        // フロア間の仕切り余白行
+        html += `<tr style="height:14px; background:#f8fafc;"><td colspan="${numDays + 11}" style="border:none; background:#f8fafc;"></td></tr>`;
+
+        // ==========================================
+        // ★ ユーザー指示: 生活期テーブル（集計の下に配置、他フロアと構造・UI統一）
+        // 順序: 3階 → 南 → 集計 → 生活期
+        // ・縦結合「生活期」セル（rowspan="6"）
+        // ・サマリー6項目: 訪問出勤人数合計, 訪問実数合計, 通所出勤人数合計, 通所実数合計, 訪問8時, ⚡表示するボタン
+        // ・表示するボタン位置: サマリー最下端行の sticky-col-2 に配置
+        // ・項目フォント色: 黒（#0f172a）
+        // ・人数集計: lifeMaster とスタッフプロパティ・名前から100%正確に集計
         // ==========================================
         const isLifeExp = masterExpandedFloors.has('life');
         const lifeFc = { id: 'life', label: '生活期', bg: '#f0fdfa', headerBg: '#ccfbf1', border: '#5eead4', badgeColor: '#0f766e' };
 
         // 生活期の最新スタッフデータとグリッドを正確に集約計算
-        const lifeStaffList = (lifeData && Array.isArray(lifeData.staffList)) ? lifeData.staffList : (Array.isArray(lifeMaster) ? lifeMaster : []);
+        const lifeRawStaffList = (lifeData && Array.isArray(lifeData.staffList) && lifeData.staffList.length > 0) ? lifeData.staffList : (Array.isArray(lifeMaster) ? lifeMaster : []);
         const lifeGrid = (lifeData && Array.isArray(lifeData.outputGrid)) ? lifeData.outputGrid : [];
+
+        // lifeMaster から属性（lifeSection, haSection, isZeroCount, isHalf, isUnused）を補正統合
+        const lifeStaffList = lifeRawStaffList.map(st => {
+            const copy = { ...st };
+            const ms = (Array.isArray(lifeMaster)) ? lifeMaster.find(m => m.id === st.id || m.name === st.name) : null;
+            if (ms) {
+                if (!copy.lifeSection && ms.lifeSection) copy.lifeSection = ms.lifeSection;
+                if (!copy.haSection && ms.haSection) copy.haSection = ms.haSection;
+                if (copy.isZeroCount === undefined && ms.isZeroCount !== undefined) copy.isZeroCount = ms.isZeroCount;
+                if (copy.isHalf === undefined && ms.isHalf !== undefined) copy.isHalf = ms.isHalf;
+                if (copy.isUnused === undefined && ms.isUnused !== undefined) copy.isUnused = ms.isUnused;
+            }
+            // 名前からのフォールバック補正
+            const name = copy.name || '';
+            if (!copy.lifeSection) {
+                if (name.includes('訪問')) copy.lifeSection = '訪問';
+                else if (name.includes('通所')) copy.lifeSection = '通所';
+                else if (name.includes('クラーク')) copy.lifeSection = 'Cl2';
+                else if (name.includes('ハーフ')) copy.lifeSection = '通所';
+            }
+            if (!copy.haSection && name.includes('ハ')) {
+                if (name.includes('南')) copy.haSection = 'ハ南';
+                else if (name.includes('3')) copy.haSection = 'ハ3';
+            }
+            return copy;
+        });
 
         const lifeVWorkCounts = new Array(numDays).fill(0);
         const lifeVRealCounts = new Array(numDays).fill(0);
@@ -7853,8 +7969,9 @@ function renderMasterIntegrationView() {
             const row = (lifeGrid && lifeGrid[sIdx]) ? lifeGrid[sIdx] : (st.days || []);
             const sec = st.lifeSection || '';
             const ha = st.haSection || '';
-            const isVisit = (sec === '訪問');
-            const isTsusho = (sec === '通所') || (sec === 'Cl2') || (ha === 'ハ3' || ha === 'ハ南' || ha === 'ハ4');
+            const name = st.name || '';
+            const isVisit = (sec === '訪問') || name.includes('訪問');
+            const isTsusho = (sec === '通所') || (sec === 'Cl2') || (ha === 'ハ3' || ha === 'ハ南' || ha === 'ハ4') || name.includes('通所') || name.includes('ハーフ') || name.includes('クラーク');
 
             for (let d = 0; d < numDays; d++) {
                 const cell = row[d];
@@ -7877,10 +7994,107 @@ function renderMasterIntegrationView() {
             }
         });
 
-        // 生活期 サマリー / トグルボタン行
-        html += `<tr style="background:${lifeFc.bg}; border-top: 2px solid ${lifeFc.border}; border-bottom: 2px solid ${lifeFc.border};">
-            <th class="sticky-col-1" style="background:${lifeFc.headerBg}; color:${lifeFc.badgeColor}; font-weight:800; font-size:0.95rem; vertical-align:middle; text-align:center; border-right:1px solid ${lifeFc.border}; width:44px; min-width:44px; max-width:44px;">生活期</th>
-            <td class="sticky-col-2" style="background:${lifeFc.bg}; border-right:2px solid #475569; padding:4px 6px; width:95px; min-width:95px; max-width:105px;">
+        // 生活期 テーブルヘッダー1: 日付ヘッダー（他フロアと完全統一）
+        html += `<tr class="floor-boundary-row" style="background:${lifeFc.headerBg}; font-weight:700;">
+            <th class="sticky-col-1" style="background:${lifeFc.headerBg}; color:${lifeFc.badgeColor}; width:44px; min-width:44px; max-width:44px; text-align:center; padding:2px; border-right:1px solid ${lifeFc.border}; border-top: 4px solid #334155 !important;">階</th>
+            <th class="sticky-col-2" style="background:${lifeFc.headerBg}; color:#1e293b; width:125px; min-width:125px; max-width:125px; text-align:left; padding:2px 4px; border-right:2px solid #475569; border-top: 4px solid #334155 !important;">項目</th>`;
+        for (let d = 0; d < numDays; d++) {
+            const di = term.dates[d];
+            const thickCls = getDayBorderClass(d);
+            html += `<th class="${thickCls} col-day-fixed" style="width:52px; min-width:52px; max-width:52px; background:${lifeFc.headerBg}; font-size:0.78rem; padding:4px 2px; color:#1e293b; border-bottom:1px solid ${lifeFc.border}; border-top: 4px solid #334155 !important; text-align:center; white-space:nowrap;">${di.m}/${di.day}</th>`;
+        }
+        html += `
+            <th title="出勤日数" style="background:${lifeFc.headerBg}; color:#1e293b; border-bottom:1px solid ${lifeFc.border}; border-top: 4px solid #334155 !important; width:38px; min-width:38px; text-align:center; font-size:0.75rem;">出勤</th>
+            <th title="公休日数" style="background:${lifeFc.headerBg}; color:#1e293b; border-bottom:1px solid ${lifeFc.border}; border-top: 4px solid #334155 !important; width:38px; min-width:38px; text-align:center; font-size:0.75rem;">公休</th>
+            <th title="有給休暇日数" style="background:${lifeFc.headerBg}; color:#1e293b; border-bottom:1px solid ${lifeFc.border}; border-top: 4px solid #334155 !important; width:38px; min-width:38px; text-align:center; font-size:0.75rem; font-weight:800;">有休</th>
+            <th title="リフレッシュ休暇日数" style="background:${lifeFc.headerBg}; color:#1e293b; border-bottom:1px solid ${lifeFc.border}; border-top: 4px solid #334155 !important; width:38px; min-width:38px; text-align:center; font-size:0.75rem;">リフ</th>
+            <th title="早番回数" style="background:${lifeFc.headerBg}; color:#1e293b; border-bottom:1px solid ${lifeFc.border}; border-top: 4px solid #334155 !important; width:32px; min-width:32px; text-align:center; font-size:0.75rem;">早</th>
+            <th title="遅番回数" style="background:${lifeFc.headerBg}; color:#1e293b; border-bottom:1px solid ${lifeFc.border}; border-top: 4px solid #334155 !important; width:32px; min-width:32px; text-align:center; font-size:0.75rem;">遅</th>
+            <th title="イブニング回数" style="background:${lifeFc.headerBg}; color:#1e293b; border-bottom:1px solid ${lifeFc.border}; border-top: 4px solid #334155 !important; width:32px; min-width:32px; text-align:center; font-size:0.75rem;">E</th>
+            <th title="8時開始回数" style="background:${lifeFc.headerBg}; color:#1e293b; border-bottom:1px solid ${lifeFc.border}; border-top: 4px solid #334155 !important; width:32px; min-width:32px; text-align:center; font-size:0.75rem;">8時</th>
+            <th style="background:${lifeFc.headerBg}; color:${lifeFc.badgeColor}; min-width:160px; max-width:260px; font-size:0.8rem; text-align:center; border-bottom:1px solid ${lifeFc.border}; border-top: 4px solid #334155 !important;">備考（メモ）</th>
+        </tr>`;
+
+        // 生活期 テーブルヘッダー2: 曜日ヘッダー
+        html += `<tr style="background:${lifeFc.headerBg}; font-weight:700;">
+            <th class="sticky-col-1" style="background:${lifeFc.headerBg}; border-right:1px solid ${lifeFc.border}; width:44px; min-width:44px; max-width:44px;"></th>
+            <th class="sticky-col-2" style="background:${lifeFc.headerBg}; border-right:2px solid #475569; width:125px; min-width:125px; max-width:125px;"></th>`;
+        for (let d = 0; d < numDays; d++) {
+            const di = term.dates[d];
+            const thickCls = getDayBorderClass(d);
+            const wColor = di.wIdx === 5 ? '#2563eb' : ((di.wIdx === 6 || di.isHoliday) ? '#dc2626' : '#334155');
+            const wBg = di.wIdx === 5 ? '#eff6ff' : ((di.wIdx === 6 || di.isHoliday) ? '#fef2f2' : lifeFc.headerBg);
+            html += `<th class="${thickCls} col-day-fixed" style="width:52px; min-width:52px; max-width:52px; background:${wBg}; color:${wColor}; font-size:0.8rem; padding:2px; border-bottom:1px solid ${lifeFc.border}; text-align:center;">${di.weekday}</th>`;
+        }
+        html += `<th colspan="9" style="background:${lifeFc.headerBg}; border-bottom:1px solid ${lifeFc.border};"></th></tr>`;
+
+        // 生活期 サマリー行1: 訪問出勤人数合計（sticky-col-1 に rowspan="6" で「生活期」を縦結合配置！）
+        const lifeVWorkSum = lifeVWorkCounts.reduce((a, b) => a + b, 0);
+        html += `<tr style="background:${lifeFc.bg}; font-weight:700;">
+            <td class="sticky-col-1" rowspan="6" style="background:${lifeFc.headerBg}; color:${lifeFc.badgeColor}; font-size:1.05rem; font-weight:800; vertical-align:middle; text-align:center; border-right:1px solid ${lifeFc.border}; width:44px; min-width:44px; max-width:44px;">生活期</td>
+            <td class="sticky-col-2" style="background:${lifeFc.bg}; color:#0f172a !important; border-right:2px solid #475569; font-weight:800; font-size:0.85rem; width:125px; min-width:125px; max-width:125px; padding:2px 4px; white-space:nowrap;">訪問出勤人数合計</td>`;
+        for (let d = 0; d < numDays; d++) {
+            const thickCls = getDayBorderClass(d);
+            html += `<td class="${thickCls} col-day-fixed" style="width:52px; min-width:52px; max-width:52px; background:${lifeFc.bg}; color:#0369a1; font-weight:800; border-bottom:1px solid ${lifeFc.border}; text-align:center;">${lifeVWorkCounts[d]}</td>`;
+        }
+        html += `<td style="background:${lifeFc.bg}; color:#0369a1; font-weight:800; text-align:center; font-size:0.85rem;">${lifeVWorkSum}</td><td colspan="8" style="background:${lifeFc.bg};"></td></tr>`;
+
+        // 生活期 サマリー行2: 訪問実数合計
+        const lifeVRealSum = lifeVRealCounts.reduce((a, b) => a + b, 0);
+        const dispVRealSum = (lifeVRealSum % 1 === 0) ? lifeVRealSum : lifeVRealSum.toFixed(1);
+        html += `<tr style="background:${lifeFc.bg}; font-weight:700;">
+            <td class="sticky-col-2" style="background:${lifeFc.bg}; color:#0f172a !important; border-right:2px solid #475569; font-weight:800; font-size:0.85rem; width:125px; min-width:125px; max-width:125px; padding:2px 4px; white-space:nowrap;">訪問実数合計</td>`;
+        for (let d = 0; d < numDays; d++) {
+            const thickCls = getDayBorderClass(d);
+            const v = lifeVRealCounts[d];
+            const dispV = (v > 0) ? (v % 1 === 0 ? v : v.toFixed(1)) : v;
+            html += `<td class="${thickCls} col-day-fixed" style="width:52px; min-width:52px; max-width:52px; background:${lifeFc.bg}; color:#0284c7; font-weight:800; border-bottom:1px solid ${lifeFc.border}; text-align:center;">${dispV}</td>`;
+        }
+        html += `<td style="background:${lifeFc.bg}; color:#0284c7; font-weight:800; text-align:center; font-size:0.85rem;">${dispVRealSum}</td><td colspan="8" style="background:${lifeFc.bg};"></td></tr>`;
+
+        // 生活期 サマリー行3: 通所出勤人数合計
+        const lifeTWorkSum = lifeTWorkCounts.reduce((a, b) => a + b, 0);
+        html += `<tr style="background:${lifeFc.bg}; font-weight:700;">
+            <td class="sticky-col-2" style="background:${lifeFc.bg}; color:#0f172a !important; border-right:2px solid #475569; font-weight:800; font-size:0.85rem; width:125px; min-width:125px; max-width:125px; padding:2px 4px; white-space:nowrap;">通所出勤人数合計</td>`;
+        for (let d = 0; d < numDays; d++) {
+            const thickCls = getDayBorderClass(d);
+            html += `<td class="${thickCls} col-day-fixed" style="width:52px; min-width:52px; max-width:52px; background:${lifeFc.bg}; color:#854d0e; font-weight:800; border-bottom:1px solid ${lifeFc.border}; text-align:center;">${lifeTWorkCounts[d]}</td>`;
+        }
+        html += `<td style="background:${lifeFc.bg}; color:#854d0e; font-weight:800; text-align:center; font-size:0.85rem;">${lifeTWorkSum}</td><td colspan="8" style="background:${lifeFc.bg};"></td></tr>`;
+
+        // 生活期 サマリー行4: 通所実数合計
+        const lifeTRealSum = lifeTRealCounts.reduce((a, b) => a + b, 0);
+        const dispTRealSum = (lifeTRealSum % 1 === 0) ? lifeTRealSum : lifeTRealSum.toFixed(1);
+        html += `<tr style="background:${lifeFc.bg}; font-weight:700;">
+            <td class="sticky-col-2" style="background:${lifeFc.bg}; color:#0f172a !important; border-right:2px solid #475569; font-weight:800; font-size:0.85rem; width:125px; min-width:125px; max-width:125px; padding:2px 4px; white-space:nowrap;">通所実数合計</td>`;
+        for (let d = 0; d < numDays; d++) {
+            const thickCls = getDayBorderClass(d);
+            const v = lifeTRealCounts[d];
+            const dispV = (v > 0) ? (v % 1 === 0 ? v : v.toFixed(1)) : v;
+            html += `<td class="${thickCls} col-day-fixed" style="width:52px; min-width:52px; max-width:52px; background:${lifeFc.bg}; color:#b45309; font-weight:800; border-bottom:1px solid ${lifeFc.border}; text-align:center;">${dispV}</td>`;
+        }
+        html += `<td style="background:${lifeFc.bg}; color:#b45309; font-weight:800; text-align:center; font-size:0.85rem;">${dispTRealSum}</td><td colspan="8" style="background:${lifeFc.bg};"></td></tr>`;
+
+        // 生活期 サマリー行5: 訪問8時
+        const lifeH8Sum = lifeH8Counts.reduce((a, b) => a + b, 0);
+        html += `<tr style="background:${lifeFc.bg}; font-weight:700;">
+            <td class="sticky-col-2" style="background:${lifeFc.bg}; color:#0f172a !important; border-right:2px solid #475569; font-weight:800; font-size:0.85rem; width:125px; min-width:125px; max-width:125px; padding:2px 4px; white-space:nowrap;">訪問8時</td>`;
+        for (let d = 0; d < numDays; d++) {
+            const thickCls = getDayBorderClass(d);
+            const di = term.dates[d];
+            const isWeekend = di ? (di.wIdx === 5 || di.wIdx === 6) : ((d % 7 === 5) || (d % 7 === 6));
+            const cnt = lifeH8Counts[d];
+            const needH8 = isWeekend ? 0 : 1;
+            const isConflict = (cnt !== needH8);
+            const bgStyle = isConflict ? 'background:#dbeafe !important; color:#1d4ed8 !important;' : `background:${lifeFc.bg}; color:#059669;`;
+            const titleStr = isConflict ? `title="⚠️ 訪問8時定数エラー: ${cnt}名（定数: ${needH8}名）"` : '';
+            html += `<td class="${thickCls} col-day-fixed ${isConflict ? 'conflict-highlight' : ''}" ${titleStr} style="width:52px; min-width:52px; max-width:52px; ${bgStyle} font-weight:800; border-bottom:1px solid ${lifeFc.border}; text-align:center;">${cnt}</td>`;
+        }
+        html += `<td style="background:${lifeFc.bg}; color:#059669; font-weight:800; text-align:center; font-size:0.85rem;">${lifeH8Sum}</td><td colspan="8" style="background:${lifeFc.bg};"></td></tr>`;
+
+        // 生活期 サマリー行6: 「⚡表示する」トグルボタン行（他フロアと完全統一して sticky-col-2 に配置！）
+        html += `<tr style="background:${lifeFc.bg}; border-bottom: 2px solid ${lifeFc.border};">
+            <td class="sticky-col-2" style="background:${lifeFc.bg}; border-right:2px solid #475569; padding:4px 6px; width:125px; min-width:125px; max-width:125px;">
                 <button type="button" class="btn btn-outline toggle-master-floor-btn" data-floor="life" style="width:100%; font-size:0.75rem; padding:2px 6px; font-weight:700; background:${isLifeExp ? '#f1f5f9' : '#ffffff'}; color:${lifeFc.badgeColor}; border-color:${lifeFc.border}; box-shadow: 0 1px 2px rgba(0,0,0,0.05); cursor:pointer;">
                     ${isLifeExp ? '▲折りたたむ' : '⚡表示する'}
                 </button>
@@ -7913,7 +8127,6 @@ function renderMasterIntegrationView() {
 
             let sWork = 0, sOff = 0, sPaid = 0, sRef = 0, sEarly = 0, sLate = 0, sEve = 0, sH8 = 0;
             const isZero = !!(s.isZeroCount || s.lifeSection === '管理' || s.lifeSection === 'Cl1');
-            const isHalf = !!s.isHalf;
 
             // ★ ユーザー指示: マスターテーブルリアルタイム制約チェック実行（生活期スタッフ）
             const sRowSyms = [];
@@ -7983,189 +8196,6 @@ function renderMasterIntegrationView() {
                 <td class="remarks-cell" style="background:#ffffff; color:#475569; font-size:0.78rem; text-align:left; padding:2px 8px; border-bottom:1px solid #e2e8f0; white-space:normal; word-break:break-all;">${escapeHtmlText(s.remarks || '')}</td>
             </tr>`;
         });
-
-        // 生活期の集計行（添付2の5項目：訪問出勤人数合計、訪問実数合計、通所出勤人数合計、通所実数合計、訪問8時）
-        const lifeFooterItems = [
-            { label: '訪問出勤人数合計', vals: lifeVWorkCounts, color: '#0369a1', bg: '#f8fafc', bold: true },
-            { label: '訪問実数合計', vals: lifeVRealCounts, color: '#0284c7', bg: '#f0f9ff', bold: true },
-            { label: '通所出勤人数合計', vals: lifeTWorkCounts, color: '#854d0e', bg: '#fefce8', bold: true },
-            { label: '通所実数合計', vals: lifeTRealCounts, color: '#b45309', bg: '#fffbeb', bold: true },
-            { label: '訪問8時', vals: lifeH8Counts, color: '#059669', bg: '#f0fdf4', bold: true, isH8: true }
-        ];
-
-        lifeFooterItems.forEach((fr, frIdx) => {
-            const totalSum = fr.vals.reduce((a, b) => a + b, 0);
-            const displayTotal = totalSum % 1 === 0 ? totalSum : totalSum.toFixed(1);
-            html += `<tr style="background:${fr.bg}; font-weight:${fr.bold ? '800' : '700'};">`;
-            if (frIdx === 0) {
-                html += `<td class="sticky-col-1" rowspan="5" style="background:#f1f5f9; color:#0369a1; font-weight:800; font-size:0.85rem; text-align:center; vertical-align:middle; border-right:1px solid #cbd5e1; width:44px; min-width:44px; max-width:44px;">集計</td>`;
-            }
-            html += `<td class="sticky-col-2" style="background:${fr.bg}; color:${fr.color}; font-weight:${fr.bold ? '800' : '700'}; font-size:0.85rem; text-align:left; border-right:2px solid #475569; padding-left:8px;">${fr.label}</td>`;
-            for (let d = 0; d < numDays; d++) {
-                const thickCls = getDayBorderClass(d);
-                const v = fr.vals[d];
-                const dispV = (v > 0) ? (v % 1 === 0 ? v : v.toFixed(1)) : (fr.isH8 ? v : (['訪問出勤人数合計', '訪問実数合計', '通所出勤人数合計', '通所実数合計'].includes(fr.label) ? v : '-'));
-
-                let isConflict = false;
-                let conflictTitle = '';
-                if (fr.isH8) {
-                    const di = term.dates[d];
-                    const isWeekend = di ? (di.wIdx === 5 || di.wIdx === 6) : ((d % 7 === 5) || (d % 7 === 6));
-                    const needH8 = isWeekend ? 0 : 1;
-                    if (v !== needH8) {
-                        isConflict = true;
-                        conflictTitle = `⚠️ 訪問8時定数エラー: ${v}名（定数: ${needH8}名）`;
-                    }
-                }
-                const bgStyle = isConflict ? 'background:#dbeafe !important; color:#1d4ed8 !important;' : `background:${fr.bg}; color:${fr.color};`;
-                const titleAttr = conflictTitle ? `title="${conflictTitle}"` : '';
-                const conflictCls = isConflict ? 'conflict-highlight' : '';
-
-                html += `<td class="${thickCls} ${conflictCls} col-day-fixed" ${titleAttr} style="width:52px; min-width:52px; max-width:52px; ${bgStyle} text-align:center; border-bottom:1px solid #cbd5e1; font-weight:${fr.bold ? '800' : '700'};">${dispV}</td>`;
-            }
-            html += `<td style="background:${fr.bg}; color:${fr.color}; font-weight:800; text-align:center; font-size:0.85rem;">${displayTotal}</td><td colspan="8" style="background:${fr.bg};"></td></tr>`;
-        });
-
-        // フロア間の仕切り余白行
-        html += `<tr style="height:12px; background:#f8fafc;"><td colspan="${numDays + 11}" style="border:none; background:#f8fafc;"></td></tr>`;
-
-        // ==========================================
-        // ★ ユーザー指示 (要求3): マスターテーブル最下部全館「集計」の表示変更（全11項目）
-        // ・(病棟)出勤人数合計
-        // ・(病棟)実数合計
-        // ・(病棟)早
-        // ・(病棟)遅
-        // ・(病棟)E
-        // ・(病棟)8時
-        // ・(訪問)出勤人数合計
-        // ・(訪問)実数合計
-        // ・(通所)出勤人数合計
-        // ・(通所)実数合計
-        // ・(訪問)8時
-        // ==========================================
-        html += `<tr style="background:#f1f5f9; font-weight:700; border-top: 3px solid #334155;">
-            <th class="sticky-col-1" rowspan="11" style="background:#e2e8f0; color:#1e293b; font-size:1.1rem; font-weight:900; vertical-align:middle; text-align:center; border-right:1px solid #cbd5e1; width:44px; min-width:44px; max-width:44px;">集計</th>
-            <td class="sticky-col-2" style="background:#f8fafc; color:#0f172a; border-right:2px solid #475569; font-weight:800; font-size:0.9rem; width:95px; min-width:95px; max-width:105px;">(病棟)出勤人数合計</td>`;
-        for (let d = 0; d < numDays; d++) {
-            const thickCls = getDayBorderClass(d);
-            html += `<td class="${thickCls} col-day-fixed" style="width:52px; min-width:52px; max-width:52px; background:#f8fafc; color:#0f172a; font-weight:800; font-size:0.95rem; border-bottom:1px solid #cbd5e1; text-align:center;">${grandTotal[d]}</td>`;
-        }
-        html += `<td colspan="9" style="background:#f8fafc;"></td></tr>`;
-
-        // 2. (病棟)実数合計
-        html += `<tr style="background:#f8fafc; font-weight:700;">
-            <td class="sticky-col-2" style="background:#f8fafc; color:#0369a1; border-right:2px solid #475569; font-weight:800; font-size:0.9rem; width:95px; min-width:95px; max-width:105px;">(病棟)実数合計</td>`;
-        for (let d = 0; d < numDays; d++) {
-            const thickCls = getDayBorderClass(d);
-            html += `<td class="${thickCls} col-day-fixed" style="width:52px; min-width:52px; max-width:52px; background:#f8fafc; color:#0369a1; font-weight:800; font-size:0.95rem; border-bottom:1px solid #cbd5e1; text-align:center;">${Number(grandReal[d].toFixed(1))}</td>`;
-        }
-        html += `<td colspan="9" style="background:#f8fafc;"></td></tr>`;
-
-        // 3. (病棟)早（全館定数: 11名）
-        html += `<tr style="background:#f8fafc; font-weight:700;">
-            <td class="sticky-col-2" style="background:#f8fafc; color:#ea580c; border-right:2px solid #475569; font-weight:700; width:95px; min-width:95px; max-width:105px;">(病棟)早</td>`;
-        for (let d = 0; d < numDays; d++) {
-            const thickCls = getDayBorderClass(d);
-            const cnt = grandEarly[d];
-            const isConflict = (cnt !== 11);
-            const bgStyle = isConflict ? 'background:#dbeafe !important; color:#1d4ed8 !important;' : 'background:#f8fafc; color:#ea580c;';
-            const titleStr = isConflict ? `title="⚠️ 全館早番定数エラー: ${cnt}名（定数: 11名）"` : '';
-            html += `<td class="${thickCls} col-day-fixed ${isConflict ? 'conflict-highlight' : ''}" ${titleStr} style="width:52px; min-width:52px; max-width:52px; ${bgStyle} font-weight:700; border-bottom:1px solid #cbd5e1; text-align:center;">${cnt}</td>`;
-        }
-        html += `<td colspan="9" style="background:#f8fafc;"></td></tr>`;
-
-        // 4. (病棟)遅（全館定数: 5名）
-        html += `<tr style="background:#f8fafc; font-weight:700;">
-            <td class="sticky-col-2" style="background:#f8fafc; color:#0284c7; border-right:2px solid #475569; font-weight:700; width:95px; min-width:95px; max-width:105px;">(病棟)遅</td>`;
-        for (let d = 0; d < numDays; d++) {
-            const thickCls = getDayBorderClass(d);
-            const cnt = grandLate[d];
-            const isConflict = (cnt !== 5);
-            const bgStyle = isConflict ? 'background:#dbeafe !important; color:#1d4ed8 !important;' : 'background:#f8fafc; color:#0284c7;';
-            const titleStr = isConflict ? `title="⚠️ 全館遅番定数エラー: ${cnt}名（定数: 5名）"` : '';
-            html += `<td class="${thickCls} col-day-fixed ${isConflict ? 'conflict-highlight' : ''}" ${titleStr} style="width:52px; min-width:52px; max-width:52px; ${bgStyle} font-weight:700; border-bottom:1px solid #cbd5e1; text-align:center;">${cnt}</td>`;
-        }
-        html += `<td colspan="9" style="background:#f8fafc;"></td></tr>`;
-
-        // 5. (病棟)E（全館定数: 8名）
-        html += `<tr style="background:#f8fafc; font-weight:700;">
-            <td class="sticky-col-2" style="background:#f8fafc; color:#7c3aed; border-right:2px solid #475569; font-weight:700; width:95px; min-width:95px; max-width:105px;">(病棟)E</td>`;
-        for (let d = 0; d < numDays; d++) {
-            const thickCls = getDayBorderClass(d);
-            const cnt = grandEve[d];
-            const isConflict = (cnt !== 8);
-            const bgStyle = isConflict ? 'background:#dbeafe !important; color:#1d4ed8 !important;' : 'background:#f8fafc; color:#7c3aed;';
-            const titleStr = isConflict ? `title="⚠️ 全館E定数エラー: ${cnt}名（定数: 8名）"` : '';
-            html += `<td class="${thickCls} col-day-fixed ${isConflict ? 'conflict-highlight' : ''}" ${titleStr} style="width:52px; min-width:52px; max-width:52px; ${bgStyle} font-weight:700; border-bottom:1px solid #cbd5e1; text-align:center;">${cnt}</td>`;
-        }
-        html += `<td colspan="9" style="background:#f8fafc;"></td></tr>`;
-
-        // 6. (病棟)8時（全館定数: 4名）
-        html += `<tr style="background:#f8fafc; font-weight:700;">
-            <td class="sticky-col-2" style="background:#f8fafc; color:#059669; border-right:2px solid #475569; font-weight:700; width:95px; min-width:95px; max-width:105px;">(病棟)8時</td>`;
-        for (let d = 0; d < numDays; d++) {
-            const thickCls = getDayBorderClass(d);
-            const cnt = grandH8[d];
-            const isConflict = (cnt !== 4);
-            const bgStyle = isConflict ? 'background:#dbeafe !important; color:#1d4ed8 !important;' : 'background:#f8fafc; color:#059669;';
-            const titleStr = isConflict ? `title="⚠️ 全館8時定数エラー: ${cnt}名（定数: 4名）"` : '';
-            html += `<td class="${thickCls} col-day-fixed ${isConflict ? 'conflict-highlight' : ''}" ${titleStr} style="width:52px; min-width:52px; max-width:52px; ${bgStyle} font-weight:700; border-bottom:1px solid #cbd5e1; text-align:center;">${cnt}</td>`;
-        }
-        html += `<td colspan="9" style="background:#f8fafc;"></td></tr>`;
-
-        // 7. (訪問)出勤人数合計
-        html += `<tr style="background:#f8fafc; font-weight:700;">
-            <td class="sticky-col-2" style="background:#f8fafc; color:#0369a1; border-right:2px solid #475569; font-weight:800; font-size:0.9rem; width:95px; min-width:95px; max-width:105px;">(訪問)出勤人数合計</td>`;
-        for (let d = 0; d < numDays; d++) {
-            const thickCls = getDayBorderClass(d);
-            html += `<td class="${thickCls} col-day-fixed" style="width:52px; min-width:52px; max-width:52px; background:#f8fafc; color:#0369a1; font-weight:800; font-size:0.95rem; border-bottom:1px solid #cbd5e1; text-align:center;">${lifeVWorkCounts[d]}</td>`;
-        }
-        html += `<td colspan="9" style="background:#f8fafc;"></td></tr>`;
-
-        // 8. (訪問)実数合計
-        html += `<tr style="background:#f8fafc; font-weight:700;">
-            <td class="sticky-col-2" style="background:#f8fafc; color:#0284c7; border-right:2px solid #475569; font-weight:800; font-size:0.9rem; width:95px; min-width:95px; max-width:105px;">(訪問)実数合計</td>`;
-        for (let d = 0; d < numDays; d++) {
-            const thickCls = getDayBorderClass(d);
-            const disp = (lifeVRealCounts[d] % 1 === 0) ? lifeVRealCounts[d] : lifeVRealCounts[d].toFixed(1);
-            html += `<td class="${thickCls} col-day-fixed" style="width:52px; min-width:52px; max-width:52px; background:#f8fafc; color:#0284c7; font-weight:800; font-size:0.95rem; border-bottom:1px solid #cbd5e1; text-align:center;">${disp}</td>`;
-        }
-        html += `<td colspan="9" style="background:#f8fafc;"></td></tr>`;
-
-        // 9. (通所)出勤人数合計
-        html += `<tr style="background:#f8fafc; font-weight:700;">
-            <td class="sticky-col-2" style="background:#f8fafc; color:#854d0e; border-right:2px solid #475569; font-weight:800; font-size:0.9rem; width:95px; min-width:95px; max-width:105px;">(通所)出勤人数合計</td>`;
-        for (let d = 0; d < numDays; d++) {
-            const thickCls = getDayBorderClass(d);
-            html += `<td class="${thickCls} col-day-fixed" style="width:52px; min-width:52px; max-width:52px; background:#f8fafc; color:#854d0e; font-weight:800; font-size:0.95rem; border-bottom:1px solid #cbd5e1; text-align:center;">${lifeTWorkCounts[d]}</td>`;
-        }
-        html += `<td colspan="9" style="background:#f8fafc;"></td></tr>`;
-
-        // 10. (通所)実数合計
-        html += `<tr style="background:#f8fafc; font-weight:700;">
-            <td class="sticky-col-2" style="background:#f8fafc; color:#b45309; border-right:2px solid #475569; font-weight:800; font-size:0.9rem; width:95px; min-width:95px; max-width:105px;">(通所)実数合計</td>`;
-        for (let d = 0; d < numDays; d++) {
-            const thickCls = getDayBorderClass(d);
-            const disp = (lifeTRealCounts[d] % 1 === 0) ? lifeTRealCounts[d] : lifeTRealCounts[d].toFixed(1);
-            html += `<td class="${thickCls} col-day-fixed" style="width:52px; min-width:52px; max-width:52px; background:#f8fafc; color:#b45309; font-weight:800; font-size:0.95rem; border-bottom:1px solid #cbd5e1; text-align:center;">${disp}</td>`;
-        }
-        html += `<td colspan="9" style="background:#f8fafc;"></td></tr>`;
-
-        // 11. (訪問)8時（月〜金定数1名、土日0名。不一致ならブルー網掛け）
-        html += `<tr style="background:#f8fafc; font-weight:700; border-bottom:3px solid #334155;">
-            <td class="sticky-col-2" style="background:#f8fafc; color:#059669; border-right:2px solid #475569; font-weight:700; width:95px; min-width:95px; max-width:105px;">(訪問)8時</td>`;
-        for (let d = 0; d < numDays; d++) {
-            const di = term.dates[d];
-            const isWeekend = di ? (di.wIdx === 5 || di.wIdx === 6) : ((d % 7 === 5) || (d % 7 === 6));
-            const thickCls = getDayBorderClass(d);
-            const cnt = lifeH8Counts[d];
-            const needH8 = isWeekend ? 0 : 1;
-            const isConflict = (cnt !== needH8);
-            const bgStyle = isConflict ? 'background:#dbeafe !important; color:#1d4ed8 !important;' : 'background:#f8fafc; color:#059669;';
-            const titleStr = isConflict ? `title="⚠️ 訪問8時定数エラー: ${cnt}名（定数: ${needH8}名）"` : '';
-            html += `<td class="${thickCls} col-day-fixed ${isConflict ? 'conflict-highlight' : ''}" ${titleStr} style="width:52px; min-width:52px; max-width:52px; ${bgStyle} font-weight:700; border-bottom:1px solid #cbd5e1; text-align:center;">${cnt}</td>`;
-        }
-        html += `<td colspan="9" style="background:#f8fafc;"></td></tr>`;
 
         checkTbody.innerHTML = html;
 
