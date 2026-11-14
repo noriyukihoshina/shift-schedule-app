@@ -417,6 +417,13 @@ document.addEventListener('DOMContentLoaded', () => {
             document.title = `勤務予定表 自動作成システム - ${config.deptName}`;
         }
 
+        // ★ ユーザー指示: オンライン（Vercel等のWeb上）ではパスワードは不要！
+        // 病院のイントラ環境（file:プロトコル等のオフライン運用）でのみパスワード画面を起動する
+        const isOnlineHost = (window.location.protocol === 'http:' || window.location.protocol === 'https:');
+        if (isOnlineHost) {
+            return; // オンライン環境ではパスワード不要で即座に開く
+        }
+
         const authKey = `auth_${deptId}`;
         // ★ ユーザー指示: リロード時は不要、ブラウザで新しく開くたびにパスワードを要求（sessionStorage）
         if (sessionStorage.getItem(authKey) === 'true') {
