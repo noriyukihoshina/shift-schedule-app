@@ -1127,8 +1127,8 @@ document.addEventListener('DOMContentLoaded', () => {
                     allow6Consec: !!s.allow6Consec,
                 isSatSunOff: !!s.isSatSunOff,
                 isSunOff: !!s.isSunOff,
-                    prevDays: [...s.prevDays],
-                    days: [...s.days]
+                    prevDays: (Array.isArray(s.prevDays) ? s.prevDays : []).map(v => extractCellSymbol(v)),
+                    days: (Array.isArray(s.days) ? s.days : []).map(v => extractCellSymbol(v))
                 })),
                 outputGrid: (lastSolveResult && lastSolveResult.grid) 
                     ? lastSolveResult.grid.map(row => row.map(c => ({ ...c }))) 
@@ -1339,64 +1339,6 @@ document.addEventListener('DOMContentLoaded', () => {
                 );
                 const maxTeamSpread = Math.max(calcSpread(secArrays.teamA), calcSpread(secArrays.teamB));
 
-                if (loadedLoadDiff > 3.0 || (!data.sectionTeamLeveledRev45 && (maxSecSpread >= 5 || maxTeamSpread >= 6))) {
-                    // まず既存のグリッドに対してクロススワップ平準化を適用
-                    scheduler.balanceDailyWorkforce();
-                    // もし初期配置から組み直した方がさらにセクション・チームのブレが小さく制約エラーも0件なら採用
-                    const freshSched = new ShiftScheduler(staffList, {
-                        standardHolidays: stdVal,
-                        dates: term.dates,
-                        dayOffsets: [...dayOffsets],
-                        isST: isST,
-                        isSouth: isSouth,
-                        isLife: isLife
-                    });
-                    const reBase = freshSched.solveBaseSchedule({ force: true });
-                    if (reBase && reBase.grid) {
-                        if (hasUnfixedSpecialInLoaded) {
-                            const reSpec = freshSched.assignSpecialDutiesToGrid({ force: true });
-                            if (reSpec && reSpec.grid) {
-                                freshSched.grid = reSpec.grid;
-                            }
-                        }
-                        const freshVal = validateScheduleGrid(freshSched.grid, staffList, {
-                            dates: term.dates,
-                            standardHolidays: stdVal,
-                            isFinal: hasUnfixedSpecialInLoaded,
-                            isST: isST,
-                            isSouth: isSouth,
-                            isLife: isLife,
-                            stStaffData: linkedStStaffData,
-                            linkedStStaffData: linkedStStaffData
-                        });
-                        const curVal = validateScheduleGrid(scheduler.grid, staffList, {
-                            dates: term.dates,
-                            standardHolidays: stdVal,
-                            isFinal: hasUnfixedSpecialInLoaded,
-                            isST: isST,
-                            isSouth: isSouth,
-                            isLife: isLife,
-                            stStaffData: linkedStStaffData,
-                            linkedStStaffData: linkedStStaffData
-                        });
-                        if (freshVal.errors.length <= curVal.errors.length) {
-                            scheduler.grid = freshSched.grid;
-                        }
-                    }
-                    data.outputGrid = scheduler.grid;
-                    data.sectionTeamLeveledRev45 = true;
-                    try {
-                        localStorage.setItem(`${STORAGE_KEY_PREFIX}${targetStart}`, JSON.stringify(data));
-                    } catch (e) {}
-                } else if (!data.sectionTeamLeveledRev45) {
-                    scheduler.balanceDailyWorkforce();
-                    data.outputGrid = scheduler.grid;
-                    data.sectionTeamLeveledRev45 = true;
-                    try {
-                        localStorage.setItem(`${STORAGE_KEY_PREFIX}${targetStart}`, JSON.stringify(data));
-                    } catch (e) {}
-                }
-
                 const newStats = scheduler.calculateStats();
                 lastScheduler = scheduler;
                 lastSolveResult = {
@@ -1466,14 +1408,25 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     }
 
-    // セルまたはオブジェクトから安全に文字列シンボルを抽出するヘルパー（[object Object] の混入を100%防止）
+    // セルまたはオブジェクトから安全に文字列シンボルを抽出するヘルパー（[object Object] の混入を100%物理遮断）
     function extractCellSymbol(cell) {
         if (cell === null || cell === undefined) return '';
-        if (typeof cell === 'object') {
-            return (cell.symbol !== undefined && cell.symbol !== null) ? String(cell.symbol).trim() : '';
+        let depth = 0;
+        while (cell && typeof cell === 'object' && depth < 5) {
+            depth++;
+            if (cell.symbol !== undefined && cell.symbol !== null) {
+                cell = cell.symbol;
+            } else if (cell.value !== undefined && cell.value !== null) {
+                cell = cell.value;
+            } else if (cell.text !== undefined && cell.text !== null) {
+                cell = cell.text;
+            } else {
+                return '';
+            }
         }
         const str = String(cell).trim();
-        return (str === '[object Object]') ? '' : str;
+        if (str === '[object Object]' || str === 'undefined' || str === 'null' || str === 'NaN') return '';
+        return str;
     }
 
     // ==========================================
@@ -3991,7 +3944,7 @@ document.addEventListener('DOMContentLoaded', () => {
             pEndD.setDate(pEndD.getDate() + 27);
             const pTitle = `${pD.getMonth() + 1}/${pD.getDate()}～${pEndD.getMonth() + 1}/${pEndD.getDate()}`;
 
-            if (confirm(`直前の勤務表【${pTitle}】の最終5日間の勤務実績を、この期間の「前ターム最終5日間実績」に取り込みますか？\n（※現在入力されている前実績は上書きされます）`)) {
+            if (confirm(`直前の勤務表【${pTitle}】の最終7日間の勤務実績を、この期間の「前ターム最終7日間実績」に取り込みますか？\n（※現在入力されている前実績は上書きされます）`)) {
                 pushHistory();
                 applyPreviousTermHistory(prevTerm, true);
             }
@@ -4379,7 +4332,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
     if (solveBtn) {
         solveBtn.addEventListener('click', () => {
-        // ★ ユーザー指示: ⚡ 勤務表を自動生成するを押したタイミングで前ターム最終5日間実績を読み込んでいない場合は自動で前ターム最終5日間実績を読み込んでから作業を開始
+        // ★ ユーザー指示: ⚡ 勤務表を自動生成するを押したタイミングで前ターム最終7日間実績を読み込んでいない場合は自動で前ターム最終7日間実績を読み込んでから作業を開始
         const hasPrevHistory = staffList.some(s => !s.isUnused && s.prevDays && s.prevDays.some(p => p && p.trim() !== ''));
         if (!hasPrevHistory) {
             const curDate = document.getElementById('termStartDate')?.value || currentWorkingStartDate;
@@ -4387,7 +4340,7 @@ document.addEventListener('DOMContentLoaded', () => {
             if (prevTerm) {
                 const applied = applyPreviousTermHistory(prevTerm, false);
                 if (applied) {
-                    showToast('🔗 直前の前ターム最終5日間実績を自動取込しました');
+                    showToast('🔗 直前の前ターム最終7日間実績を自動取込しました');
                     renderInputTable();
                 }
             }
@@ -6551,7 +6504,7 @@ document.addEventListener('DOMContentLoaded', () => {
         // =====================================================================
         // フェーズ1: 全体出勤実数のブレ最小化（高負荷日 ⇄ 低負荷日）
         // =====================================================================
-        const maxIterOverall = 40;
+        const maxIterOverall = 20;
         for (let iter = 0; iter < maxIterOverall; iter++) {
             const loads = targetDays.map(d => ({ day: d, load: getDailyReal(d) }));
             loads.sort((a, b) => b.load - a.load);
@@ -6562,9 +6515,9 @@ document.addEventListener('DOMContentLoaded', () => {
             if (maxItem.load - minItem.load <= 0.6) break;
 
             let swapped = false;
-            for (let h = 0; h < Math.min(4, loads.length); h++) {
+            for (let h = 0; h < Math.min(3, loads.length); h++) {
                 const maxD = loads[h].day;
-                for (let l = loads.length - 1; l >= Math.max(0, loads.length - 4); l--) {
+                for (let l = loads.length - 1; l >= Math.max(0, loads.length - 3); l--) {
                     const minD = loads[l].day;
                     if (loads[h].load - loads[l].load <= 0.6) continue;
 
@@ -6589,7 +6542,7 @@ document.addEventListener('DOMContentLoaded', () => {
         // フェーズ2: Aチーム vs Bチーム（南病棟は南2階 vs 南3階）の出勤人数平準化
         // （全体実数を1ミリも変えずに、AとBの差が2名以上の日の偏りを均等化！）
         // =====================================================================
-        const maxIterTeam = 60;
+        const maxIterTeam = 25;
         for (let iter = 0; iter < maxIterTeam; iter++) {
             const teamLoads = targetDays.map(d => {
                 const tl = getDailyTeamLoads(d);
@@ -6606,11 +6559,11 @@ document.addEventListener('DOMContentLoaded', () => {
             let teamSwapped = false;
 
             // 1. 2名同時クロススワップ（全体実数維持: d1でA減・B増、d2でA増・B減）
-            for (let h = 0; h < Math.min(6, teamLoads.length); h++) {
+            for (let h = 0; h < Math.min(3, teamLoads.length); h++) {
                 const d1 = teamLoads[h].day;
                 if (teamLoads[h].diff <= 1.0) continue; // Aが多すぎない日はスキップ
 
-                for (let l = teamLoads.length - 1; l >= Math.max(0, teamLoads.length - 6); l--) {
+                for (let l = teamLoads.length - 1; l >= Math.max(0, teamLoads.length - 3); l--) {
                     const d2 = teamLoads[l].day;
                     if (teamLoads[l].diff >= -1.0) continue; // Bが多すぎない日はスキップ
                     if (teamLoads[h].diff - teamLoads[l].diff <= 1.5) continue;

@@ -2,13 +2,27 @@
   "cleanUrls": true,
   "rewrites": [
     { "source": "/1f", "destination": "/1f.html" },
+    { "source": "/1F", "destination": "/1f.html" },
     { "source": "/2f", "destination": "/2f.html" },
+    { "source": "/2F", "destination": "/2f.html" },
     { "source": "/3f", "destination": "/3f.html" },
+    { "source": "/3F", "destination": "/3f.html" },
     { "source": "/south", "destination": "/south.html" },
+    { "source": "/South", "destination": "/south.html" },
+    { "source": "/SOUTH", "destination": "/south.html" },
     { "source": "/st", "destination": "/ST.html" },
     { "source": "/ST", "destination": "/ST.html" },
     { "source": "/life", "destination": "/life.html" },
-    { "source": "/master", "destination": "/index.html" }
+    { "source": "/Life", "destination": "/life.html" },
+    { "source": "/master", "destination": "/index.html" },
+    { "source": "/Master", "destination": "/index.html" },
+    { "source": "/1階病棟", "destination": "/1f.html" },
+    { "source": "/2階病棟", "destination": "/2f.html" },
+    { "source": "/3階病棟", "destination": "/3f.html" },
+    { "source": "/南病棟", "destination": "/south.html" },
+    { "source": "/生活期", "destination": "/life.html" },
+    { "source": "/マスター統括", "destination": "/index.html" },
+    { "source": "/マスターテーブル", "destination": "/index.html" }
   ],
   "headers": [
     {
