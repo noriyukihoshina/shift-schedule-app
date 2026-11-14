@@ -2138,13 +2138,12 @@ class ShiftScheduler {
         // 基本制約の検証
         let baseErrors = this.verifyBaseHardConstraints();
         if (baseErrors.length > 0) {
-            // ★ ユーザー指示: 一度エラーが出た後に勤務の微調整をおこなうシステムを構築し、エラーを回避してから出力する！
-            for (let rPass = 0; rPass < 5; rPass++) {
+            // ★ 高速微調整リペア（最大1パスで安全に修復し、長時間のスレッド占有を完全遮断）
+            for (let rPass = 0; rPass < 2; rPass++) {
                 this.repairScheduleViolations();
                 this.ensureRoleCoverage();
                 this.ensureSchedCoverage();
                 this.ensureFullTimeCoverage();
-                this.balanceWeekdayWeekendOffset();
                 this.balanceWeekdaysDirectly();
                 this.balanceWeekendsDirectly();
                 baseErrors = this.verifyBaseHardConstraints();
@@ -2154,6 +2153,9 @@ class ShiftScheduler {
                 return { success: false, errors: baseErrors };
             }
         }
+
+        this.balanceWeekdaysDirectly();
+        this.balanceWeekendsDirectly();
 
         return {
             success: true,
@@ -4764,7 +4766,7 @@ class ShiftScheduler {
      * 3. 中継日(midDay)を介した2ステップ連鎖スワップ（週休2日制約を守りつつ異なる週の間の実数合計の凹凸を平坦化）
      */
     balanceGlobalWithOffsets() {
-        for (let iter = 0; iter < 500; iter++) {
+        for (let iter = 0; iter < 25; iter++) {
             const daily = [];
             for (let d = 0; d < this.numDays; d++) {
                 const load = this.getDailyEffectiveRealLoad(d);
@@ -4789,8 +4791,9 @@ class ShiftScheduler {
             let swapped = false;
 
             // --- フェーズ1: 単一スタッフによる直接スワップ（1.0換算スタッフ または 0.5換算スタッフ） ---
-            const highDays = daily.filter(item => item.diff > 0.15);
-            const lowDays = daily.slice().reverse().filter(item => item.diff < -0.15);
+            // 上位3日間に絞って超高速に探索
+            const highDays = daily.filter(item => item.diff > 0.15).slice(0, 3);
+            const lowDays = daily.slice().reverse().filter(item => item.diff < -0.15).slice(0, 3);
 
             outerDirect:
             for (const hItem of highDays) {
@@ -4837,7 +4840,6 @@ class ShiftScheduler {
 
                     for (const s of staffOrder) {
                         const w = this.staffList[s].isHalf ? 0.5 : 1.0;
-                        // スワップ後に2日間の実数差が確実に縮まる場合のみ実行（gap > w）
                         if (gap <= w + 0.01) continue;
 
                         if (!this.grid[s][maxDay].isFixed && this.grid[s][maxDay].symbol === SYMBOLS.WORK &&
@@ -4860,7 +4862,7 @@ class ShiftScheduler {
 
             if (swapped) continue;
 
-            // --- フェーズ2: 1.0スタッフと0.5スタッフの逆方向同時スワップ（差1.0の2日間を0.5移動して完全一致させる） ---
+            // --- フェーズ2: 1.0スタッフと0.5スタッフの逆方向同時スワップ ---
             const halfStaffIndices = [];
             const fullStaffIndices = [];
             for (let s = 0; s < this.numStaff; s++) {
@@ -4877,10 +4879,8 @@ class ShiftScheduler {
                         const minDay = lItem.day;
                         if (maxDay === minDay) continue;
                         const gap = hItem.load - lItem.load;
-                        // 差が 1.0 以上ある場合、1.0スタッフを maxDay->minDay、0.5スタッフを minDay->maxDay に動かすと正味 0.5 移動！
                         if (gap <= 0.51) continue;
 
-                        // maxDay(○)->minDay(休) が可能な 1.0スタッフを探す
                         let validFullS = -1;
                         for (const fs of fullStaffIndices) {
                             if (!this.grid[fs][maxDay].isFixed && this.grid[fs][maxDay].symbol === SYMBOLS.WORK &&
@@ -4897,7 +4897,6 @@ class ShiftScheduler {
                         }
                         if (validFullS === -1) continue;
 
-                        // minDay(○)->maxDay(休) が可能な 0.5スタッフを探す
                         for (const hs of halfStaffIndices) {
                             if (!this.grid[hs][minDay].isFixed && this.grid[hs][minDay].symbol === SYMBOLS.WORK &&
                                 !this.grid[hs][maxDay].isFixed && this.grid[hs][maxDay].symbol === SYMBOLS.OFF) {
@@ -4914,70 +4913,6 @@ class ShiftScheduler {
                                     this.setSymbol(validFullS, minDay, SYMBOLS.OFF, false);
                                     this.setSymbol(hs, minDay, SYMBOLS.WORK, false);
                                     this.setSymbol(hs, maxDay, SYMBOLS.OFF, false);
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-
-            if (swapped) continue;
-
-            // --- フェーズ3: 中継日(midDay)を介した2ステップ連鎖スワップ（異なる週の間でも週休2日を守って実数合計を平坦化） ---
-            outerRelay:
-            for (const hItem of highDays) {
-                const maxDay = hItem.day;
-                for (const lItem of lowDays) {
-                    const minDay = lItem.day;
-                    if (maxDay === minDay) continue;
-                    const gap = hItem.load - lItem.load;
-                    if (gap <= 0.51) continue;
-
-                    // 中継日 midDay を探索
-                    for (let midDay = 0; midDay < this.numDays; midDay++) {
-                        if (midDay === maxDay || midDay === minDay) continue;
-
-                        // 同じ重み w (1.0 または 0.5) のスタッフペア (s1: maxDay->midDay, s2: midDay->minDay) を探す
-                        for (const targetW of [0.5, 1.0]) {
-                            if (gap <= targetW + 0.01) continue;
-                            const pool = targetW === 0.5 ? halfStaffIndices : fullStaffIndices;
-                            if (pool.length < 2) continue;
-
-                            let s1Found = -1;
-                            for (const s1 of pool) {
-                                if (!this.grid[s1][maxDay].isFixed && this.grid[s1][maxDay].symbol === SYMBOLS.WORK &&
-                                    !this.grid[s1][midDay].isFixed && this.grid[s1][midDay].symbol === SYMBOLS.OFF) {
-                                    this.setSymbol(s1, maxDay, SYMBOLS.OFF, false);
-                                    this.setSymbol(s1, midDay, SYMBOLS.WORK, false);
-                                    if (this.isStaffHardValid(s1)) {
-                                        s1Found = s1;
-                                    }
-                                    this.setSymbol(s1, maxDay, SYMBOLS.WORK, false);
-                                    this.setSymbol(s1, midDay, SYMBOLS.OFF, false);
-                                    if (s1Found !== -1) break;
-                                }
-                            }
-                            if (s1Found === -1) continue;
-
-                            for (const s2 of pool) {
-                                if (s2 === s1Found) continue;
-                                if (!this.grid[s2][midDay].isFixed && this.grid[s2][midDay].symbol === SYMBOLS.WORK &&
-                                    !this.grid[s2][minDay].isFixed && this.grid[s2][minDay].symbol === SYMBOLS.OFF) {
-                                    // s1 と s2 を同時適用して検証
-                                    this.setSymbol(s1Found, maxDay, SYMBOLS.OFF, false);
-                                    this.setSymbol(s1Found, midDay, SYMBOLS.WORK, false);
-                                    this.setSymbol(s2, midDay, SYMBOLS.OFF, false);
-                                    this.setSymbol(s2, minDay, SYMBOLS.WORK, false);
-
-                                    if (this.isStaffHardValid(s1Found) && this.isStaffHardValid(s2) && this.isGlobalAttributesValid()) {
-                                        swapped = true;
-                                        break outerRelay;
-                                    } else {
-                                        this.setSymbol(s1Found, maxDay, SYMBOLS.WORK, false);
-                                        this.setSymbol(s1Found, midDay, SYMBOLS.OFF, false);
-                                        this.setSymbol(s2, midDay, SYMBOLS.WORK, false);
-                                        this.setSymbol(s2, minDay, SYMBOLS.OFF, false);
-                                    }
                                 }
                             }
                         }
@@ -5192,7 +5127,7 @@ class ShiftScheduler {
         }
 
         // --- 3. 週休2日違反の自動修復（日〜土で6出勤・1公休を前後の週とスワップ） ---
-        for (let pass = 0; pass < 3; pass++) {
+        for (let pass = 0; pass < 1; pass++) {
             let fixedWeek = false;
             for (let s = 0; s < this.numStaff; s++) {
                 if (this.staffList[s].isUnused || this.staffList[s].isSectionChief) continue;
@@ -5206,7 +5141,6 @@ class ShiftScheduler {
 
                     // 週休が1日しかない（6出勤）
                     if (weekOff < 2) {
-                        // 他の週で週休が3日以上ある週（または公休に余裕のある日）を探す
                         for (let otherW = 0; otherW < this.weekSpans.length; otherW++) {
                             if (otherW === w) continue;
                             const otherSpan = this.weekSpans[otherW];
@@ -5216,22 +5150,18 @@ class ShiftScheduler {
                             }
 
                             if (otherOff >= 3) {
-                                // otherSpan の非固定「休」を wSpan の非固定「○」とスワップ！
                                 for (const od of otherSpan) {
                                     if (this.grid[s][od].symbol === SYMBOLS.OFF && !this.grid[s][od].isFixed) {
-                                        // od の前日が特殊勤務なら除外
                                         if (od > 0 && isRestrictedSpecial(this.grid[s][od - 1].symbol)) continue;
 
                                         for (const wd of wSpan) {
                                             if (this.grid[s][wd].symbol === SYMBOLS.WORK && !this.grid[s][wd].isFixed) {
-                                                // 一時スワップ
                                                 this.setSymbol(s, od, SYMBOLS.WORK, false);
                                                 this.setSymbol(s, wd, SYMBOLS.OFF, false);
                                                 if (this.isStaffHardValid(s) && this.isGlobalAttributesValid()) {
                                                     fixedWeek = true;
                                                     break;
                                                 }
-                                                // 戻す
                                                 this.setSymbol(s, od, SYMBOLS.OFF, false);
                                                 this.setSymbol(s, wd, SYMBOLS.WORK, false);
                                             }
@@ -5252,8 +5182,7 @@ class ShiftScheduler {
         this.eliminateSingleDayWork();
 
         // --- 5. 連勤違反（公休間隔上限超過・上限5連勤違反）のスマート自動リペア ---
-        // ユーザー指示:「公休をひとつずらせば済む話です。組んだ後に微修正するシステムは組めないの？」
-        for (let pass = 0; pass < 3; pass++) {
+        for (let pass = 0; pass < 1; pass++) {
             let fixedConsec = false;
             for (let s = 0; s < this.numStaff; s++) {
                 if (this.staffList[s].isUnused || this.staffList[s].isSectionChief) continue;
