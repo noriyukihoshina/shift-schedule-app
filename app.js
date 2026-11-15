@@ -5386,7 +5386,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
                     if (sym === '休') stOffCount++;
                     else if (sym === '有') stPaidCount++;
-                    else if (sym && sym.includes('リフ')) stRefCount++;
+                    else if (isRefreshHolidaySymbol(sym)) stRefCount++;
                     else if (sym === '早') { stEarlyCount++; stWorkCount += 1; }
                     else if (isWorkSymbol(sym)) { stWorkCount += 1; }
 
@@ -7052,6 +7052,52 @@ document.addEventListener('DOMContentLoaded', () => {
         }
 
         let totalSwaps = 0;
+        // ★ フェーズ1: 週内スワップ（Intra-week Swap）
+        // 各週スパンの中で月〜土の出勤実数を平準化！同一週内のため週休2日を絶対に壊さず土曜偏重を解消
+        const weekSpans = (lastScheduler && lastScheduler.weekSpans) || term.weekSpans || [];
+        for (let pass = 0; pass < 20; pass++) {
+            let anySwapped = false;
+            for (const span of weekSpans) {
+                const workDaysInSpan = span.filter(d => {
+                    const di = term.dates[d];
+                    return di ? !di.isSun : ((d % 7) !== 6);
+                });
+                if (workDaysInSpan.length < 2) continue;
+
+                for (let iter = 0; iter < 15; iter++) {
+                    const loads = workDaysInSpan.map(d => ({ day: d, load: getTsushoDailyReal(d) }));
+                    loads.sort((a, b) => b.load - a.load);
+
+                    if (loads[0].load - loads[loads.length - 1].load <= 0.6) break;
+
+                    let swapped = false;
+                    for (let h = 0; h < loads.length; h++) {
+                        const maxD = loads[h].day;
+                        for (let l = loads.length - 1; l >= 0; l--) {
+                            const minD = loads[l].day;
+                            if (loads[h].load - loads[l].load <= 0.6) continue;
+
+                            for (const s of tsushoStaff) {
+                                if (canSwapTsusho(s, maxD, minD)) {
+                                    targetGrid[s][maxD] = { symbol: SYMBOLS.OFF, isFixed: false };
+                                    targetGrid[s][minD] = { symbol: SYMBOLS.WORK, isFixed: false };
+                                    totalSwaps++;
+                                    swapped = true;
+                                    anySwapped = true;
+                                    break;
+                                }
+                            }
+                            if (swapped) break;
+                        }
+                        if (swapped) break;
+                    }
+                    if (!swapped) break;
+                }
+            }
+            if (!anySwapped) break;
+        }
+
+        // ★ フェーズ2: 全体スワップ（Global Swap）
         for (let iter = 0; iter < 80; iter++) {
             const loads = tsushoWorkingDays.map(d => ({ day: d, load: getTsushoDailyReal(d) }));
             loads.sort((a, b) => b.load - a.load);
