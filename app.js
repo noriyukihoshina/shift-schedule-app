@@ -4429,8 +4429,7 @@ document.addEventListener('DOMContentLoaded', () => {
                     });
 
                     // ★ ユーザー指示 (ver.28): 骨格生成後の最適日勤○からリフ昇格配置
-                    const pastHistory = (typeof collectPastRefreshHolidayHistory === 'function') ? collectPastRefreshHolidayHistory(curStartDate) : {};
-                    const futureHistory = (typeof collectFutureRefreshHolidayHistory === 'function') ? collectFutureRefreshHolidayHistory(curStartDate) : {};
+                    const { pastHistory, futureHistory } = (typeof getObtainedRefreshHistory === 'function') ? getObtainedRefreshHistory(curStartDate) : { pastHistory: {}, futureHistory: {} };
                     const result = scheduler.solveBaseSchedule({
                         obtainedHistory: pastHistory,
                         futureHistory: futureHistory
@@ -4495,7 +4494,8 @@ document.addEventListener('DOMContentLoaded', () => {
                                         stDailyEve: getLinkedSTDailyEve(),
                                         stFloorFtCount: getLinkedSTFloorFtCount()
                                     });
-                                    const forceResult = freshScheduler.solveBaseSchedule({ force: true });
+                                    const { pastHistory: fPast, futureHistory: fFuture } = (typeof getObtainedRefreshHistory === 'function') ? getObtainedRefreshHistory(curStartDate) : { pastHistory: {}, futureHistory: {} };
+                                    const forceResult = freshScheduler.solveBaseSchedule({ force: true, obtainedHistory: fPast, futureHistory: fFuture });
                                     if (forceResult && forceResult.grid) {
                                         for (let s = 0; s < NUM_STAFF; s++) {
                                             if (!forceResult.grid[s]) continue;

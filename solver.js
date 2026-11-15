@@ -2298,7 +2298,7 @@ class ShiftScheduler {
             let alreadyObtainedInPast = 0;
             for (const sIdx of activeStaffIndices) {
                 const st = this.staffList[sIdx];
-                const history = obtainedHistory[st.id] || obtainedHistory[sIdx];
+                const history = obtainedHistory[st.id];
                 const hasObtained = (history instanceof Set) ? history.has(grp.symbol) : (Array.isArray(history) && history.includes(grp.symbol));
                 if (hasObtained) alreadyObtainedInPast++;
             }
@@ -2308,13 +2308,9 @@ class ShiftScheduler {
                 remainingUnobtained,
                 Math.round(activeStaffCount * (daysInTerm / grp.totalMonthDays))
             );
-            const prevDaysInMonth = Math.max(0, grp.totalMonthDays - daysInTerm);
-            const expectedPrevAssigned = Math.round(activeStaffCount * (prevDaysInMonth / grp.totalMonthDays));
-            const fallbackLastTermTarget = Math.min(remainingUnobtained, Math.max(0, activeStaffCount - expectedPrevAssigned));
 
-            const targetCount = isLastTermOfMonth
-                ? ((alreadyObtainedInPast > 0 || daysInTerm >= grp.totalMonthDays) ? remainingUnobtained : fallbackLastTermTarget)
-                : proportionalTarget;
+            // ★ ユーザー指示: 月末締めターム（当該月の最終ターム）では、前ターム未取得の残り全員（remainingUnobtained）を100%必ず割り当てる！
+            const targetCount = isLastTermOfMonth ? remainingUnobtained : proportionalTarget;
 
             // 今タームで既にこのグループのリフを持っている人数
             let alreadyInTermForThisGroup = 0;
@@ -2339,11 +2335,11 @@ class ShiftScheduler {
                 if (staffWithThisGroupInTerm.has(sIdx)) continue;
                 const st = this.staffList[sIdx];
 
-                const history = obtainedHistory[st.id] || obtainedHistory[sIdx];
+                const history = obtainedHistory[st.id];
                 const hasObtained = (history instanceof Set) ? history.has(grp.symbol) : (Array.isArray(history) && history.includes(grp.symbol));
                 if (hasObtained) continue;
 
-                const futHist = futureHistory[st.id] || futureHistory[sIdx];
+                const futHist = futureHistory[st.id];
                 const hasInFuture = (futHist instanceof Set) ? futHist.has(grp.symbol) : (Array.isArray(futHist) && futHist.includes(grp.symbol));
 
                 candidates.push({
@@ -2353,12 +2349,11 @@ class ShiftScheduler {
                 });
             }
 
-            // 候補者ソート（未取得者最優先、1人1ターム1リフ優先、役職分散）
+            // 候補者ソート:
+            // ★ ユーザー指示: 同一ターム内での複数リフ取得（例: 第4タームで上1と上2の両方取得）は完全想定内！
+            // hasOtherRef による後回し・排除を行わず、未取得者を最優先し、役職分散・ID順で公平配分する。
             candidates.sort((a, b) => {
                 if (a.hasInFuture !== b.hasInFuture) return a.hasInFuture - b.hasInFuture;
-                const hasOtherRefA = staffWithRefInTerm.has(a.sIdx) ? 1 : 0;
-                const hasOtherRefB = staffWithRefInTerm.has(b.sIdx) ? 1 : 0;
-                if (hasOtherRefA !== hasOtherRefB) return hasOtherRefA - hasOtherRefB;
                 const weightA = ((a.staff.isSectionChief || a.staff.isChief) ? 2 : 0) + (a.staff.isFullTime ? 2 : 0) + (a.staff.canSched ? 1 : 0);
                 const weightB = ((b.staff.isSectionChief || b.staff.isChief) ? 2 : 0) + (b.staff.isFullTime ? 2 : 0) + (b.staff.canSched ? 1 : 0);
                 if (weightA !== weightB) return weightA - weightB;
@@ -2397,7 +2392,7 @@ class ShiftScheduler {
                         if (otherRolesWorking < 1) continue; // 役職不在を完全防止！
                     }
 
-                    // 2. スケ可保護: スケ可スタッフが休む場合、当日に別のスケ可が2名以上残ること
+                    // 2. スケ可保護: スケ可スタッフが休む場合、当日に別のスケ可が出勤維持されること（STは各階1名以上、全体は2名以上）
                     if (st.canSched) {
                         let otherSchedWorking = 0;
                         for (const otherS of activeStaffIndices) {
@@ -2406,10 +2401,11 @@ class ShiftScheduler {
                                 otherSchedWorking++;
                             }
                         }
-                        if (otherSchedWorking < 2) continue; // スケ可不足を防止！
+                        const minSched = this.isST ? 1 : 2;
+                        if (otherSchedWorking < minSched) continue; // スケ可不足を防止！
                     }
 
-                    // 3. 専従保護: 専従スタッフが休む場合、当日に別の専従が3名以上残ること
+                    // 3. 専従保護: 専従スタッフが休む場合、当日に別の専従が出勤維持されること（STは全社2名出勤のため1名以上、通常は2名以上）
                     if (st.isFullTime) {
                         let otherFtWorking = 0;
                         for (const otherS of activeStaffIndices) {
@@ -2418,7 +2414,8 @@ class ShiftScheduler {
                                 otherFtWorking++;
                             }
                         }
-                        if (otherFtWorking < 3) continue; // 専従不足を防止！
+                        const minFt = this.isST ? 1 : 2;
+                        if (otherFtWorking < minFt) continue; // 専従不足を防止！
                     }
 
                     // 4. Cl2保護（生活期）: Cl2スタッフが同日全員休みにならないこと
@@ -7841,7 +7838,7 @@ function autoAssignRefreshHolidaysCore(staffList, dates, options = {}) {
         let alreadyObtainedInPast = 0;
         for (const sIdx of activeStaffIndices) {
             const st = staffList[sIdx];
-            const history = obtainedHistory[st.id] || obtainedHistory[sIdx];
+            const history = obtainedHistory[st.id];
             const hasObtained = (history instanceof Set) ? history.has(grp.symbol) : (Array.isArray(history) && history.includes(grp.symbol));
             if (hasObtained) alreadyObtainedInPast++;
         }
@@ -7861,13 +7858,9 @@ function autoAssignRefreshHolidaysCore(staffList, dates, options = {}) {
             remainingUnobtained,
             Math.round(activeStaffCount * (daysInTerm / grp.totalMonthDays))
         );
-        const prevDaysInMonth = Math.max(0, grp.totalMonthDays - daysInTerm);
-        const expectedPrevAssigned = Math.round(activeStaffCount * (prevDaysInMonth / grp.totalMonthDays));
-        const fallbackLastTermTarget = Math.min(remainingUnobtained, Math.max(0, activeStaffCount - expectedPrevAssigned));
 
-        const targetCount = isLastTermOfMonth
-            ? ((alreadyObtainedInPast > 0 || daysInTerm >= grp.totalMonthDays) ? remainingUnobtained : fallbackLastTermTarget)
-            : proportionalTarget;
+        // ★ ユーザー指示: 月末締めターム（当該月の最終ターム）では、前ターム未取得の残り全員（remainingUnobtained）を100%必ず割り当てる！
+        const targetCount = isLastTermOfMonth ? remainingUnobtained : proportionalTarget;
 
         // 今タームで既に手動入力等でこのグループの記号を持っている人数
         let alreadyInTermForThisGroup = 0;
@@ -7893,12 +7886,12 @@ function autoAssignRefreshHolidaysCore(staffList, dates, options = {}) {
 
             const st = staffList[sIdx];
             // 過去にこの記号を取得済みなら除外（二重取得防止！）
-            const history = obtainedHistory[st.id] || obtainedHistory[sIdx];
+            const history = obtainedHistory[st.id];
             const hasObtained = (history instanceof Set) ? history.has(grp.symbol) : (Array.isArray(history) && history.includes(grp.symbol));
             if (hasObtained) continue;
 
             // 未来タームで既にこの記号が割り当てられているかチェック（ソートで未取得者を最優先にするため）
-            const futHist = futureHistory[st.id] || futureHistory[sIdx];
+            const futHist = futureHistory[st.id];
             const hasInFuture = (futHist instanceof Set) ? futHist.has(grp.symbol) : (Array.isArray(futHist) && futHist.includes(grp.symbol));
 
             // 対象期間内に空欄セルがあるか（係長は土日休を確保するため平日の空欄セルを優先抽出）
@@ -7927,9 +7920,6 @@ function autoAssignRefreshHolidaysCore(staffList, dates, options = {}) {
         // 3. 役職・専従・スケジュール管理属性の均等分散
         candidates.sort((a, b) => {
             if (a.hasInFuture !== b.hasInFuture) return a.hasInFuture - b.hasInFuture;
-            const hasOtherRefA = staffWithRefInCurrentTerm.has(a.sIdx) ? 1 : 0;
-            const hasOtherRefB = staffWithRefInCurrentTerm.has(b.sIdx) ? 1 : 0;
-            if (hasOtherRefA !== hasOtherRefB) return hasOtherRefA - hasOtherRefB;
             const weightA = ((a.staff.isSectionChief || a.staff.isChief) ? 2 : 0) + (a.staff.isFullTime ? 2 : 0) + (a.staff.canSched ? 1 : 0);
             const weightB = ((b.staff.isSectionChief || b.staff.isChief) ? 2 : 0) + (b.staff.isFullTime ? 2 : 0) + (b.staff.canSched ? 1 : 0);
             if (weightA !== weightB) return weightA - weightB;
