@@ -450,13 +450,14 @@ document.addEventListener('DOMContentLoaded', () => {
 
         // 各フロアのテーマカラー＆アイコン情報
         const themeInfo = {
-            '1f': { color: '#2563eb', bg: '#eff6ff', name: '1階病棟' },
-            '2f': { color: '#ea580c', bg: '#fff7ed', name: '2階病棟' },
-            '3f': { color: '#16a34a', bg: '#f0fdf4', name: '3階病棟' },
-            'south': { color: '#7c3aed', bg: '#faf5ff', name: '南病棟' },
-            'life': { color: '#0d9488', bg: '#f0fdfa', name: '生活期' },
-            'master': { color: '#b45309', bg: '#fefce8', name: 'マスターテーブル（統括）' }
-        }[deptId] || { color: '#0284c7', bg: '#f0f9ff', name: config.deptName || '勤務表システム' };
+            '1f': { color: '#2563eb', bg: '#eff6ff', name: '1階病棟', icon: '1階病棟.png' },
+            '2f': { color: '#ea580c', bg: '#fff7ed', name: '2階病棟', icon: '2階病棟.png' },
+            '3f': { color: '#16a34a', bg: '#f0fdf4', name: '3階病棟', icon: '3階病棟.png' },
+            'south': { color: '#7c3aed', bg: '#faf5ff', name: '南病棟', icon: '南病棟.png' },
+            'st': { color: '#0284c7', bg: '#f0f9ff', name: 'ST専用テーブル', icon: 'ST病棟.png' },
+            'life': { color: '#0d9488', bg: '#f0fdfa', name: '生活期', icon: '生活期.png' },
+            'master': { color: '#b45309', bg: '#fefce8', name: 'マスターテーブル（統括）', icon: 'マスターテーブル.png' }
+        }[deptId] || { color: '#0284c7', bg: '#f0f9ff', name: config.deptName || '勤務表システム', icon: 'マスターテーブル.png' };
 
         // 認証モーダルを動的生成して画面全体を安全にロック
         const overlay = document.createElement('div');
@@ -466,9 +467,7 @@ document.addEventListener('DOMContentLoaded', () => {
         overlay.innerHTML = `
             <div class="auth-modal-card">
                 <div class="auth-modal-icon">
-                    <span style="display:inline-flex; align-items:center; justify-content:center; width:68px; height:68px; background:${themeInfo.bg}; border:2px solid ${themeInfo.color}; border-radius:50%; box-shadow:0 4px 12px rgba(0,0,0,0.08);">
-                        💻
-                    </span>
+                    <img src="icons/${themeInfo.icon}" alt="${themeInfo.name}" style="width:72px; height:72px; border-radius:14px; box-shadow:0 6px 16px rgba(0,0,0,0.12); border:2px solid ${themeInfo.color}; object-fit:contain; background:#fff; padding:3px;">
                 </div>
                 <h3 class="auth-modal-title" style="color:${themeInfo.color};">【${themeInfo.name}】</h3>
                 <p class="auth-modal-subtitle">セキュリティ認証が必要です。<br>設定されたパスワードを入力してください。</p>
