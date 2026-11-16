@@ -334,6 +334,9 @@ document.addEventListener('DOMContentLoaded', () => {
                 };
             });
             window.localStorage.setItem(STORAGE_KEY_STAFF_MASTER, JSON.stringify(masterList));
+            if (typeof scheduleCloudSync === 'function') {
+                scheduleCloudSync();
+            }
         } catch (e) {
             console.error('スタッフマスターの保存に失敗:', e);
         }
@@ -518,9 +521,9 @@ document.addEventListener('DOMContentLoaded', () => {
     const appConfig = window.APP_CONFIG || { deptId: 'master', deptName: 'マスター統括', password: '' };
     const isST = !!appConfig.isST || (appConfig.deptId === 'st');
     const isMaster = (appConfig.deptId === 'master');
-    const isOnlineHost = (window.location.protocol === 'http:' || window.location.protocol === 'https:');
-    // ★ パターンA: オンライン(Vercel等)およびマスターでは全階ターム連動、病院共有フォルダ(file:)では各階完全独立！
-    const shouldSyncGlobalTerm = isMaster || isOnlineHost;
+    const isPublicWeb = (window.location.hostname.includes('vercel.app') || window.location.hostname.includes('github.io'));
+    // ★ パターンA: オンラインWeb版(Vercel)およびマスターは全階ターム連動、病院共有フォルダ(ローカル/file:)では各階完全独立！
+    const shouldSyncGlobalTerm = isMaster || isPublicWeb;
     const isLife = !!appConfig.isLife || (appConfig.deptId === 'life' || appConfig.deptId === 'life_admin');
     const isSouth = (appConfig.floor === '南' || appConfig.deptId === 'south');
     const currentFloor = appConfig.floor || (appConfig.deptId === '1f' ? '1F' : (appConfig.deptId === '2f' ? '2F' : (appConfig.deptId === '3f' ? '3F' : (appConfig.deptId === 'south' ? '南' : (isLife ? '生活期' : '')))));
@@ -846,7 +849,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
             // ★ マスターテーブルの場合: 全病棟(1f, 2f, 3f, south, st)の最新クラウドデータも一括取得してLocalStorageを最新化！
             if (isMaster) {
-                const subDepts = ['1f', '2f', '3f', 'south', 'st'];
+                const subDepts = ['1f', '2f', '3f', 'south', 'st', 'life'];
                 await Promise.allSettled(subDepts.map(async subId => {
                     try {
                         const r = await fetch(`/api/cloud_sync?deptId=${encodeURIComponent(subId)}&t=${Date.now()}`, { cache: 'no-store' });
@@ -859,6 +862,9 @@ document.addEventListener('DOMContentLoaded', () => {
                                     window.localStorage.setItem(`shift_schedule_${subId}_term_${tDate}`, JSON.stringify(subCloud.terms[tDate]));
                                 }
                             });
+                        }
+                        if (subCloud && Array.isArray(subCloud.staffMaster) && subCloud.staffMaster.length > 0) {
+                            window.localStorage.setItem(`shift_schedule_${subId}_staff_master`, JSON.stringify(subCloud.staffMaster));
                         }
                     } catch (e) {
                         // オフラインまたは通信失敗時はローカルキャッシュをそのまま維持
@@ -879,6 +885,20 @@ document.addEventListener('DOMContentLoaded', () => {
                                 }
                             });
                             loadLinkedSTData(currentWorkingStartDate);
+                        }
+                    }
+                } catch (e) {}
+                try {
+                    const rLife = await fetch(`/api/cloud_sync?deptId=life&t=${Date.now()}`, { cache: 'no-store' });
+                    if (rLife.ok) {
+                        const jLife = await rLife.json();
+                        const lifeCloud = jLife && (jLife.cloudState || jLife.data);
+                        if (lifeCloud && lifeCloud.terms && typeof lifeCloud.terms === 'object') {
+                            Object.keys(lifeCloud.terms).forEach(tDate => {
+                                if (lifeCloud.terms[tDate]) {
+                                    window.localStorage.setItem(`shift_schedule_life_term_${tDate}`, JSON.stringify(lifeCloud.terms[tDate]));
+                                }
+                            });
                             loadLinkedLifeData(currentWorkingStartDate);
                         }
                     }
