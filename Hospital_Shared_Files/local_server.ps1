@@ -1,60 +1,84 @@
 ﻿param(
     [string]$TargetPage = "index.html",
-    [int]$Port = 38383,
+    [int]$StartPort = 38383,
     [switch]$NoBrowser
 )
 
 $ErrorActionPreference = "Stop"
 [Console]::OutputEncoding = [System.Text.Encoding]::UTF8
 
-$rootDir = $PSScriptRoot
+$rootDir = Split-Path -Parent $MyInvocation.MyCommand.Path
+if ([string]::IsNullOrWhiteSpace($rootDir)) {
+    $rootDir = $PSScriptRoot
+}
+if ([string]::IsNullOrWhiteSpace($rootDir)) {
+    $rootDir = (Get-Location).Path
+}
+
 $dataDir = Join-Path $rootDir "data"
 if (-not (Test-Path $dataDir)) {
     New-Item -ItemType Directory -Path $dataDir -Force | Out-Null
 }
 
-$prefix = "http://127.0.0.1:$Port/"
+# ポート探索 (38383 から 38389 まで自動探索)
+$selectedPort = 0
+$listener = $null
 
-# ポートが開いているか確認（すでに起動中ならブラウザだけ開いて終了）
-$isAlreadyRunning = $false
-try {
-    $testReq = [System.Net.WebRequest]::Create("${prefix}ping")
-    $testReq.Timeout = 1000
-    $testResp = $testReq.GetResponse()
-    $testResp.Close()
-    $isAlreadyRunning = $true
-} catch {
-    $isAlreadyRunning = $false
+for ($p = $StartPort; $p -lt ($StartPort + 10); $p++) {
+    $testPrefix = "http://127.0.0.1:$p/"
+    
+    # 既存サーバーが稼働中か確認
+    $isRunning = $false
+    try {
+        $req = [System.Net.WebRequest]::Create("${testPrefix}ping")
+        $req.Timeout = 500
+        $resp = $req.GetResponse()
+        $resp.Close()
+        $isRunning = $true
+    } catch {
+        $isRunning = $false
+    }
+
+    if ($isRunning) {
+        # 既存サーバーがすでに動いているので、そのサーバーを使ってブラウザを開くだけ
+        Write-Host "既存の共有サーバーが稼働中です (ポート: $p)" -ForegroundColor Cyan
+        if (-not $NoBrowser) {
+            Start-Process "$testPrefix$TargetPage"
+        }
+        exit 0
+    }
+
+    # 新規にリッスンを試みる
+    try {
+        $tempListener = New-Object System.Net.HttpListener
+        $tempListener.Prefixes.Add($testPrefix)
+        $tempListener.Start()
+        $selectedPort = $p
+        $listener = $tempListener
+        break
+    } catch {
+        # ポート使用中のため次を試す
+        if ($tempListener) {
+            try { $tempListener.Close() } catch {}
+        }
+    }
 }
 
-if ($isAlreadyRunning) {
-    if (-not $NoBrowser) {
-        Start-Process "$prefix$TargetPage"
-    }
-    exit 0
-}
-
-# HttpListener の開始
-$listener = New-Object System.Net.HttpListener
-$listener.Prefixes.Add($prefix)
-try {
-    $listener.Start()
-} catch {
-    Write-Host "ポート $Port のリッスンに失敗しました: $_" -ForegroundColor Red
-    if (-not $NoBrowser) {
-        Start-Process "$prefix$TargetPage"
-    }
+if (-not $listener) {
+    Write-Host "エラー: 使用可能なポートが見つかりませんでした。" -ForegroundColor Red
     exit 1
 }
+
+$prefix = "http://127.0.0.1:$selectedPort/"
 
 Write-Host "====================================================" -ForegroundColor Cyan
 Write-Host "  勤務表作成システム 院内共有フォルダデータサーバー  " -ForegroundColor Cyan
 Write-Host "====================================================" -ForegroundColor Cyan
 Write-Host "アクセスURL: $prefix$TargetPage" -ForegroundColor Green
 Write-Host "データ保存先: $dataDir" -ForegroundColor Yellow
-Write-Host "（このウィンドウを閉じるとローカルサーバーが終了します）" -ForegroundColor Gray
+Write-Host "（このウィンドウを最小化してお使いください）" -ForegroundColor Gray
 
-# ブラウザを自動起動
+# ブラウザ自動起動
 if (-not $NoBrowser) {
     Start-Process "$prefix$TargetPage"
 }
@@ -70,16 +94,36 @@ $mimeTypes = @{
     ".ico"  = "image/x-icon"
 }
 
+$lastAccessTime = Get-Date
+
 try {
     while ($listener.IsListening) {
-        $context = $listener.GetContext()
+        # 非同期待機（5秒タイムアウトでアイドル監視）
+        $asyncContext = $listener.BeginGetContext($null, $null)
+        $signaled = $asyncContext.AsyncWaitHandle.WaitOne(5000)
+
+        if (-not $signaled) {
+            # 30分間アクセスがなければ自動終了（PCリソース解放）
+            $idleMinutes = ((Get-Date) - $lastAccessTime).TotalMinutes
+            if ($idleMinutes -ge 30) {
+                Write-Host "30分間無操作のためサーバーを自動終了します。" -ForegroundColor Yellow
+                break
+            }
+            continue
+        }
+
+        $context = $listener.EndGetContext($asyncContext)
         $request = $context.Request
         $response = $context.Response
+        $lastAccessTime = Get-Date
 
-        # CORS ヘッダー
+        # キャッシュ無効化 ＆ CORS ヘッダー
         $response.Headers.Add("Access-Control-Allow-Origin", "*")
         $response.Headers.Add("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
         $response.Headers.Add("Access-Control-Allow-Headers", "Content-Type")
+        $response.Headers.Add("Cache-Control", "no-store, no-cache, must-revalidate, max-age=0")
+        $response.Headers.Add("Pragma", "no-cache")
+        $response.Headers.Add("Expires", "0")
 
         if ($request.HttpMethod -eq "OPTIONS") {
             $response.StatusCode = 200
@@ -87,10 +131,9 @@ try {
             continue
         }
 
-        $rawUrl = $request.RawUrl
         $path = $request.Url.LocalPath
 
-        # ヘルスチェック用 / 終了用
+        # ヘルスチェック
         if ($path -eq "/ping") {
             $pong = [System.Text.Encoding]::UTF8.GetBytes("pong")
             $response.StatusCode = 200
@@ -99,6 +142,8 @@ try {
             $response.Close()
             continue
         }
+
+        # 終了コマンド
         if ($path -eq "/shutdown") {
             $pong = [System.Text.Encoding]::UTF8.GetBytes("ok")
             $response.StatusCode = 200
@@ -121,7 +166,10 @@ try {
                     if (Test-Path $filePath) {
                         $utf8NoBom = New-Object System.Text.UTF8Encoding($false)
                         $jsonContent = [System.IO.File]::ReadAllText($filePath, $utf8NoBom).Trim()
-                        # 生のJSONをそのままレスポンスに埋め込んで高速・正確に返す
+                        # 先頭BOMの念押し除去
+                        if ($jsonContent.Length -gt 0 -and [int][char]$jsonContent[0] -eq 65279) {
+                            $jsonContent = $jsonContent.Substring(1)
+                        }
                         $respStr = "{`"ok`":true,`"deptId`":`"$deptId`",`"exists`":true,`"cloudState`":$jsonContent}"
                     } else {
                         $respStr = "{`"ok`":true,`"deptId`":`"$deptId`",`"exists`":false,`"cloudState`":null}"
@@ -148,7 +196,9 @@ try {
                     $currentData = @{}
                     if (Test-Path $filePath) {
                         try {
-                            $currentData = (Get-Content -Path $filePath -Raw -Encoding UTF8 | ConvertFrom-Json)
+                            $rawJson = (Get-Content -Path $filePath -Raw -Encoding UTF8)
+                            if ($rawJson.Length -gt 0 -and [int][char]$rawJson[0] -eq 65279) { $rawJson = $rawJson.Substring(1) }
+                            $currentData = ($rawJson | ConvertFrom-Json)
                         } catch {}
                     }
 
@@ -174,12 +224,30 @@ try {
                         }
                     }
 
-                    # 保存（安全なアトミック書き込み）
+                    # 安全なアトミック保存（GUID付き一時ファイル ＆ 最大3回リトライ）
                     $saveJson = ConvertTo-Json $merged -Depth 20
-                    $tmpPath = "$filePath.tmp"
+                    $uniqueId = [System.Guid]::NewGuid().ToString("N")
+                    $tmpPath = "$filePath.tmp.$uniqueId"
                     $utf8NoBom = New-Object System.Text.UTF8Encoding($false)
                     [System.IO.File]::WriteAllText($tmpPath, $saveJson, $utf8NoBom)
-                    Move-Item -Path $tmpPath -Destination $filePath -Force
+
+                    $moved = $false
+                    for ($att = 0; $att -lt 3; $att++) {
+                        try {
+                            Move-Item -Path $tmpPath -Destination $filePath -Force
+                            $moved = $true
+                            break
+                        } catch {
+                            Start-Sleep -Milliseconds (100 * ($att + 1))
+                        }
+                    }
+                    if (-not $moved) {
+                        # フォールバック直接上書き
+                        [System.IO.File]::WriteAllText($filePath, $saveJson, $utf8NoBom)
+                    }
+                    if (Test-Path $tmpPath) {
+                        Remove-Item -Path $tmpPath -Force -ErrorAction SilentlyContinue
+                    }
 
                     $respObj = @{ ok = $true; deptId = $deptId; updatedAt = $merged.updatedAt }
                     $respBytes = [System.Text.Encoding]::UTF8.GetBytes((ConvertTo-Json $respObj))
@@ -216,13 +284,15 @@ try {
         } else {
             $response.StatusCode = 404
             $errBytes = [System.Text.Encoding]::UTF8.GetBytes("File Not Found: $reqPath")
+            $response.StatusCode = 404
+            $response.ContentType = "text/plain; charset=utf-8"
             $response.OutputStream.Write($errBytes, 0, $errBytes.Length)
             $response.Close()
         }
     }
 } finally {
-    if ($listener.IsListening) {
+    if ($listener -and $listener.IsListening) {
         $listener.Stop()
+        $listener.Close()
     }
-    $listener.Close()
 }
