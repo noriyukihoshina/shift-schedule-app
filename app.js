@@ -181,7 +181,7 @@ document.addEventListener('DOMContentLoaded', () => {
         const select = document.getElementById('termSelect');
         if (!select) return;
 
-        const curStart = isMaster
+        const curStart = shouldSyncGlobalTerm
             ? (localStorage.getItem(STORAGE_KEY_GLOBAL_CURRENT_TERM) || localStorage.getItem(STORAGE_KEY_LAST_ACTIVE) || localStorage.getItem('shift_schedule_current_start_date') || document.getElementById('termStartDate')?.value || currentWorkingStartDate || '2026-04-01')
             : (localStorage.getItem(STORAGE_KEY_LAST_ACTIVE) || document.getElementById('termStartDate')?.value || currentWorkingStartDate || '2026-04-01');
         currentWorkingStartDate = curStart;
@@ -278,7 +278,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 }
             }
             localStorage.setItem(STORAGE_KEY_LAST_ACTIVE, newDate);
-            if (isMaster) {
+            if (shouldSyncGlobalTerm) {
                 localStorage.setItem(STORAGE_KEY_GLOBAL_CURRENT_TERM, newDate);
                 localStorage.setItem('shift_schedule_current_start_date', newDate);
             }
@@ -518,6 +518,9 @@ document.addEventListener('DOMContentLoaded', () => {
     const appConfig = window.APP_CONFIG || { deptId: 'master', deptName: 'マスター統括', password: '' };
     const isST = !!appConfig.isST || (appConfig.deptId === 'st');
     const isMaster = (appConfig.deptId === 'master');
+    const isOnlineHost = (window.location.protocol === 'http:' || window.location.protocol === 'https:');
+    // ★ パターンA: オンライン(Vercel等)およびマスターでは全階ターム連動、病院共有フォルダ(file:)では各階完全独立！
+    const shouldSyncGlobalTerm = isMaster || isOnlineHost;
     const isLife = !!appConfig.isLife || (appConfig.deptId === 'life' || appConfig.deptId === 'life_admin');
     const isSouth = (appConfig.floor === '南' || appConfig.deptId === 'south');
     const currentFloor = appConfig.floor || (appConfig.deptId === '1f' ? '1F' : (appConfig.deptId === '2f' ? '2F' : (appConfig.deptId === '3f' ? '3F' : (appConfig.deptId === 'south' ? '南' : (isLife ? '生活期' : '')))));
@@ -1006,7 +1009,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
                 // 4. 表示中タームの再読込＆画面反映
                 // ★ ユーザー指示: 他テーブルへ遷移した際にクラウドの古い日付でタームが進んだり戻ったりするのを完全遮断！
-                const targetTermDate = isMaster
+                const targetTermDate = shouldSyncGlobalTerm
                     ? (window.localStorage.getItem(STORAGE_KEY_GLOBAL_CURRENT_TERM) || currentWorkingStartDate || (isInitialBoot && cloud.lastActiveDate ? cloud.lastActiveDate : '2026-04-01'))
                     : (window.localStorage.getItem(STORAGE_KEY_LAST_ACTIVE) || currentWorkingStartDate || (isInitialBoot && cloud.lastActiveDate ? cloud.lastActiveDate : '2026-04-01'));
 
@@ -11617,8 +11620,8 @@ function renderMasterIntegrationView() {
     loadStaffMaster(); // ★ スタッフの基本属性・トグル設定（係長/主任/副主任/0.5/専従/所属/備考等）を確実に復元
 
     const defaultDate = document.getElementById('termStartDate')?.value || '2026-04-01';
-    // ★ ユーザー指示: マスターテーブル以外は階の連動を無くす（各病棟は自分自身の最終アクティブタームのみ参照）
-    const chosenDate = isMaster
+    // ★ パターンA: オンライン(Vercel等)およびマスターは全階ターム連動、病院共有フォルダ(file:)では各階完全独立！
+    const chosenDate = shouldSyncGlobalTerm
         ? (localStorage.getItem(STORAGE_KEY_GLOBAL_CURRENT_TERM) || localStorage.getItem('shift_schedule_current_start_date') || localStorage.getItem(STORAGE_KEY_LAST_ACTIVE) || defaultDate)
         : (localStorage.getItem(STORAGE_KEY_LAST_ACTIVE) || defaultDate);
     const matchedTerm = findTermByStartDate(chosenDate);
