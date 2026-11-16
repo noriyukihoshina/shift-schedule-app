@@ -7460,9 +7460,10 @@ function validateScheduleGrid(grid, staffList, options = {}) {
                 // ★ ST役職者の出勤補完判定:
                 let stChiefWorking = false;
                 let stSubChiefWorking = false;
-                if (this.options && this.options.linkedStStaffData && Array.isArray(this.options.linkedStStaffData.staffList)) {
-                    this.options.linkedStStaffData.staffList.forEach((st, stIdx) => {
-                        const stRow = this.options.linkedStStaffData.grid ? this.options.linkedStStaffData.grid[stIdx] : null;
+                const stData = options.linkedStStaffData || options.stStaffData;
+                if (stData && Array.isArray(stData.staffList)) {
+                    stData.staffList.forEach((st, stIdx) => {
+                        const stRow = stData.grid ? stData.grid[stIdx] : (st.days || []);
                         const stSym = (stRow && stRow[d]) ? (stRow[d].symbol || stRow[d]) : '';
                         if (isWorkSymbol(stSym) && stSym !== SYMBOLS.TRIP) {
                             if (st.isChief) stChiefWorking = true;

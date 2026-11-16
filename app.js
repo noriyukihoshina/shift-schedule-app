@@ -4758,9 +4758,27 @@ document.addEventListener('DOMContentLoaded', () => {
                         : '✨ 特殊勤務（早3名・遅1名・E2名・8時1名）を割り当て、「最終チェック&完成」を表示しました！';
                     showToast(toastMsg);
                 } else {
+                    const term = getTermInfo();
+                    const stdHolidayVal = parseFloat(document.getElementById('standardHolidaySelect')?.value || '8.0');
+                    const curGrid = (lastScheduler && lastScheduler.grid) ? lastScheduler.grid : (lastSolveResult ? lastSolveResult.grid : []);
+                    const valRes = validateScheduleGrid(curGrid, staffList, {
+                        dates: term.dates,
+                        standardHolidays: stdHolidayVal,
+                        isFinal: false,
+                        isST: isST,
+                        isSouth: isSouth,
+                        isLife: isLife,
+                        stStaffData: linkedStStaffData,
+                        linkedStStaffData: linkedStStaffData
+                    });
+                    const conflictsToApply = (specialResult.conflictCells && specialResult.conflictCells.length > 0)
+                        ? specialResult.conflictCells
+                        : (valRes.conflictCells || []);
+                    applyOutputConflictHighlights(conflictsToApply, specialResult.errors);
+
                     showErrorModal(specialResult.errors, {
                         title: '特殊勤務割当の指摘・エラー検知',
-                        subtitle: '特殊勤務の候補者不足や制約との衝突があります。',
+                        subtitle: '特殊勤務の候補者不足や制約との衝突があります（該当セルを青い網掛けで表示中）。',
                         desc: '内容をご確認の上修正するか、あえて無視して可能な限り特殊勤務を割り当てて「最終チェック&完成」へ進むことができます。',
                         onForceSpecial: () => {
                             // エラーを無視して特殊勤務を割り当て！
@@ -6250,6 +6268,43 @@ document.addEventListener('DOMContentLoaded', () => {
 
         if (isMaster) {
             renderMasterIntegrationView();
+        }
+
+        // ★ 再描画直後に現在の網掛け（currentOutputConflicts）を完全復元（網掛け蒸発防止）
+        if (currentOutputConflicts && currentOutputConflicts.length > 0) {
+            currentOutputConflicts.forEach(item => {
+                if (item.footerStat) {
+                    const footCells = document.querySelectorAll(
+                        `#outputTableFoot td[data-d="${item.dayIndex}"][data-footer-stat="${item.footerStat}"], ` +
+                        `#checkTableFoot td[data-d="${item.dayIndex}"][data-footer-stat="${item.footerStat}"]`
+                    );
+                    footCells.forEach(cell => {
+                        cell.classList.add('conflict-highlight');
+                        cell.setAttribute('data-conflict-reason', item.reason || '特殊勤務人数不整合');
+                        cell.title = `⚠️ 【人数不整合】${item.reason || '必要人数と一致していません'}`;
+                    });
+                } else if (item.statType) {
+                    const statCells = document.querySelectorAll(
+                        `#outputTableBody td[data-s="${item.staffIndex}"][data-stat="${item.statType}"], ` +
+                        `#checkTableBody td[data-s="${item.staffIndex}"][data-stat="${item.statType}"]`
+                    );
+                    statCells.forEach(cell => {
+                        cell.classList.add('conflict-highlight');
+                        cell.setAttribute('data-conflict-reason', item.reason || '集計不整合');
+                        cell.title = `⚠️ 【集計不整合】${item.reason || '集計値が基準と一致していません'}`;
+                    });
+                } else if (item.dayIndex !== undefined && item.staffIndex !== undefined) {
+                    const cells = document.querySelectorAll(
+                        `#outputTableBody td[data-s="${item.staffIndex}"][data-d="${item.dayIndex}"], ` +
+                        `#checkTableBody td[data-s="${item.staffIndex}"][data-d="${item.dayIndex}"]`
+                    );
+                    cells.forEach(cell => {
+                        cell.classList.add('conflict-highlight');
+                        cell.setAttribute('data-conflict-reason', item.reason || '制約違反');
+                        cell.title = `⚠️ 【制約違反】${item.reason || '制約が守られていません'}`;
+                    });
+                }
+            });
         }
 
         attachOutputTableEvents();

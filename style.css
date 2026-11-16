@@ -406,7 +406,7 @@ td.col-day-fixed {
     transition: background 0.1s;
 }
 
-.day-cell:hover {
+.day-cell:not([class*="cell-special-"]):not([data-sym="早"]):not([data-sym="ハヤ"]):not([data-sym="遅"]):not([data-sym="E"]):not(.conflict-highlight):not(.copy-selected-cell):hover {
     background: #e0f2fe !important;
 }
 
@@ -416,31 +416,44 @@ td.col-day-fixed {
     background: #bae6fd !important;
 }
 
-/* 事前入力枠の強調：文字のみ赤字・太字（ご要望により網掛け・背景色は完全除去） */
-.fixed-cell {
+/* 事前入力枠の強調：通常時のみ文字赤字・太字（背景色は透明維持、ただし網掛けや特殊勤務時はその背景色を優先） */
+.fixed-cell:not(.conflict-highlight):not(.cell-special-early):not(.cell-special-late):not(.cell-special-eve):not([data-sym="早"]):not([data-sym="ハヤ"]):not([data-sym="遅"]):not([data-sym="E"]) {
     color: #dc2626 !important;
     font-weight: 800 !important;
     background-color: transparent !important;
 }
 
-/* ★ 障壁・エラー原因セルの薄いブルー網掛け（斜めストライプ + ブルー枠線） */
-.conflict-highlight {
-    background-color: #bfdbfe !important; /* 薄いブルー */
-    background-image: repeating-linear-gradient(45deg, rgba(37, 99, 235, 0.18), rgba(37, 99, 235, 0.18) 5px, transparent 5px, transparent 10px) !important;
-    box-shadow: inset 0 0 0 2px #2563eb !important; /* 明瞭なブルー枠線 */
+/* ★ 障壁・制約違反・エラー原因セルの青い網掛け（最優先・絶対上書き保証） */
+.conflict-highlight,
+td.conflict-highlight,
+.day-cell.conflict-highlight,
+.fixed-cell.conflict-highlight,
+td.fixed-cell.conflict-highlight,
+body .sheet-table tbody td.conflict-highlight,
+body .sheet-table tbody td.fixed-cell.conflict-highlight,
+body .sheet-table tfoot td.conflict-highlight,
+.cell-special-early.conflict-highlight,
+.cell-special-late.conflict-highlight,
+.cell-special-eve.conflict-highlight,
+td[data-sym="早"].conflict-highlight,
+td[data-sym="遅"].conflict-highlight,
+td[data-sym="E"].conflict-highlight {
+    background-color: #bfdbfe !important; /* 目立つブルー網掛け */
+    background: #bfdbfe !important;
+    background-image: repeating-linear-gradient(45deg, rgba(37, 99, 235, 0.25), rgba(37, 99, 235, 0.25) 5px, transparent 5px, transparent 10px) !important;
+    box-shadow: inset 0 0 0 2.5px #2563eb !important; /* 明瞭なブルー枠線 */
     color: #1e3a8a !important; /* 濃いブルー文字 */
     font-weight: 900 !important;
-    position: relative;
-    z-index: 2;
-    animation: conflictPulse 1.8s infinite ease-in-out;
+    position: relative !important;
+    z-index: 10 !important;
 }
 
 @keyframes conflictPulse {
     0%, 100% {
-        box-shadow: inset 0 0 0 2px #2563eb, 0 0 6px rgba(37, 99, 235, 0.4);
+        box-shadow: inset 0 0 0 2.5px #2563eb, 0 0 6px rgba(37, 99, 235, 0.4);
     }
     50% {
-        box-shadow: inset 0 0 0 2px #60a5fa, 0 0 2px rgba(37, 99, 235, 0.2);
+        box-shadow: inset 0 0 0 2.5px #60a5fa, 0 0 2px rgba(37, 99, 235, 0.2);
     }
 }
 
@@ -516,6 +529,7 @@ td[data-sym="E"].fixed-cell {
 
 /* エラー網掛け（.conflict-highlight）が重なった場合はエラー青網掛けを最優先 */
 body .sheet-table tbody td.conflict-highlight,
+body .sheet-table tbody td.fixed-cell.conflict-highlight,
 body .sheet-table tfoot td.conflict-highlight,
 .cell-special-early.conflict-highlight,
 .cell-special-late.conflict-highlight,
@@ -524,12 +538,12 @@ td[data-sym="早"].conflict-highlight,
 td[data-sym="遅"].conflict-highlight,
 td[data-sym="E"].conflict-highlight {
     background-color: #bfdbfe !important;
-    background-image: repeating-linear-gradient(45deg, rgba(37, 99, 235, 0.22), rgba(37, 99, 235, 0.22) 5px, transparent 5px, transparent 10px) !important;
-    box-shadow: inset 0 0 0 2px #2563eb !important;
+    background-image: repeating-linear-gradient(45deg, rgba(37, 99, 235, 0.25), rgba(37, 99, 235, 0.25) 5px, transparent 5px, transparent 10px) !important;
+    box-shadow: inset 0 0 0 2.5px #2563eb !important;
     color: #1e3a8a !important;
     font-weight: 900 !important;
     position: relative !important;
-    z-index: 5 !important;
+    z-index: 10 !important;
 }
 
 /* フッター集計行 */
@@ -618,7 +632,8 @@ input:checked + .toggle-slider:before {
 }
 
 .modal-overlay.open,
-.modal-overlay.show {
+.modal-overlay.show,
+.modal-overlay.active {
     display: flex;
 }
 
@@ -899,10 +914,8 @@ input:checked + .toggle-slider:before {
     transition: background-color 0.15s, outline 0.15s;
 }
 
-#outputTableBody .day-cell:hover {
+#outputTableBody .day-cell:not([class*="cell-special-"]):not([data-sym="早"]):not([data-sym="ハヤ"]):not([data-sym="遅"]):not([data-sym="E"]):not(.conflict-highlight):not(.copy-selected-cell):hover {
     background-color: #e2e8f0 !important;
-    outline: 2px solid var(--primary);
-    z-index: 5;
 }
 
 /* 不使用スタッフ行のスタイル（希望入力シート） */
@@ -1191,7 +1204,7 @@ body.theme-st .sheet-table {
 body.theme-st .sheet-table tbody td:not(.prev-col-cell):not([style*="background"]):not(.conflict-highlight):not([class*="cell-special-"]):not([data-sym="早"]):not([data-sym="ハヤ"]):not([data-sym="遅"]):not([data-sym="E"]) {
     background-color: #fff5f8 !important;
 }
-body.theme-st .sheet-table tbody tr:hover td {
+body.theme-st .sheet-table tbody tr:hover td:not([class*="cell-special-"]):not([data-sym="早"]):not([data-sym="ハヤ"]):not([data-sym="遅"]):not([data-sym="E"]):not(.conflict-highlight):not(.copy-selected-cell) {
     background-color: #ffe4ec !important;
 }
 body.theme-st .sticky-col-1,
@@ -1217,7 +1230,7 @@ body.theme-1f .sheet-table {
 body.theme-1f .sheet-table tbody td:not(.prev-col-cell):not([style*="background"]):not(.conflict-highlight):not([class*="cell-special-"]):not([data-sym="早"]):not([data-sym="ハヤ"]):not([data-sym="遅"]):not([data-sym="E"]) {
     background-color: #f0f8ff !important;
 }
-body.theme-1f .sheet-table tbody tr:hover td {
+body.theme-1f .sheet-table tbody tr:hover td:not([class*="cell-special-"]):not([data-sym="早"]):not([data-sym="ハヤ"]):not([data-sym="遅"]):not([data-sym="E"]):not(.conflict-highlight):not(.copy-selected-cell) {
     background-color: #e0f2fe !important;
 }
 body.theme-1f .sticky-col-1,
@@ -1243,7 +1256,7 @@ body.theme-2f .sheet-table {
 body.theme-2f .sheet-table tbody td:not(.prev-col-cell):not([style*="background"]):not(.conflict-highlight):not([class*="cell-special-"]):not([data-sym="早"]):not([data-sym="ハヤ"]):not([data-sym="遅"]):not([data-sym="E"]) {
     background-color: #fff8f0 !important;
 }
-body.theme-2f .sheet-table tbody tr:hover td {
+body.theme-2f .sheet-table tbody tr:hover td:not([class*="cell-special-"]):not([data-sym="早"]):not([data-sym="ハヤ"]):not([data-sym="遅"]):not([data-sym="E"]):not(.conflict-highlight):not(.copy-selected-cell) {
     background-color: #ffedd5 !important;
 }
 body.theme-2f .sticky-col-1,
@@ -1269,7 +1282,7 @@ body.theme-3f .sheet-table {
 body.theme-3f .sheet-table tbody td:not(.prev-col-cell):not([style*="background"]):not(.conflict-highlight):not([class*="cell-special-"]):not([data-sym="早"]):not([data-sym="ハヤ"]):not([data-sym="遅"]):not([data-sym="E"]) {
     background-color: #f0fdf4 !important;
 }
-body.theme-3f .sheet-table tbody tr:hover td {
+body.theme-3f .sheet-table tbody tr:hover td:not([class*="cell-special-"]):not([data-sym="早"]):not([data-sym="ハヤ"]):not([data-sym="遅"]):not([data-sym="E"]):not(.conflict-highlight):not(.copy-selected-cell) {
     background-color: #d1fae5 !important;
 }
 body.theme-3f .sticky-col-1,
@@ -1298,7 +1311,7 @@ body.theme-life .sheet-table {
 body.theme-life .sheet-table tbody td:not(.prev-col-cell):not([style*="background"]):not(.conflict-highlight):not([class*="cell-special-"]):not([data-sym="早"]):not([data-sym="ハヤ"]):not([data-sym="遅"]):not([data-sym="E"]) {
     background-color: #f0fdfa !important;
 }
-body.theme-life .sheet-table tbody tr:hover td {
+body.theme-life .sheet-table tbody tr:hover td:not([class*="cell-special-"]):not([data-sym="早"]):not([data-sym="ハヤ"]):not([data-sym="遅"]):not([data-sym="E"]):not(.conflict-highlight):not(.copy-selected-cell) {
     background-color: #ccfbf1 !important;
 }
 body.theme-life .sticky-col-1,
@@ -1327,7 +1340,7 @@ body.theme-master .sheet-table {
 body.theme-master .sheet-table tbody td:not(.prev-col-cell):not([style*="background"]):not(.conflict-highlight):not([class*="cell-special-"]):not([data-sym="早"]):not([data-sym="ハヤ"]):not([data-sym="遅"]):not([data-sym="E"]) {
     background-color: #fffdf0 !important;
 }
-body.theme-master .sheet-table tbody tr:hover td {
+body.theme-master .sheet-table tbody tr:hover td:not([class*="cell-special-"]):not([data-sym="早"]):not([data-sym="ハヤ"]):not([data-sym="遅"]):not([data-sym="E"]):not(.conflict-highlight):not(.copy-selected-cell) {
     background-color: #fef9c3;
 }
 /* マスターテーブルのsticky列はフロアごとのカラーを尊重するため、!importantで上書きしない */
@@ -1354,7 +1367,7 @@ body.theme-south .sheet-table {
 body.theme-south .sheet-table tbody td:not(.prev-col-cell):not([style*="background"]):not(.conflict-highlight):not([class*="cell-special-"]):not([data-sym="早"]):not([data-sym="ハヤ"]):not([data-sym="遅"]):not([data-sym="E"]) {
     background-color: #faf5ff !important;
 }
-body.theme-south .sheet-table tbody tr:hover td {
+body.theme-south .sheet-table tbody tr:hover td:not([class*="cell-special-"]):not([data-sym="早"]):not([data-sym="ハヤ"]):not([data-sym="遅"]):not([data-sym="E"]):not(.conflict-highlight):not(.copy-selected-cell) {
     background-color: #f3e8ff !important;
 }
 body.theme-south .sticky-col-1,
@@ -1519,17 +1532,15 @@ td.remarks-cell {
     font-weight: 900;
 }
 
-/* ★ ユーザー指示: コピペモードの選択枠ハイライト */
-.copy-selected-cell {
-    outline: 3px solid #2563eb !important;
-    outline-offset: -3px !important;
-    background-color: #dbeafe !important;
-    animation: pulse-copy 1.5s infinite;
-}
-@keyframes pulse-copy {
-    0% { outline-color: #2563eb; }
-    50% { outline-color: #93c5fd; }
-    100% { outline-color: #2563eb; }
+/* ★ ユーザー指示: コピペモードの選択枠ハイライト（点滅消滅を廃止し、Excel同様に濃紺太枠を常時固定・最前面表示） */
+.copy-selected-cell,
+td.copy-selected-cell,
+body .sheet-table tbody td.copy-selected-cell {
+    outline: 3px solid #1d4ed8 !important;
+    outline-offset: -2px !important;
+    box-shadow: inset 0 0 0 2px #1d4ed8 !important, 0 0 0 2px #2563eb !important;
+    position: relative !important;
+    z-index: 25 !important;
 }
 
 /* ★ ドラッグ＆ドロップ行並び替え用スタイル */
