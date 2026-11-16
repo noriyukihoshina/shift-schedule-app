@@ -403,11 +403,13 @@ td.col-day-fixed {
     font-weight: 600;
     font-size: 0.85rem;
     user-select: none;
-    transition: background 0.1s;
+    transition: none !important;
 }
 
-.day-cell:not([class*="cell-special-"]):not([data-sym="早"]):not([data-sym="ハヤ"]):not([data-sym="遅"]):not([data-sym="E"]):not(.conflict-highlight):not(.copy-selected-cell):hover {
-    background: #e0f2fe !important;
+/* ホバー時の点滅・チラつきを完全根絶：背景色変更は廃止し、静かな薄い枠線のみ */
+.day-cell:hover {
+    outline: 2px solid #93c5fd !important;
+    outline-offset: -2px !important;
 }
 
 .day-cell.selected {
@@ -908,14 +910,15 @@ input:checked + .toggle-slider:before {
     border: 1px solid #10b981;
 }
 
-/* 出力シート編集可能セルのスタイル */
+/* 出力シート編集可能セルのスタイル（トランジション全廃・チラつきゼロ保証） */
 #outputTableBody .day-cell {
     cursor: pointer;
-    transition: background-color 0.15s, outline 0.15s;
+    transition: none !important;
 }
 
-#outputTableBody .day-cell:not([class*="cell-special-"]):not([data-sym="早"]):not([data-sym="ハヤ"]):not([data-sym="遅"]):not([data-sym="E"]):not(.conflict-highlight):not(.copy-selected-cell):hover {
-    background-color: #e2e8f0 !important;
+#outputTableBody .day-cell:hover {
+    outline: 2px solid #93c5fd !important;
+    outline-offset: -2px !important;
 }
 
 /* 不使用スタッフ行のスタイル（希望入力シート） */
@@ -1198,14 +1201,12 @@ body.theme-st .sheet-wrapper {
     background-color: #fff2f5 !important;
     border-color: #fbcfe8 !important;
 }
+/* 各病棟テーマのテーブルスタイル（行ホバーによる背景色のチカチカ・点滅・チラつきを完全撤廃） */
 body.theme-st .sheet-table {
     background-color: #fff5f8 !important;
 }
 body.theme-st .sheet-table tbody td:not(.prev-col-cell):not([style*="background"]):not(.conflict-highlight):not([class*="cell-special-"]):not([data-sym="早"]):not([data-sym="ハヤ"]):not([data-sym="遅"]):not([data-sym="E"]) {
     background-color: #fff5f8 !important;
-}
-body.theme-st .sheet-table tbody tr:hover td:not([class*="cell-special-"]):not([data-sym="早"]):not([data-sym="ハヤ"]):not([data-sym="遅"]):not([data-sym="E"]):not(.conflict-highlight):not(.copy-selected-cell) {
-    background-color: #ffe4ec !important;
 }
 body.theme-st .sticky-col-1,
 body.theme-st .sticky-col-2 {
@@ -1230,9 +1231,6 @@ body.theme-1f .sheet-table {
 body.theme-1f .sheet-table tbody td:not(.prev-col-cell):not([style*="background"]):not(.conflict-highlight):not([class*="cell-special-"]):not([data-sym="早"]):not([data-sym="ハヤ"]):not([data-sym="遅"]):not([data-sym="E"]) {
     background-color: #f0f8ff !important;
 }
-body.theme-1f .sheet-table tbody tr:hover td:not([class*="cell-special-"]):not([data-sym="早"]):not([data-sym="ハヤ"]):not([data-sym="遅"]):not([data-sym="E"]):not(.conflict-highlight):not(.copy-selected-cell) {
-    background-color: #e0f2fe !important;
-}
 body.theme-1f .sticky-col-1,
 body.theme-1f .sticky-col-2 {
     background-color: #e0f2fe !important;
@@ -1256,9 +1254,6 @@ body.theme-2f .sheet-table {
 body.theme-2f .sheet-table tbody td:not(.prev-col-cell):not([style*="background"]):not(.conflict-highlight):not([class*="cell-special-"]):not([data-sym="早"]):not([data-sym="ハヤ"]):not([data-sym="遅"]):not([data-sym="E"]) {
     background-color: #fff8f0 !important;
 }
-body.theme-2f .sheet-table tbody tr:hover td:not([class*="cell-special-"]):not([data-sym="早"]):not([data-sym="ハヤ"]):not([data-sym="遅"]):not([data-sym="E"]):not(.conflict-highlight):not(.copy-selected-cell) {
-    background-color: #ffedd5 !important;
-}
 body.theme-2f .sticky-col-1,
 body.theme-2f .sticky-col-2 {
     background-color: #ffedd5 !important;
@@ -1281,9 +1276,6 @@ body.theme-3f .sheet-table {
 }
 body.theme-3f .sheet-table tbody td:not(.prev-col-cell):not([style*="background"]):not(.conflict-highlight):not([class*="cell-special-"]):not([data-sym="早"]):not([data-sym="ハヤ"]):not([data-sym="遅"]):not([data-sym="E"]) {
     background-color: #f0fdf4 !important;
-}
-body.theme-3f .sheet-table tbody tr:hover td:not([class*="cell-special-"]):not([data-sym="早"]):not([data-sym="ハヤ"]):not([data-sym="遅"]):not([data-sym="E"]):not(.conflict-highlight):not(.copy-selected-cell) {
-    background-color: #d1fae5 !important;
 }
 body.theme-3f .sticky-col-1,
 body.theme-3f .sticky-col-2 {
@@ -1311,9 +1303,6 @@ body.theme-life .sheet-table {
 body.theme-life .sheet-table tbody td:not(.prev-col-cell):not([style*="background"]):not(.conflict-highlight):not([class*="cell-special-"]):not([data-sym="早"]):not([data-sym="ハヤ"]):not([data-sym="遅"]):not([data-sym="E"]) {
     background-color: #f0fdfa !important;
 }
-body.theme-life .sheet-table tbody tr:hover td:not([class*="cell-special-"]):not([data-sym="早"]):not([data-sym="ハヤ"]):not([data-sym="遅"]):not([data-sym="E"]):not(.conflict-highlight):not(.copy-selected-cell) {
-    background-color: #ccfbf1 !important;
-}
 body.theme-life .sticky-col-1,
 body.theme-life .sticky-col-2 {
     background-color: #ccfbf1 !important;
@@ -1340,9 +1329,6 @@ body.theme-master .sheet-table {
 body.theme-master .sheet-table tbody td:not(.prev-col-cell):not([style*="background"]):not(.conflict-highlight):not([class*="cell-special-"]):not([data-sym="早"]):not([data-sym="ハヤ"]):not([data-sym="遅"]):not([data-sym="E"]) {
     background-color: #fffdf0 !important;
 }
-body.theme-master .sheet-table tbody tr:hover td:not([class*="cell-special-"]):not([data-sym="早"]):not([data-sym="ハヤ"]):not([data-sym="遅"]):not([data-sym="E"]):not(.conflict-highlight):not(.copy-selected-cell) {
-    background-color: #fef9c3;
-}
 /* マスターテーブルのsticky列はフロアごとのカラーを尊重するため、!importantで上書きしない */
 body.theme-master .sticky-col-1,
 body.theme-master .sticky-col-2 {
@@ -1366,9 +1352,6 @@ body.theme-south .sheet-table {
 }
 body.theme-south .sheet-table tbody td:not(.prev-col-cell):not([style*="background"]):not(.conflict-highlight):not([class*="cell-special-"]):not([data-sym="早"]):not([data-sym="ハヤ"]):not([data-sym="遅"]):not([data-sym="E"]) {
     background-color: #faf5ff !important;
-}
-body.theme-south .sheet-table tbody tr:hover td:not([class*="cell-special-"]):not([data-sym="早"]):not([data-sym="ハヤ"]):not([data-sym="遅"]):not([data-sym="E"]):not(.conflict-highlight):not(.copy-selected-cell) {
-    background-color: #f3e8ff !important;
 }
 body.theme-south .sticky-col-1,
 body.theme-south .sticky-col-2 {
@@ -1532,15 +1515,50 @@ td.remarks-cell {
     font-weight: 900;
 }
 
-/* ★ ユーザー指示: コピペモードの選択枠ハイライト（点滅消滅を廃止し、Excel同様に濃紺太枠を常時固定・最前面表示） */
+/* ★ ユーザー指示: コピペモードのアクティブ選択枠（絶対に消えない・隠れない最前面太枠＋鮮明背景） */
 .copy-selected-cell,
 td.copy-selected-cell,
 body .sheet-table tbody td.copy-selected-cell {
     outline: 3px solid #1d4ed8 !important;
     outline-offset: -2px !important;
-    box-shadow: inset 0 0 0 2px #1d4ed8 !important, 0 0 0 2px #2563eb !important;
+    box-shadow: inset 0 0 0 2px #1d4ed8 !important, 0 0 8px rgba(29, 78, 216, 0.5) !important;
+    background-color: #dbeafe !important;
+    color: #1e3a8a !important;
+    font-weight: 900 !important;
     position: relative !important;
-    z-index: 25 !important;
+    z-index: 50 !important;
+}
+
+/* 特殊勤務セルの場合は元の識別カラーを保持しつつ枠線を最優先 */
+.cell-special-early.copy-selected-cell,
+td[data-sym="早"].copy-selected-cell,
+td[data-sym="ハヤ"].copy-selected-cell {
+    background-color: #fef08a !important;
+    outline: 3px solid #b45309 !important;
+    box-shadow: inset 0 0 0 2px #b45309 !important, 0 0 8px rgba(180, 83, 9, 0.5) !important;
+}
+.cell-special-late.copy-selected-cell,
+td[data-sym="遅"].copy-selected-cell {
+    background-color: #a5f3fc !important;
+    outline: 3px solid #0369a1 !important;
+    box-shadow: inset 0 0 0 2px #0369a1 !important, 0 0 8px rgba(3, 105, 161, 0.5) !important;
+}
+.cell-special-eve.copy-selected-cell,
+td[data-sym="E"].copy-selected-cell {
+    background-color: #fbcfe8 !important;
+    outline: 3px solid #be185d !important;
+    box-shadow: inset 0 0 0 2px #be185d !important, 0 0 8px rgba(190, 24, 93, 0.5) !important;
+}
+
+/* ★ Excel同等: コピー元セル（破線枠でコピー中であることを常時明示・別セル移動後も保持） */
+.copied-source-cell,
+td.copied-source-cell,
+body .sheet-table tbody td.copied-source-cell {
+    outline: 3px dashed #2563eb !important;
+    outline-offset: -2px !important;
+    box-shadow: inset 0 0 0 2px #60a5fa !important;
+    position: relative !important;
+    z-index: 45 !important;
 }
 
 /* ★ ドラッグ＆ドロップ行並び替え用スタイル */

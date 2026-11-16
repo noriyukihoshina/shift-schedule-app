@@ -3111,7 +3111,7 @@ document.addEventListener('DOMContentLoaded', () => {
             });
         });
 
-        document.querySelectorAll('.day-cell').forEach(cell => {
+        document.querySelectorAll('#inputTableBody .day-cell').forEach(cell => {
             cell.addEventListener('click', (e) => {
                 const s = parseInt(cell.dataset.s, 10);
                 const type = cell.dataset.type;
@@ -11956,7 +11956,10 @@ function renderMasterIntegrationView() {
         if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'c') {
             if (activeCell) {
                 clipboardSymbol = activeCell.textContent.trim();
-                showToast(`📋 【${clipboardSymbol || '空欄'}】をコピーしました (Ctrl+C)`);
+                // 既存のコピー元枠を解除し、現在のセルにコピー元枠（破線太枠）を固定
+                document.querySelectorAll('.copied-source-cell').forEach(c => c.classList.remove('copied-source-cell'));
+                activeCell.classList.add('copied-source-cell');
+                showToast(`📋 【${clipboardSymbol || '空欄'}】をコピーしました (Ctrl+C) ➔ 貼り付けたいセルを選択して Ctrl+V`);
                 e.preventDefault();
             }
         } else if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'v') {
