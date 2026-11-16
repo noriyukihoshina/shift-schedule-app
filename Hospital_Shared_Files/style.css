@@ -618,7 +618,8 @@ input:checked + .toggle-slider:before {
 }
 
 .modal-overlay.open,
-.modal-overlay.show {
+.modal-overlay.show,
+.modal-overlay.active {
     display: flex;
 }
 
