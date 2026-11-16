@@ -1,0 +1,1741 @@
+/* 勤務表作成システム - スタイルシート */
+
+:root {
+    --primary: #2563eb;
+    --primary-hover: #1d4ed8;
+    --primary-light: #eff6ff;
+    --secondary: #475569;
+    --danger: #dc2626;
+    --danger-light: #fef2f2;
+    --success: #16a34a;
+    --warning: #d97706;
+    --gray-50: #f8fafc;
+    --gray-100: #f1f5f9;
+    --gray-200: #e2e8f0;
+    --gray-300: #cbd5e1;
+    --gray-600: #475569;
+    --gray-700: #334155;
+    --gray-800: #1e293b;
+    --border-color: #cbd5e1;
+}
+
+* {
+    box-sizing: border-box;
+    margin: 0;
+    padding: 0;
+}
+
+body {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, "Hiragino Kaku Gothic ProN", "Meiryo", sans-serif;
+    color: var(--gray-800);
+    background-color: #f8fafc;
+    line-height: 1.4;
+    overflow-x: hidden;
+}
+
+/* ヘッダー */
+.app-header {
+    background: linear-gradient(135deg, #1e293b 0%, #0f172a 100%);
+    color: white;
+    padding: 0.45rem 1.25rem;
+    box-shadow: 0 2px 4px -1px rgba(0, 0, 0, 0.1);
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    position: sticky;
+    top: 0;
+    z-index: 100;
+}
+
+.header-title {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+}
+
+.header-title h1 {
+    font-size: 1.25rem;
+    font-weight: 700;
+    letter-spacing: -0.02em;
+}
+
+.badge {
+    font-size: 0.75rem;
+    padding: 0.2rem 0.6rem;
+    border-radius: 9999px;
+    font-weight: 600;
+    background: #3b82f6;
+    color: white;
+}
+
+.header-actions {
+    display: flex;
+    gap: 0.5rem;
+    align-items: center;
+}
+
+/* ナビゲーション・タブ */
+.tab-container {
+    background: white;
+    border-bottom: 1px solid var(--gray-200);
+    padding: 0 1.5rem;
+    display: flex;
+    gap: 1rem;
+    position: sticky;
+    top: 61px;
+    z-index: 90;
+    box-shadow: 0 1px 2px 0 rgba(0, 0, 0, 0.05);
+}
+
+.tab-btn {
+    padding: 0.85rem 1.25rem;
+    border: none;
+    background: none;
+    font-size: 0.95rem;
+    font-weight: 600;
+    color: var(--gray-600);
+    cursor: pointer;
+    border-bottom: 3px solid transparent;
+    transition: all 0.2s;
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+}
+
+.tab-btn:hover {
+    color: var(--primary);
+    background: var(--gray-50);
+}
+
+.tab-btn.active {
+    color: var(--primary);
+    border-bottom-color: var(--primary);
+}
+
+/* メインコンテンツ */
+.main-content {
+    padding: 1.25rem 1.5rem;
+    max-width: 100%;
+}
+
+.tab-panel {
+    display: none;
+}
+
+.tab-panel.active {
+    display: block !important;
+}
+
+/* ツールバー */
+.toolbar-card {
+    background: white;
+    border-radius: 0.5rem;
+    padding: 0.85rem 1.25rem;
+    margin-bottom: 1rem;
+    border: 1px solid var(--gray-200);
+    box-shadow: 0 1px 3px rgba(0,0,0,0.05);
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: space-between;
+    gap: 1rem;
+}
+
+.palette-group {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    flex-wrap: wrap;
+}
+
+.palette-label {
+    font-size: 0.85rem;
+    font-weight: 700;
+    color: var(--gray-700);
+    margin-right: 0.25rem;
+}
+
+.palette-btn {
+    padding: 0.35rem 0.65rem;
+    border: 1px solid var(--gray-300);
+    border-radius: 0.375rem;
+    background: white;
+    font-size: 0.85rem;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.15s;
+    min-width: 2.2rem;
+    text-align: center;
+}
+
+.palette-btn:hover {
+    background: var(--gray-100);
+    border-color: var(--primary);
+}
+
+.palette-btn.selected {
+    background: var(--primary);
+    color: white;
+    border-color: var(--primary);
+    box-shadow: 0 0 0 2px rgba(37, 99, 235, 0.3);
+}
+
+.action-group {
+    display: flex;
+    gap: 0.5rem;
+    align-items: center;
+    flex-wrap: wrap;
+}
+
+/* ボタン */
+.btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.4rem;
+    padding: 0.5rem 1rem;
+    border-radius: 0.375rem;
+    font-size: 0.875rem;
+    font-weight: 600;
+    border: 1px solid transparent;
+    cursor: pointer;
+    transition: all 0.15s;
+}
+
+.btn-primary {
+    background: var(--primary);
+    color: white;
+}
+.btn-primary:hover {
+    background: var(--primary-hover);
+}
+
+.btn-success {
+    background: var(--success);
+    color: white;
+}
+.btn-success:hover {
+    background: #15803d;
+}
+
+.btn-outline {
+    background: white;
+    border-color: var(--gray-300);
+    color: var(--gray-700);
+}
+.btn-outline:hover {
+    background: var(--gray-100);
+    border-color: var(--gray-400);
+}
+
+.btn-danger {
+    background: var(--danger-light);
+    border-color: #fca5a5;
+    color: var(--danger);
+}
+.btn-danger:hover {
+    background: #fee2e2;
+}
+
+.btn-lg {
+    padding: 0.65rem 1.4rem;
+    font-size: 1rem;
+}
+
+/* スプレッドシートテーブルコンテナ */
+.sheet-wrapper {
+    background: white;
+    border-radius: 0.5rem;
+    border: 1px solid var(--gray-200);
+    box-shadow: 0 1px 3px rgba(0,0,0,0.05);
+    overflow-x: scroll;
+    overflow-y: auto;
+    max-height: calc(100vh - 250px);
+    position: relative;
+    scrollbar-width: auto;
+    scrollbar-color: #94a3b8 #f1f5f9;
+}
+
+/* 掴みやすく視認性の高いカスタムスクロールバー（横・縦） */
+.sheet-wrapper::-webkit-scrollbar {
+    width: 14px;
+    height: 14px;
+}
+.sheet-wrapper::-webkit-scrollbar-track {
+    background: #f1f5f9;
+    border-radius: 8px;
+    border: 1px solid #e2e8f0;
+}
+.sheet-wrapper::-webkit-scrollbar-thumb {
+    background: #94a3b8;
+    border-radius: 8px;
+    border: 2px solid #f1f5f9;
+}
+.sheet-wrapper::-webkit-scrollbar-thumb:hover {
+    background: #64748b;
+}
+
+/* 左右スクロールナビゲーションボタンスタイル */
+.scroll-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    font-size: 0.8rem;
+    padding: 4px 10px;
+    color: #1e293b;
+    border: 1px solid #cbd5e1;
+    background: #f8fafc;
+    border-radius: 4px;
+    cursor: pointer;
+    font-weight: 700;
+    transition: all 0.15s;
+    user-select: none;
+}
+.scroll-btn:hover {
+    background: #e2e8f0;
+    border-color: #94a3b8;
+    color: #0f172a;
+}
+.scroll-btn:active {
+    background: #cbd5e1;
+    transform: translateY(1px);
+}
+
+.sheet-table {
+    border-collapse: separate;
+    border-spacing: 0;
+    width: max-content;
+    font-size: 0.82rem;
+}
+
+.sheet-table th,
+.sheet-table td {
+    border-right: 1px solid var(--border-color);
+    border-bottom: 1px solid var(--border-color);
+    padding: 0.35rem 0.45rem;
+    text-align: center;
+    vertical-align: middle;
+    white-space: nowrap;
+}
+
+/* ★ 太線罫線クラス（画像3の見やすい区切りデザイン） */
+.border-thick-right {
+    border-right: 2px solid #475569 !important;
+}
+.border-thick-left {
+    border-left: 2px solid #475569 !important;
+}
+.border-thick-bottom {
+    border-bottom: 2px solid #475569 !important;
+}
+
+/* ヘッダーの固定 */
+.sheet-table thead th {
+    position: sticky;
+    top: 0;
+    background: #f1f5f9;
+    color: var(--gray-700);
+    font-weight: 700;
+    z-index: 10;
+}
+
+/* 左端スタッフ列の固定 */
+.sticky-col-1 {
+    position: sticky;
+    left: 0;
+    background: #f8fafc;
+    z-index: 5;
+    width: 45px;
+    min-width: 45px;
+}
+.sticky-col-2 {
+    position: sticky;
+    left: 45px;
+    background: #f8fafc;
+    z-index: 5;
+    width: 125px;
+    min-width: 125px;
+    text-align: left !important;
+    font-weight: 600;
+}
+thead th.sticky-col-1,
+thead th.sticky-col-2 {
+    z-index: 25 !important;
+    background: #e2e8f0 !important;
+}
+
+/* 前ターム列の背景 */
+.prev-col-header {
+    background: #ede9fe !important;
+    color: #5b21b6 !important;
+}
+.prev-col-cell {
+    background: #faf5ff;
+}
+
+/* フラグ列 */
+.flag-col {
+    width: 42px;
+    min-width: 42px;
+    max-width: 48px;
+    text-align: center;
+}
+
+/* セルスタイル（全テーブル共通：日付列は52px完全均一固定・12/31も1行で綺麗に収まり不要な左右スクロールを排除） */
+.col-day-fixed,
+.header-day-col,
+.day-cell,
+th.header-day-col,
+th.col-day-fixed,
+td.day-cell,
+td.col-day-fixed {
+    width: 52px !important;
+    min-width: 52px !important;
+    max-width: 52px !important;
+    box-sizing: border-box !important;
+    text-align: center !important;
+    white-space: nowrap !important;
+}
+
+.day-cell {
+    height: 30px;
+    cursor: pointer;
+    font-family: monospace;
+    font-weight: 600;
+    font-size: 0.85rem;
+    user-select: none;
+    transition: background 0.1s;
+}
+
+.day-cell:hover {
+    background: #e0f2fe !important;
+}
+
+.day-cell.selected {
+    outline: 2px solid var(--primary);
+    outline-offset: -2px;
+    background: #bae6fd !important;
+}
+
+/* 事前入力枠の強調：文字のみ赤字・太字（ご要望により網掛け・背景色は完全除去） */
+.fixed-cell {
+    color: #dc2626 !important;
+    font-weight: 800 !important;
+    background-color: transparent !important;
+}
+
+/* ★ 障壁・エラー原因セルの薄いブルー網掛け（斜めストライプ + ブルー枠線） */
+.conflict-highlight {
+    background-color: #bfdbfe !important; /* 薄いブルー */
+    background-image: repeating-linear-gradient(45deg, rgba(37, 99, 235, 0.18), rgba(37, 99, 235, 0.18) 5px, transparent 5px, transparent 10px) !important;
+    box-shadow: inset 0 0 0 2px #2563eb !important; /* 明瞭なブルー枠線 */
+    color: #1e3a8a !important; /* 濃いブルー文字 */
+    font-weight: 900 !important;
+    position: relative;
+    z-index: 2;
+    animation: conflictPulse 1.8s infinite ease-in-out;
+}
+
+@keyframes conflictPulse {
+    0%, 100% {
+        box-shadow: inset 0 0 0 2px #2563eb, 0 0 6px rgba(37, 99, 235, 0.4);
+    }
+    50% {
+        box-shadow: inset 0 0 0 2px #60a5fa, 0 0 2px rgba(37, 99, 235, 0.2);
+    }
+}
+
+/* 自動生成枠：黒文字 */
+.auto-cell {
+    color: #1e293b;
+    font-weight: 600;
+}
+
+/* =========================================================================
+   ★ 特殊勤務セル（早・遅・E）目視確認用 目立つ背景色分け
+   ※全テーブル・全モード（希望入力・修正作業エリア・最終チェック・マスター）完全共通配色
+   ========================================================================= */
+.cell-special-early,
+[data-sym="早"]:not(.stat-cell):not(th),
+[data-sym="ハヤ"]:not(.stat-cell):not(th),
+td[data-sym="早"],
+td[data-sym="ハヤ"],
+td.cell-special-early,
+body .sheet-table td.cell-special-early,
+body .sheet-table td[data-sym="早"],
+body .sheet-table td[data-sym="ハヤ"] {
+    background-color: #fef08a !important; /* 目立つイエロー/アンバー系 */
+    background: #fef08a !important;
+    color: #854d0e !important;            /* 濃いアンバー文字 */
+    font-weight: 800 !important;
+}
+
+.cell-special-late,
+[data-sym="遅"]:not(.stat-cell):not(th),
+td[data-sym="遅"],
+td.cell-special-late,
+body .sheet-table td.cell-special-late,
+body .sheet-table td[data-sym="遅"] {
+    background-color: #a5f3fc !important; /* 目立つシアン/ターコイズ系 */
+    background: #a5f3fc !important;
+    color: #164e63 !important;            /* 濃いシアンネイビー文字 */
+    font-weight: 800 !important;
+}
+
+.cell-special-eve,
+[data-sym="E"]:not(.stat-cell):not(th),
+td[data-sym="E"],
+td.cell-special-eve,
+body .sheet-table td.cell-special-eve,
+body .sheet-table td[data-sym="E"] {
+    background-color: #fbcfe8 !important; /* 目立つピンク/マゼンタ系 */
+    background: #fbcfe8 !important;
+    color: #831843 !important;            /* 濃いワインレッド文字 */
+    font-weight: 800 !important;
+}
+
+/* 事前固定希望枠（赤字）の場合は赤字を維持しつつ背景色を保持 */
+.cell-special-early.fixed-cell,
+td[data-sym="早"].fixed-cell,
+td[data-sym="ハヤ"].fixed-cell {
+    color: #dc2626 !important;
+    background-color: #fef08a !important;
+    background: #fef08a !important;
+}
+.cell-special-late.fixed-cell,
+td[data-sym="遅"].fixed-cell {
+    color: #dc2626 !important;
+    background-color: #a5f3fc !important;
+    background: #a5f3fc !important;
+}
+.cell-special-eve.fixed-cell,
+td[data-sym="E"].fixed-cell {
+    color: #dc2626 !important;
+    background-color: #fbcfe8 !important;
+    background: #fbcfe8 !important;
+}
+
+/* エラー網掛け（.conflict-highlight）が重なった場合はエラー青網掛けを最優先 */
+body .sheet-table tbody td.conflict-highlight,
+body .sheet-table tfoot td.conflict-highlight,
+.cell-special-early.conflict-highlight,
+.cell-special-late.conflict-highlight,
+.cell-special-eve.conflict-highlight,
+td[data-sym="早"].conflict-highlight,
+td[data-sym="遅"].conflict-highlight,
+td[data-sym="E"].conflict-highlight {
+    background-color: #bfdbfe !important;
+    background-image: repeating-linear-gradient(45deg, rgba(37, 99, 235, 0.22), rgba(37, 99, 235, 0.22) 5px, transparent 5px, transparent 10px) !important;
+    box-shadow: inset 0 0 0 2px #2563eb !important;
+    color: #1e3a8a !important;
+    font-weight: 900 !important;
+    position: relative !important;
+    z-index: 5 !important;
+}
+
+/* フッター集計行 */
+.sheet-table tfoot th,
+.sheet-table tfoot td {
+    position: sticky;
+    bottom: 0;
+    background: #f8fafc;
+    font-weight: 700;
+    border-top: 2px solid #94a3b8;
+    z-index: 15;
+}
+
+/* 土日ヘッダー色 */
+.header-sat {
+    color: #0284c7 !important;
+}
+.header-sun {
+    color: #e11d48 !important;
+}
+
+/* ミニトグルスイッチ */
+.toggle-switch {
+    position: relative;
+    display: inline-block;
+    width: 28px;
+    height: 16px;
+    margin: 0 auto;
+}
+
+.toggle-switch input {
+    opacity: 0;
+    width: 0;
+    height: 0;
+}
+
+.toggle-slider {
+    position: absolute;
+    cursor: pointer;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background-color: #cbd5e1;
+    transition: .2s;
+    border-radius: 16px;
+}
+
+.toggle-slider:before {
+    position: absolute;
+    content: "";
+    height: 12px;
+    width: 12px;
+    left: 2px;
+    bottom: 2px;
+    background-color: white;
+    transition: .2s;
+    border-radius: 50%;
+}
+
+input:checked + .toggle-slider {
+    background-color: var(--primary);
+}
+
+input:checked + .toggle-slider.danger-slider {
+    background-color: var(--danger);
+}
+
+input:checked + .toggle-slider:before {
+    transform: translateX(12px);
+}
+
+/* モーダル */
+.modal-overlay {
+    display: none;
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: rgba(0, 0, 0, 0.5);
+    z-index: 200;
+    justify-content: center;
+    align-items: center;
+    padding: 1.5rem;
+}
+
+.modal-overlay.open,
+.modal-overlay.show {
+    display: flex;
+}
+
+.modal-card {
+    background: white;
+    border-radius: 0.75rem;
+    max-width: 650px;
+    width: 100%;
+    max-height: 85vh;
+    overflow-y: auto;
+    box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04);
+}
+
+.modal-header {
+    padding: 1.25rem 1.5rem;
+    border-bottom: 1px solid var(--gray-200);
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+
+.modal-header.error {
+    background: #fef2f2;
+    border-bottom-color: #fecaca;
+    color: #991b1b;
+}
+
+.modal-body {
+    padding: 1.5rem;
+    line-height: 1.6;
+}
+
+.modal-footer {
+    padding: 1rem 1.5rem;
+    background: var(--gray-50);
+    border-top: 1px solid var(--gray-200);
+    display: flex;
+    justify-content: flex-end;
+    gap: 0.75rem;
+}
+
+.error-list {
+    list-style: none;
+    margin-top: 0.75rem;
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+}
+
+.error-item {
+    background: #fff1f2;
+    border-left: 4px solid #f43f5e;
+    padding: 0.6rem 0.8rem;
+    border-radius: 0.25rem;
+    font-size: 0.85rem;
+    color: #881337;
+}
+
+/* 統計ダッシュボードカード */
+.stats-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+    gap: 1rem;
+    margin-bottom: 1.5rem;
+}
+
+.stat-card {
+    background: white;
+    padding: 1.25rem;
+    border-radius: 0.5rem;
+    border: 1px solid var(--gray-200);
+    box-shadow: 0 1px 3px rgba(0,0,0,0.05);
+}
+
+.stat-card-title {
+    font-size: 0.85rem;
+    color: var(--gray-600);
+    font-weight: 600;
+    margin-bottom: 0.35rem;
+}
+
+/* エラー通知バー（入力シート上部） */
+.conflict-alert-banner {
+    display: none;
+    background: #eff6ff;
+    border: 1px solid #93c5fd;
+    border-left: 5px solid #2563eb;
+    border-radius: 0.5rem;
+    padding: 0.85rem 1.25rem;
+    margin-bottom: 1rem;
+    color: #1e40af;
+    font-size: 0.9rem;
+    font-weight: 600;
+    align-items: center;
+    justify-content: space-between;
+    box-shadow: 0 1px 3px rgba(37, 99, 235, 0.1);
+}
+.conflict-alert-banner.show {
+    display: flex;
+}
+
+/* ★ 印刷用スタイル（A3横向き・各階60名分完全収容対応） */
+@media print {
+    @page {
+        size: A3 landscape;
+        margin: 5mm 6mm;
+    }
+
+    /* 印刷不要なUI要素を完全非表示 */
+    .app-header,
+    .tab-container,
+    .toolbar-card,
+    .btn,
+    .scroll-btn,
+    .conflict-alert-banner,
+    .modal-overlay,
+    .palette-group,
+    .app-toast {
+        display: none !important;
+    }
+
+    /* 非アクティブなタブを印刷から除外 */
+    .tab-panel:not(.active) {
+        display: none !important;
+    }
+
+    body {
+        background: white !important;
+        color: #000 !important;
+        margin: 0 !important;
+        padding: 0 !important;
+        font-family: 'Meiryo', 'Hiragino Kaku Gothic ProN', sans-serif !important;
+        -webkit-print-color-adjust: exact !important;
+        print-color-adjust: exact !important;
+    }
+
+    .main-content {
+        padding: 0 !important;
+        margin: 0 !important;
+    }
+
+    .sheet-wrapper {
+        max-height: none !important;
+        overflow: visible !important;
+        border: none !important;
+        box-shadow: none !important;
+        width: 100% !important;
+    }
+
+    /* 印刷時のテーブル全体（60名枠が上下にピッタリ収まるタイト設定） */
+    .sheet-table {
+        width: 100% !important;
+        font-size: 7pt !important;
+        border-collapse: collapse !important;
+    }
+
+    /* ヘッダー・セルのパディングと高さの最小化（60名分をA3用紙の縦幅297mm内に収める） */
+    .sheet-table th,
+    .sheet-table td {
+        padding: 1px 1.5px !important;
+        height: 12.5px !important;
+        line-height: 1.1 !important;
+        font-size: 7pt !important;
+        border: 1px solid #94a3b8 !important;
+    }
+
+    /* ★ ユーザー指示: 印刷時には特殊勤務（早・遅・E等）のセル背景色は完全除去（白地・枠線と黒文字のみ） */
+    .cell-special-early,
+    .cell-special-late,
+    .cell-special-eve,
+    [data-sym="早"],
+    [data-sym="遅"],
+    [data-sym="E"],
+    td.day-cell,
+    td.master-editable-cell,
+    td.input-cell {
+        background-color: transparent !important;
+        background: transparent !important;
+        background-image: none !important;
+        box-shadow: none !important;
+        color: #000000 !important;
+        -webkit-print-color-adjust: exact !important;
+        print-color-adjust: exact !important;
+    }
+    .cell-special-early.fixed-cell,
+    .cell-special-late.fixed-cell,
+    .cell-special-eve.fixed-cell,
+    .fixed-cell {
+        color: #000000 !important;
+        background-color: transparent !important;
+        background: transparent !important;
+    }
+
+    /* 印刷時のsticky解除（紙面での座標ズレを防止） */
+    .sticky-col-1,
+    .sticky-col-2,
+    .sheet-table thead th {
+        position: static !important;
+        box-shadow: none !important;
+    }
+
+    .sticky-col-1 {
+        width: 22px !important;
+        min-width: 22px !important;
+    }
+    .sticky-col-2 {
+        width: 65px !important;
+        min-width: 65px !important;
+        font-weight: 700 !important;
+    }
+
+    /* 日付ヘッダーの印刷時スタイル */
+    .header-day-col {
+        min-width: 0 !important;
+        width: auto !important;
+        padding: 1px 0.5px !important;
+    }
+    .day-label {
+        font-size: 6.5pt !important;
+    }
+    .day-weekday {
+        font-size: 6pt !important;
+    }
+    /* 増減ボタンは印刷時非表示 */
+    .day-offset-ctrl {
+        display: none !important;
+    }
+
+    /* 事前希望枠は赤字太字を維持 */
+    .fixed-cell {
+        color: #dc2626 !important;
+        font-weight: bold !important;
+    }
+
+    /* 太線罫線 */
+    .border-thick-right {
+        border-right: 1.5px solid #000 !important;
+    }
+    .border-thick-bottom {
+        border-bottom: 1.5px solid #000 !important;
+    }
+}
+
+/* トースト通知 */
+.app-toast {
+    position: fixed;
+    top: 20px;
+    left: 50%;
+    transform: translateX(-50%) translateY(-100px);
+    background: #1e293b;
+    color: white;
+    padding: 12px 24px;
+    border-radius: 8px;
+    font-size: 0.9rem;
+    font-weight: 600;
+    box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.3);
+    z-index: 9999;
+    transition: transform 0.3s cubic-bezier(0.16, 1, 0.3, 1), opacity 0.3s;
+    opacity: 0;
+    pointer-events: none;
+    max-width: 90%;
+    text-align: center;
+}
+
+.app-toast.show {
+    transform: translateX(-50%) translateY(0);
+    opacity: 1;
+}
+
+.app-toast.success {
+    background: #065f46;
+    border: 1px solid #10b981;
+}
+
+/* 出力シート編集可能セルのスタイル */
+#outputTableBody .day-cell {
+    cursor: pointer;
+    transition: background-color 0.15s, outline 0.15s;
+}
+
+#outputTableBody .day-cell:hover {
+    background-color: #e2e8f0 !important;
+    outline: 2px solid var(--primary);
+    z-index: 5;
+}
+
+/* 不使用スタッフ行のスタイル（希望入力シート） */
+.row-unused {
+    opacity: 0.45;
+    background-color: #f8fafc !important;
+}
+
+.row-unused td {
+    background-color: #f8fafc !important;
+    color: #94a3b8 !important;
+}
+
+.row-unused input.staff-name-input {
+    color: #94a3b8 !important;
+}
+
+/* 日付ヘッダーセルの完全均一固定幅（12/31等の二桁月日も確実に1行で収まる52px） */
+.header-day-col {
+    min-width: 52px !important;
+    width: 52px !important;
+    max-width: 52px !important;
+    padding: 3px 1px !important;
+    text-align: center !important;
+    box-sizing: border-box !important;
+}
+
+/* 加減枠（52px固定幅にすっきりと美しく収まるコンパクト設計） */
+.day-offset-ctrl {
+    display: inline-flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+    gap: 1px !important;
+    width: 100% !important;
+}
+.day-offset-btn {
+    width: 13px !important;
+    height: 16px !important;
+    font-size: 10px !important;
+    line-height: 1 !important;
+    padding: 0 !important;
+}
+.day-offset-val {
+    min-width: 20px !important;
+    font-size: 0.72rem !important;
+    font-weight: 700 !important;
+    text-align: center !important;
+}
+
+.day-label {
+    font-size: 0.84rem;
+    font-weight: 700;
+    line-height: 1.15;
+}
+
+.day-weekday {
+    font-size: 0.76rem;
+    line-height: 1.15;
+}
+
+/* 日別出勤増減（オフセット）コントロール - 14インチPCで押しやすく視認性の高いサイズ */
+.day-offset-ctrl {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 2px;
+    background: #ffffff;
+    border: 1px solid #cbd5e1;
+    border-radius: 3px;
+    padding: 0 3px;
+    box-shadow: 0 1px 1px rgba(0, 0, 0, 0.05);
+    user-select: none;
+    font-size: 0.75rem;
+    margin-top: 2px;
+    height: 18px;
+    max-width: 46px;
+}
+
+.day-offset-btn {
+    border: none;
+    background: #f1f5f9;
+    color: #475569;
+    font-size: 0.8rem;
+    font-weight: 800;
+    width: 12px;
+    height: 14px;
+    line-height: 13px;
+    padding: 0;
+    border-radius: 2px;
+    cursor: pointer;
+    transition: all 0.1s;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.day-offset-btn:hover {
+    background: #2563eb;
+    color: white;
+}
+
+.day-offset-val {
+    min-width: 16px;
+    text-align: center;
+    font-weight: 800;
+    font-size: 0.75rem;
+    color: #64748b;
+    padding: 0 1px;
+    line-height: 14px;
+}
+
+.day-offset-val.offset-pos {
+    color: #1d4ed8;
+    background: #dbeafe;
+    border-radius: 2px;
+}
+
+.day-offset-val.offset-neg {
+    color: #b91c1c;
+    background: #fee2e2;
+    border-radius: 2px;
+}
+
+/* プロテクト（P）関連スタイル */
+.palette-btn-protect.selected {
+    background: #be185d !important;
+    color: white !important;
+    border-color: #9d174d !important;
+    box-shadow: 0 0 0 2px #fbcfe8;
+}
+
+/* プロテクトされたセルのスタイル（希望入力の赤字太字と同様） */
+.cell-protected {
+    color: #dc2626 !important;
+    font-weight: 800 !important;
+    position: relative;
+}
+
+.cell-protected::after {
+    content: "🔒";
+    position: absolute;
+    top: 1px;
+    right: 1px;
+    font-size: 8px;
+    line-height: 1;
+    opacity: 0.7;
+}
+
+/* セクション別集計行（フッター）スタイル：背景色は完全除去（透明/白）、文字色指定 */
+.foot-sec-pt-a,
+.foot-sec-ot-a {
+    background: transparent !important;
+    color: #ea580c !important; /* オレンジ (A系統) */
+}
+
+.foot-sec-pt-b,
+.foot-sec-ot-b {
+    background: transparent !important;
+    color: #1d4ed8 !important; /* 青 (B系統) */
+}
+
+.foot-sec-st {
+    background: transparent !important;
+    color: #ec4899 !important; /* 薄いピンク */
+}
+
+.foot-duty-gray {
+    background: transparent !important;
+    color: #334155 !important; /* 早〜8時は濃い灰色 */
+}
+
+/* 右側集計列のスタイル：背景色完全除去、公休・有休・リフは黒、早・遅・E・8時は濃い灰色 */
+.stat-cell {
+    background: transparent !important;
+}
+
+.stat-cell[data-stat="off"],
+.stat-cell[data-stat="paid"],
+.stat-cell[data-stat="ref"] {
+    color: #1e293b !important; /* 公休・有休・リフ: 黒 */
+}
+
+.stat-cell[data-stat="early"],
+.stat-cell[data-stat="late"],
+.stat-cell[data-stat="eve"],
+.stat-cell[data-stat="h8"] {
+    color: #334155 !important; /* 早・遅・E・8時: 濃い灰色 */
+}
+
+
+
+/* テーブル切替ナビゲーションスタイル */
+.dept-nav-container {
+    display: flex;
+    gap: 8px;
+    padding: 6px 1.25rem;
+    background: #f8fafc;
+    border-bottom: 1px solid #e2e8f0;
+    align-items: center;
+    flex-wrap: wrap;
+}
+.dept-nav-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    padding: 4px 12px;
+    border-radius: 6px;
+    font-size: 0.82rem;
+    font-weight: 700;
+    text-decoration: none;
+    color: #475569;
+    background: #ffffff;
+    border: 1px solid #cbd5e1;
+    transition: all 0.2s ease;
+}
+.dept-nav-btn:hover {
+    background: #f1f5f9;
+    border-color: #94a3b8;
+    color: #0f172a;
+}
+/* 各テーブル固有の高コントラストデザイン（白文字化を完全撤廃し、淡い背景＋濃い文字色を100%保証） */
+.dept-nav-btn.nav-master, .dept-nav-btn[href*="index"], .dept-nav-btn[href*="master"], .dept-nav-btn[href*="マスター"] {
+    background: #fefce8 !important;
+    border-color: #fef08a !important;
+    color: #854d0e !important;
+}
+.dept-nav-btn.nav-1f, .dept-nav-btn[href*="1f"], .dept-nav-btn[href*="1階"] {
+    background: #f0f9ff !important;
+    border-color: #bae6fd !important;
+    color: #0369a1 !important;
+}
+.dept-nav-btn.nav-2f, .dept-nav-btn[href*="2f"], .dept-nav-btn[href*="2階"] {
+    background: #fff7ed !important;
+    border-color: #fed7aa !important;
+    color: #c2410c !important;
+}
+.dept-nav-btn.nav-3f, .dept-nav-btn[href*="3f"], .dept-nav-btn[href*="3階"] {
+    background: #f0fdf4 !important;
+    border-color: #bbf7d0 !important;
+    color: #15803d !important;
+}
+.dept-nav-btn.nav-south, .dept-nav-btn[href*="south"], .dept-nav-btn[href*="南"] {
+    background: #faf5ff !important;
+    border-color: #e9d5ff !important;
+    color: #7e22ce !important;
+}
+.dept-nav-btn.nav-st, .dept-nav-btn[href*="ST"], .dept-nav-btn.dept-nav-st {
+    background: #fdf2f8 !important;
+    border-color: #fbcfe8 !important;
+    color: #be185d !important;
+}
+.dept-nav-btn.nav-life, .dept-nav-btn[href*="life"], .dept-nav-btn[href*="生活期"], .dept-nav-btn.dept-nav-life {
+    background: #f0fdfa !important;
+    border-color: #99f6e4 !important;
+    color: #0f766e !important;
+}
+
+/* ホバー時 */
+.dept-nav-btn:hover {
+    filter: brightness(0.96);
+    opacity: 0.95;
+}
+
+/* アクティブ時（現在表示中のテーブル）: 文字色は濃い色のまま維持し、上品な枠線強調で明示 */
+.dept-nav-btn.active {
+    font-weight: 800 !important;
+    box-shadow: 0 0 0 1.5px currentColor, 0 1px 2px rgba(0,0,0,0.06) !important;
+}
+
+/* ========================================================
+   ★ テーブル背景テーマカラー（薄く淡い色指定）
+   ST：ピンク / 1階：ブルー / 2階：オレンジ / 3階：みどり / マスター：黄色
+   ======================================================== */
+
+/* 1. STテーブル: 薄く淡いピンク */
+body.theme-st {
+    background-color: #fff9fa;
+}
+body.theme-st .sheet-wrapper {
+    background-color: #fff2f5 !important;
+    border-color: #fbcfe8 !important;
+}
+body.theme-st .sheet-table {
+    background-color: #fff5f8 !important;
+}
+body.theme-st .sheet-table tbody td:not(.prev-col-cell):not([style*="background"]):not(.conflict-highlight):not([class*="cell-special-"]):not([data-sym="早"]):not([data-sym="ハヤ"]):not([data-sym="遅"]):not([data-sym="E"]) {
+    background-color: #fff5f8 !important;
+}
+body.theme-st .sheet-table tbody tr:hover td {
+    background-color: #ffe4ec !important;
+}
+body.theme-st .sticky-col-1,
+body.theme-st .sticky-col-2 {
+    background-color: #ffe4ec !important;
+}
+body.theme-st thead th.sticky-col-1,
+body.theme-st thead th.sticky-col-2 {
+    background-color: #fbcfe8 !important;
+}
+
+/* 2. 1階病棟テーブル: 薄く淡いブルー */
+body.theme-1f {
+    background-color: #f8fbff;
+}
+body.theme-1f .sheet-wrapper {
+    background-color: #f0f7ff !important;
+    border-color: #bae6fd !important;
+}
+body.theme-1f .sheet-table {
+    background-color: #f0f8ff !important;
+}
+body.theme-1f .sheet-table tbody td:not(.prev-col-cell):not([style*="background"]):not(.conflict-highlight):not([class*="cell-special-"]):not([data-sym="早"]):not([data-sym="ハヤ"]):not([data-sym="遅"]):not([data-sym="E"]) {
+    background-color: #f0f8ff !important;
+}
+body.theme-1f .sheet-table tbody tr:hover td {
+    background-color: #e0f2fe !important;
+}
+body.theme-1f .sticky-col-1,
+body.theme-1f .sticky-col-2 {
+    background-color: #e0f2fe !important;
+}
+body.theme-1f thead th.sticky-col-1,
+body.theme-1f thead th.sticky-col-2 {
+    background-color: #bae6fd !important;
+}
+
+/* 3. 2階病棟テーブル: 薄く淡いオレンジ */
+body.theme-2f {
+    background-color: #fffbf7;
+}
+body.theme-2f .sheet-wrapper {
+    background-color: #fff4ea !important;
+    border-color: #fed7aa !important;
+}
+body.theme-2f .sheet-table {
+    background-color: #fff8f0 !important;
+}
+body.theme-2f .sheet-table tbody td:not(.prev-col-cell):not([style*="background"]):not(.conflict-highlight):not([class*="cell-special-"]):not([data-sym="早"]):not([data-sym="ハヤ"]):not([data-sym="遅"]):not([data-sym="E"]) {
+    background-color: #fff8f0 !important;
+}
+body.theme-2f .sheet-table tbody tr:hover td {
+    background-color: #ffedd5 !important;
+}
+body.theme-2f .sticky-col-1,
+body.theme-2f .sticky-col-2 {
+    background-color: #ffedd5 !important;
+}
+body.theme-2f thead th.sticky-col-1,
+body.theme-2f thead th.sticky-col-2 {
+    background-color: #fed7aa !important;
+}
+
+/* 4. 3階病棟テーブル: 濃くはっきりしたエメラルドグリーン（STと完全に区別可能） */
+body.theme-3f {
+    background-color: #f0fdf4;
+}
+body.theme-3f .sheet-wrapper {
+    background-color: #ecfdf5 !important;
+    border-color: #6ee7b7 !important;
+}
+body.theme-3f .sheet-table {
+    background-color: #f0fdf4 !important;
+}
+body.theme-3f .sheet-table tbody td:not(.prev-col-cell):not([style*="background"]):not(.conflict-highlight):not([class*="cell-special-"]):not([data-sym="早"]):not([data-sym="ハヤ"]):not([data-sym="遅"]):not([data-sym="E"]) {
+    background-color: #f0fdf4 !important;
+}
+body.theme-3f .sheet-table tbody tr:hover td {
+    background-color: #d1fae5 !important;
+}
+body.theme-3f .sticky-col-1,
+body.theme-3f .sticky-col-2 {
+    background-color: #d1fae5 !important;
+    color: #065f46 !important;
+    font-weight: 700;
+}
+body.theme-3f thead th.sticky-col-1,
+body.theme-3f thead th.sticky-col-2 {
+    background-color: #a7f3d0 !important;
+    color: #064e3b !important;
+}
+
+/* 7. 生活期テーブル: 爽やかなティール/シアン */
+body.theme-life {
+    background-color: #f0fdfa;
+}
+body.theme-life .sheet-wrapper {
+    background-color: #f0fdfa !important;
+    border-color: #99f6e4 !important;
+}
+body.theme-life .sheet-table {
+    background-color: #f0fdfa !important;
+}
+body.theme-life .sheet-table tbody td:not(.prev-col-cell):not([style*="background"]):not(.conflict-highlight):not([class*="cell-special-"]):not([data-sym="早"]):not([data-sym="ハヤ"]):not([data-sym="遅"]):not([data-sym="E"]) {
+    background-color: #f0fdfa !important;
+}
+body.theme-life .sheet-table tbody tr:hover td {
+    background-color: #ccfbf1 !important;
+}
+body.theme-life .sticky-col-1,
+body.theme-life .sticky-col-2 {
+    background-color: #ccfbf1 !important;
+    color: #0f766e !important;
+    font-weight: 700;
+}
+body.theme-life thead th.sticky-col-1,
+body.theme-life thead th.sticky-col-2 {
+    background-color: #99f6e4 !important;
+    color: #115e59 !important;
+}
+
+/* 5. マスターテーブル: 薄く淡い黄色 */
+body.theme-master {
+    background-color: #fefef5;
+}
+body.theme-master .sheet-wrapper {
+    background-color: #fefde8 !important;
+    border-color: #fef08a !important;
+}
+body.theme-master .sheet-table {
+    background-color: #fffdf0 !important;
+}
+body.theme-master .sheet-table tbody td:not(.prev-col-cell):not([style*="background"]):not(.conflict-highlight):not([class*="cell-special-"]):not([data-sym="早"]):not([data-sym="ハヤ"]):not([data-sym="遅"]):not([data-sym="E"]) {
+    background-color: #fffdf0 !important;
+}
+body.theme-master .sheet-table tbody tr:hover td {
+    background-color: #fef9c3;
+}
+/* マスターテーブルのsticky列はフロアごとのカラーを尊重するため、!importantで上書きしない */
+body.theme-master .sticky-col-1,
+body.theme-master .sticky-col-2 {
+    background-color: inherit;
+}
+body.theme-master thead th.sticky-col-1,
+body.theme-master thead th.sticky-col-2 {
+    background-color: inherit;
+}
+
+/* 6. 南病棟テーブル: 薄く淡いラベンダー/淡紫 */
+body.theme-south {
+    background-color: #fcfaff;
+}
+body.theme-south .sheet-wrapper {
+    background-color: #f7f2fe !important;
+    border-color: #e9d5ff !important;
+}
+body.theme-south .sheet-table {
+    background-color: #faf5ff !important;
+}
+body.theme-south .sheet-table tbody td:not(.prev-col-cell):not([style*="background"]):not(.conflict-highlight):not([class*="cell-special-"]):not([data-sym="早"]):not([data-sym="ハヤ"]):not([data-sym="遅"]):not([data-sym="E"]) {
+    background-color: #faf5ff !important;
+}
+body.theme-south .sheet-table tbody tr:hover td {
+    background-color: #f3e8ff !important;
+}
+body.theme-south .sticky-col-1,
+body.theme-south .sticky-col-2 {
+    background-color: #f3e8ff !important;
+}
+body.theme-south thead th.sticky-col-1,
+body.theme-south thead th.sticky-col-2 {
+    background-color: #e9d5ff !important;
+}
+
+/* =========================================================================
+   ST参照行: 全テーマ（1f, 2f, 3f, south, life, master等）に関わらずST専用カラーを最優先適用
+   ========================================================================= */
+tr.st-linked-row,
+tr.st-linked-row td,
+tr.st-linked-row .sticky-col-1,
+tr.st-linked-row .sticky-col-2,
+body.theme-1f tr.st-linked-row .sticky-col-1,
+body.theme-1f tr.st-linked-row .sticky-col-2,
+body.theme-2f tr.st-linked-row .sticky-col-1,
+body.theme-2f tr.st-linked-row .sticky-col-2,
+body.theme-3f tr.st-linked-row .sticky-col-1,
+body.theme-3f tr.st-linked-row .sticky-col-2,
+body.theme-south tr.st-linked-row .sticky-col-1,
+body.theme-south tr.st-linked-row .sticky-col-2,
+body.theme-life tr.st-linked-row .sticky-col-1,
+body.theme-life tr.st-linked-row .sticky-col-2,
+body.theme-master tr.st-linked-row .sticky-col-1,
+body.theme-master tr.st-linked-row .sticky-col-2 {
+    background-color: #fff5f8 !important;
+    color: #9d174d !important;
+}
+
+/* =========================================================================
+   印刷用スタイル (@media print)
+   ========================================================================= */
+@media print {
+    body {
+        background: #ffffff !important;
+        color: #000000 !important;
+        font-size: 9pt !important;
+        margin: 0 !important;
+        padding: 0 !important;
+    }
+
+    /* 印刷時に非表示にする要素 */
+    .app-header,
+    .tab-container,
+    .toolbar-card,
+    .dept-nav-container,
+    .btn,
+    button,
+    .no-print,
+    .modal-overlay,
+    #toastContainer {
+        display: none !important;
+    }
+
+    /* メインコンテンツ・テーブル全幅表示 */
+    .main-content,
+    .tab-panel.active,
+    .table-container {
+        display: block !important;
+        width: 100% !important;
+        margin: 0 !important;
+        padding: 0 !important;
+        overflow: visible !important;
+        box-shadow: none !important;
+        border: none !important;
+    }
+
+    table {
+        width: 100% !important;
+        border-collapse: collapse !important;
+        page-break-inside: auto;
+    }
+
+    tr {
+        page-break-inside: avoid;
+        page-break-after: auto;
+    }
+
+    th, td {
+        border: 1px solid #94a3b8 !important;
+        font-size: 8pt !important;
+        padding: 2px 3px !important;
+    }
+
+    /* ★ ユーザー指示: 印刷時には特殊勤務（早・遅・E等）のセル背景色は完全除去（白地・枠線と黒文字のみ） */
+    .cell-special-early,
+    .cell-special-late,
+    .cell-special-eve,
+    [data-sym="早"],
+    [data-sym="遅"],
+    [data-sym="E"],
+    td.day-cell,
+    td.master-editable-cell,
+    td.input-cell {
+        background-color: transparent !important;
+        background: transparent !important;
+        background-image: none !important;
+        box-shadow: none !important;
+        color: #000000 !important;
+        -webkit-print-color-adjust: exact !important;
+        print-color-adjust: exact !important;
+    }
+    .cell-special-early.fixed-cell,
+    .cell-special-late.fixed-cell,
+    .cell-special-eve.fixed-cell,
+    .fixed-cell {
+        color: #000000 !important;
+        background-color: transparent !important;
+        background: transparent !important;
+    }
+
+    .sticky-col-1,
+    .sticky-col-2 {
+        position: static !important;
+    }
+}
+
+
+
+/* ★ ユーザー指示: 画面の最右部の備考は記載の多い者にあわせて幅を広げる柔軟な対応 */
+.remarks-cell,
+th.remarks-header,
+td.remarks-cell {
+    min-width: 90px !important;
+    max-width: 320px !important;
+    white-space: normal !important;
+    word-break: break-all !important;
+}
+
+/* ★ ユーザー指示: 「出」を「出張」に変更（枠に収まるようフォント調整） */
+.cell-symbol-出張,
+.day-cell[data-symbol="出張"],
+.day-cell:contains("出張") {
+    font-size: 11px !important;
+    font-weight: 800 !important;
+    letter-spacing: -1px !important;
+    line-height: 1.1 !important;
+    color: #4338ca !important;
+}
+
+/* ★ ユーザー指示: 公休が8以外のスタッフは網掛け */
+.holiday-alert-cell {
+    background: #e0f2fe !important;
+    background-color: #e0f2fe !important;
+    color: #0369a1 !important;
+    font-weight: 800 !important;
+    box-shadow: inset 0 0 0 2px #0284c7 !important;
+    position: relative;
+}
+.holiday-alert-cell::after {
+    content: "!";
+    position: absolute;
+    top: 1px;
+    right: 2px;
+    font-size: 9px;
+    color: #0284c7;
+    font-weight: 900;
+}
+
+/* ★ ユーザー指示: コピペモードの選択枠ハイライト */
+.copy-selected-cell {
+    outline: 3px solid #2563eb !important;
+    outline-offset: -3px !important;
+    background-color: #dbeafe !important;
+    animation: pulse-copy 1.5s infinite;
+}
+@keyframes pulse-copy {
+    0% { outline-color: #2563eb; }
+    50% { outline-color: #93c5fd; }
+    100% { outline-color: #2563eb; }
+}
+
+/* ★ ドラッグ＆ドロップ行並び替え用スタイル */
+tr.dragging-row {
+    opacity: 0.4;
+    background: #e2e8f0 !important;
+}
+tr.drag-over-row {
+    border-top: 3px solid #2563eb !important;
+}
+.drag-handle {
+    cursor: grab;
+    color: #94a3b8;
+    user-select: none;
+    font-size: 14px;
+    margin-right: 4px;
+}
+.drag-handle:active {
+    cursor: grabbing;
+}
+
+/* ★ STテーブル罫線統一: 最も太い横罫線＝スタッフの勤務と集計の間、中太横線＝階と階の間 */
+.st-floor-divider {
+    border-bottom: 2px solid #94a3b8 !important;
+}
+.st-summary-divider {
+    border-top: 3.5px solid #1e293b !important;
+}
+
+/* ★ ユーザー指示: 最終日付と出勤集計の間の縦罫線の太さをその下に伸びる線の太さ（2px #475569）と完全に統一 */
+.border-thickest-right {
+    border-right: 2px solid #475569 !important;
+}
+
+/* ★ 自動配分リフ（通常文字・黒字・編集自由） */
+.auto-ref-cell {
+    color: #0f172a !important;
+    font-weight: 500 !important;
+}
+
+/* ★ 添付3: 公休9等の網掛け警告 */
+.holiday-alert-cell {
+    background: #e0f2fe !important;
+    color: #0369a1 !important;
+    font-weight: 800 !important;
+    box-shadow: inset 0 0 0 2px #0284c7 !important;
+    border: 2px solid #0284c7 !important;
+}
+
+/* ★ 添付4: STテーブル階層区切りの太線を最右端まで貫通 */
+tr.st-floor-last-row td,
+td.st-floor-divider-cell {
+    border-bottom: 3.5px solid #1e293b !important;
+}
+
+/* ★ ユーザー指示: 最終日と出勤集計の間の縦罫線（ヘッダーとデータ行で線の太さを上下完全に揃える: 2px #475569） */
+.border-thickest-right,
+th.border-thickest-right,
+td.border-thickest-right {
+    border-right: 2px solid #475569 !important;
+}
+th[title="出勤日数"],
+th[title="出勤"],
+td.stat-work-col,
+th.stat-work-col,
+th.border-thick-left,
+td.border-thick-left {
+    border-left: none !important;
+}
+
+/* ★ 添付4: マスターテーブル各フロア間の横境界線を最右端まで太線貫通 */
+tr.floor-boundary-row th,
+tr.floor-boundary-row td {
+    border-top: 4px solid #334155 !important;
+}
+
+/* ====================================================
+   ★ ユーザー指示: 起動時パスワード認証モーダル（画面ロック）
+   ==================================================== */
+.auth-lock-overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100vw;
+    height: 100vh;
+    background: rgba(15, 23, 42, 0.92);
+    backdrop-filter: blur(8px);
+    z-index: 999999;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    transition: opacity 0.25s ease, visibility 0.25s ease;
+}
+.auth-lock-overlay.hidden {
+    opacity: 0;
+    visibility: hidden;
+    pointer-events: none;
+}
+.auth-modal-card {
+    background: #ffffff;
+    width: 90%;
+    max-width: 440px;
+    border-radius: 16px;
+    padding: 32px 28px;
+    box-shadow: 0 20px 40px -15px rgba(0, 0, 0, 0.5), 0 0 0 1px rgba(255, 255, 255, 0.1);
+    text-align: center;
+    animation: authPopIn 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+}
+@keyframes authPopIn {
+    0% { transform: scale(0.92); opacity: 0; }
+    100% { transform: scale(1); opacity: 1; }
+}
+.auth-modal-icon {
+    font-size: 3rem;
+    margin-bottom: 12px;
+}
+.auth-modal-title {
+    font-size: 1.35rem;
+    font-weight: 800;
+    color: #0f172a;
+    margin-bottom: 6px;
+}
+.auth-modal-subtitle {
+    font-size: 0.88rem;
+    color: #475569;
+    margin-bottom: 22px;
+    line-height: 1.4;
+}
+.auth-input-group {
+    margin-bottom: 20px;
+    position: relative;
+}
+.auth-password-input {
+    width: 100%;
+    font-size: 1.8rem;
+    letter-spacing: 12px;
+    text-align: center;
+    padding: 12px 16px;
+    border: 2px solid #cbd5e1;
+    border-radius: 10px;
+    outline: none;
+    transition: all 0.2s;
+    font-family: monospace;
+    background: #f8fafc;
+}
+.auth-password-input:focus {
+    border-color: #2563eb;
+    background: #ffffff;
+    box-shadow: 0 0 0 4px rgba(37, 99, 235, 0.15);
+}
+.auth-submit-btn {
+    width: 100%;
+    padding: 13px;
+    font-size: 1.05rem;
+    font-weight: 800;
+    color: #ffffff;
+    background: linear-gradient(135deg, #2563eb 0%, #1d4ed8 100%);
+    border: none;
+    border-radius: 10px;
+    cursor: pointer;
+    box-shadow: 0 4px 12px rgba(37, 99, 235, 0.3);
+    transition: all 0.2s;
+}
+.auth-submit-btn:hover {
+    background: linear-gradient(135deg, #1d4ed8 0%, #1e40af 100%);
+    transform: translateY(-1px);
+    box-shadow: 0 6px 16px rgba(37, 99, 235, 0.4);
+}
+.auth-error-text {
+    color: #dc2626;
+    font-size: 0.85rem;
+    font-weight: 700;
+    margin-top: 12px;
+    min-height: 20px;
+}
+
+/* ====================================================
+   ★ ユーザー指示: マスターテーブル「情報更新」特大ボタン
+   ==================================================== */
+/* ====================================================
+   ★ ユーザー指示: 全フロア・マスターテーブルをいつでも自由に行き来できるようナビゲーションを常時表示
+   ==================================================== */
+.dept-nav-container {
+    display: flex !important;
+}
+
+.master-sync-mega-btn {
+    background: linear-gradient(135deg, #0284c7 0%, #0369a1 100%) !important;
+    color: #ffffff !important;
+    font-size: 0.95rem !important;
+    font-weight: 800 !important;
+    padding: 8px 20px !important;
+    border: 2px solid #38bdf8 !important;
+    border-radius: 9999px !important;
+    box-shadow: 0 4px 14px rgba(2, 132, 199, 0.35) !important;
+    cursor: pointer !important;
+    display: inline-flex !important;
+    align-items: center !important;
+    gap: 8px !important;
+    transition: all 0.2s ease !important;
+}
+.master-sync-mega-btn:hover {
+    background: linear-gradient(135deg, #0369a1 0%, #075985 100%) !important;
+    transform: translateY(-1px) scale(1.02) !important;
+    box-shadow: 0 6px 18px rgba(2, 132, 199, 0.45) !important;
+}
+.master-sync-mega-btn:active {
+    transform: translateY(1px) scale(0.99) !important;
+}
