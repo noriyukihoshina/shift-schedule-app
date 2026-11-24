@@ -524,8 +524,8 @@ document.addEventListener('DOMContentLoaded', () => {
     const isST = !!appConfig.isST || (appConfig.deptId === 'st');
     const isMaster = (appConfig.deptId === 'master');
     const isPublicWeb = (window.location.hostname.includes('vercel.app') || window.location.hostname.includes('github.io'));
-    // ★ パターンA: オンラインWeb版(Vercel)およびマスターは全階ターム連動、病院共有フォルダ(ローカル/file:)では各階完全独立！
-    const shouldSyncGlobalTerm = isMaster || isPublicWeb;
+    // ★ ユーザー指示: マスターテーブルは全階ターム連動集約、単一フロア（各病棟）はマスターのターム選択に一切影響されない完全独立保持！
+    const shouldSyncGlobalTerm = isMaster;
     const isLife = !!appConfig.isLife || (appConfig.deptId === 'life' || appConfig.deptId === 'life_admin');
     const isSouth = (appConfig.floor === '南' || appConfig.deptId === 'south');
     const currentFloor = appConfig.floor || (appConfig.deptId === '1f' ? '1F' : (appConfig.deptId === '2f' ? '2F' : (appConfig.deptId === '3f' ? '3F' : (appConfig.deptId === 'south' ? '南' : (isLife ? '生活期' : '')))));
