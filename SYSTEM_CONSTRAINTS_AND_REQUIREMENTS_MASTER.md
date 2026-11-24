@@ -15,7 +15,8 @@
     * 単一フロア（各病棟）はオンライン（Vercel）およびローカル（共有フォルダ）のいずれにおいても、常に自身固有のストレージキー（`shift_schedule_${deptPrefix}last_active_start_date`）のみを参照・更新する独立仕様へ固定。
     * これ以外のすべての機能・ロジックには一切手を触れず厳格に温存。
   * **Google Drive 配布パッケージ・本番デプロイ更新**:
-    * **`12_病院共有フォルダ最新一式.zip`**（ID: `1977szYEYEQlkT0VAVqi5Ooels_yNs8ts`）および Vercel 本番環境（ID: `dpl_Hf2jVmWi3QTywUsrKGAcT4t1d4d9`）を更新完了。
+    * 通し番号を加算し、最新パッケージ **`13_病院共有フォルダ最新一式.zip`**（ID: `1jGkpCXVg0NRoMh_cQQntyAzRMjjZs6f7`）を新規作成・配置完了。
+    * Vercel 本番環境（ID: `dpl_Hf2jVmWi3QTywUsrKGAcT4t1d4d9`）を更新完了。
 
 ---
 
