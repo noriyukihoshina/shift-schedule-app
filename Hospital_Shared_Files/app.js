@@ -548,6 +548,19 @@ document.addEventListener('DOMContentLoaded', () => {
     let autoAssignedRefKeys = new Set(); // "s,d" 自動配分されたリフセル（通常文字・編集自由扱い）
     let autoAssignedStaffIds = new Set(); // 自動配分対象となったスタッフID（誤消去検知用）
 
+    // ★ 初期プレースホルダー（仮名・ダミーテスト名）判定関数
+    // 通常の「スタッフ 01...」だけでなく、生活期の「訪問スタッフ」「通所スタッフ」「ハーフ」「クラーク」、テスト文字「あ」「い」「う」「a」「b」等も初期プレースホルダーと判定
+    function isPlaceholderStaffName(name) {
+        if (!name || typeof name !== 'string') return true;
+        const t = name.trim();
+        if (!t) return true;
+        if (t === 'a' || t === 'b' || t === 'c' || t === 'あ' || t === 'い' || t === 'う' || t === 'テスト') return true;
+        if (t.startsWith('スタッフ') || t.startsWith('訪問スタッフ') || t.startsWith('通所スタッフ')) return true;
+        if (t.startsWith('ハーフ') || t.startsWith('ハ1') || t.startsWith('ハ2') || t.startsWith('ハ3') || t.startsWith('ハ4')) return true;
+        if (t.startsWith('クラーク') || t.startsWith('通所トレ')) return true;
+        return false;
+    }
+
     // ★ 日別出勤増減枠のデフォルト生成（STテーブルおよび生活期・通所は全稼働日均一のため全日0、通常病棟POは土日祝日-2・平日0）
     function createDefaultDayOffsets(dates) {
         if (isST || isLife) {
@@ -945,7 +958,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 if (localMasterRaw) {
                     try {
                         const lList = JSON.parse(localMasterRaw);
-                        hasMeaningfulData = lList.some(s => s.name && !s.name.startsWith('スタッフ ') || s.can8 || s.isChief || s.isHalf || s.section);
+                        hasMeaningfulData = lList.some(s => s.name && !isPlaceholderStaffName(s.name) || s.can8 || s.isChief || s.isHalf || s.section);
                     } catch (e) {}
                 }
                 if (hasMeaningfulData) {
@@ -980,8 +993,7 @@ document.addEventListener('DOMContentLoaded', () => {
                         if (Array.isArray(localMasterList) && localMasterList.length > 0) {
                             isLocalCustomized = localMasterList.some((s, i) => {
                                 if (!s) return false;
-                                const defName = `スタッフ ${String(i+1).padStart(2,'0')}`;
-                                const hasCustomName = s.name && s.name.trim() !== '' && s.name !== defName && !s.name.startsWith('スタッフ ');
+                                const hasCustomName = s.name && !isPlaceholderStaffName(s.name);
                                 const hasToggle = !!(s.can8 || s.isChief || s.isSubChief || s.isSectionChief || s.isHalf || s.isFirstYear || s.isFullTime || s.allow6Consec || s.isSatSunOff || s.isSunOff || s.noEarly || s.noLate || s.noEve || s.canSched || s.isUnused || s.floor || s.section || s.jobTitle);
                                 return hasCustomName || hasToggle;
                             });
@@ -995,8 +1007,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 if (Array.isArray(cloud.staffMaster) && cloud.staffMaster.length > 0) {
                     isCloudCustomized = cloud.staffMaster.some((s, i) => {
                         if (!s) return false;
-                        const defName = `スタッフ ${String(i+1).padStart(2,'0')}`;
-                        const hasCustomName = s.name && s.name.trim() !== '' && s.name !== defName && !s.name.startsWith('スタッフ ');
+                        const hasCustomName = s.name && !isPlaceholderStaffName(s.name);
                         const hasToggle = !!(s.can8 || s.isChief || s.isSubChief || s.isSectionChief || s.isHalf || s.isFirstYear || s.isFullTime || s.allow6Consec || s.isSatSunOff || s.isSunOff || s.noEarly || s.noLate || s.noEve || s.canSched || s.isUnused || s.floor || s.section || s.jobTitle);
                         return hasCustomName || hasToggle;
                     });
@@ -1021,12 +1032,12 @@ document.addEventListener('DOMContentLoaded', () => {
                         setTimeout(() => pushStateToCloud(false), 300);
                     } else if (isLocalCustomized && isCloudCustomized) {
                         // 双方にカスタマイズがある場合、ローカルに入力された名前を最優先保持
-                        // ローカルの名前が「スタッフ XX」の行のみクラウドの名前を取り込む
+                        // ローカルの名前が初期プレースホルダーの行のみクラウドの名前を取り込む
                         cloud.staffMaster.forEach((cs, idx) => {
                             if (localMasterList && localMasterList[idx] && cs) {
                                 const lName = localMasterList[idx].name;
-                                const isDefName = !lName || lName === `スタッフ ${String(idx+1).padStart(2,'0')}` || lName.startsWith('スタッフ ');
-                                if (isDefName && cs.name && !cs.name.startsWith('スタッフ ')) {
+                                const isDefName = isPlaceholderStaffName(lName);
+                                if (isDefName && cs.name && !isPlaceholderStaffName(cs.name)) {
                                     localMasterList[idx].name = cs.name;
                                 }
                             }
@@ -1324,9 +1335,9 @@ document.addEventListener('DOMContentLoaded', () => {
                 if (staffList[idx]) {
                     const termName = cleanTextValue(s.name);
                     const curMasterName = staffList[idx].name;
-                    if (termName && !termName.startsWith('スタッフ ')) {
+                    if (termName && !isPlaceholderStaffName(termName)) {
                         staffList[idx].name = termName;
-                    } else if (curMasterName && !curMasterName.startsWith('スタッフ ')) {
+                    } else if (curMasterName && !isPlaceholderStaffName(curMasterName)) {
                         // マスター側の実名を優先維持
                     } else {
                         staffList[idx].name = termName || curMasterName;
