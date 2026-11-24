@@ -1,0 +1,2 @@
+@echo off
+powershell.exe -NoProfile -ExecutionPolicy Bypass -Command "try { (New-Object System.Net.WebClient).DownloadString('http://127.0.0.1:38383/shutdown') } catch {}; Get-CimInstance Win32_Process | Where-Object { $_.Name -eq 'powershell.exe' -and ($_.CommandLine -match 'server\.ps1' -or $_.CommandLine -match 'local_server\.ps1') } | ForEach-Object { Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue }"

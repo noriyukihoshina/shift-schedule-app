@@ -1,89 +1,104 @@
 ﻿param(
     [string]$TargetPage = "index.html",
-    [int]$StartPort = 38383,
+    [int]$Port = 38383,
     [switch]$NoBrowser
 )
 
 $ErrorActionPreference = "Stop"
 [Console]::OutputEncoding = [System.Text.Encoding]::UTF8
 
-$systemDir = Split-Path -Parent $MyInvocation.MyCommand.Path
-if ([string]::IsNullOrWhiteSpace($systemDir)) { $systemDir = $PSScriptRoot }
-if ([string]::IsNullOrWhiteSpace($systemDir)) { $systemDir = (Get-Location).Path }
+$scriptDir = Split-Path -Parent $MyInvocation.MyCommand.Path
+if ([string]::IsNullOrWhiteSpace($scriptDir)) { $scriptDir = $PSScriptRoot }
+if ([string]::IsNullOrWhiteSpace($scriptDir)) { $scriptDir = (Get-Location).Path }
 
-# ルートフォルダ判定（親フォルダに data または system があるか、自身の直下にあるかスマート判定）
-$parentDir = Split-Path -Parent $systemDir
-if ((Test-Path (Join-Path $parentDir "data")) -or ((Split-Path -Leaf $systemDir).ToLower() -eq "system")) {
-    $rootDir = $parentDir
-} else {
-    $rootDir = $systemDir
+# ルートフォルダおよびシステムフォルダのスマート解決
+$rootDir = $scriptDir
+if ((Split-Path -Leaf $scriptDir).ToLower() -eq "system") {
+    $rootDir = Split-Path -Parent $scriptDir
 }
 
+# データフォルダ探索
 $dataDir = Join-Path $rootDir "data"
 if (-not (Test-Path $dataDir)) {
-    New-Item -ItemType Directory -Path $dataDir -Force | Out-Null
+    if (Test-Path (Join-Path $scriptDir "data")) {
+        $dataDir = Join-Path $scriptDir "data"
+    } else {
+        New-Item -ItemType Directory -Path $dataDir -Force | Out-Null
+    }
 }
 
-# ポート探索 (38383 から 38392 まで自動探索)
-$selectedPort = 0
+$prefix = "http://127.0.0.1:$Port/"
+
+# ★ 1. 健全性チェック：既存サーバーが「実際にpingに応答するか」
+$existingHealthy = $false
+try {
+    $req = [System.Net.HttpWebRequest]::Create("${prefix}ping")
+    $req.Timeout = 1000
+    $req.Proxy = $null
+    $resp = $req.GetResponse()
+    $stream = $resp.GetResponseStream()
+    $reader = New-Object System.IO.StreamReader($stream)
+    $text = $reader.ReadToEnd().Trim()
+    $reader.Close()
+    $resp.Close()
+    if ($text -eq "pong") {
+        $existingHealthy = $true
+    }
+} catch {
+    $existingHealthy = $false
+}
+
+if ($existingHealthy) {
+    # 既存サーバーが正常稼働中のため、そのままブラウザを開いて自身は終了
+    if (-not $NoBrowser) {
+        Start-Process "$prefix$TargetPage"
+    }
+    exit 0
+}
+
+# ★ 2. 応答がない（またはポート塞がり・ゾンビ化）の場合の自己修復クリーンアップ
+# 自身以外の server.ps1 / local_server.ps1 プロセスをすべて安全に終了してポートを解放
+$myPid = $PID
+try {
+    Get-CimInstance Win32_Process | Where-Object {
+        $_.ProcessId -ne $myPid -and 
+        $_.Name -eq "powershell.exe" -and 
+        ($_.CommandLine -match "server\.ps1" -or $_.CommandLine -match "local_server\.ps1")
+    } | ForEach-Object {
+        Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue
+    }
+    Start-Sleep -Milliseconds 400
+} catch {}
+
+# ★ 3. ポート38383でリッスン開始（最大5回リトライ）
 $listener = $null
-
-for ($p = $StartPort; $p -lt ($StartPort + 10); $p++) {
-    $testPrefix = "http://127.0.0.1:$p/"
-    
-    # 既存サーバーが稼働中か確認
-    $isRunning = $false
-    try {
-        $req = [System.Net.HttpWebRequest]::Create("${testPrefix}ping")
-        $req.Timeout = 1200
-        $req.Proxy = $null
-        $resp = $req.GetResponse()
-        $resp.Close()
-        $isRunning = $true
-    } catch {
-        $isRunning = $false
-    }
-
-    if ($isRunning) {
-        # 既存サーバーがすでに動いているので、そのサーバーを使ってブラウザを開くだけ
-        Write-Host "既存の共有サーバーが稼働中です (ポート: $p)" -ForegroundColor Cyan
-        if (-not $NoBrowser) {
-            Start-Process "$testPrefix$TargetPage"
-        }
-        exit 0
-    }
-
-    # 新規にリッスンを試みる
+for ($attempt = 1; $attempt -le 5; $attempt++) {
     try {
         $tempListener = New-Object System.Net.HttpListener
-        $tempListener.Prefixes.Add($testPrefix)
+        $tempListener.Prefixes.Add($prefix)
         $tempListener.Start()
-        $selectedPort = $p
         $listener = $tempListener
         break
     } catch {
-        # ポート使用中のため次を試す
-        if ($tempListener) {
-            try { $tempListener.Close() } catch {}
-        }
+        Start-Sleep -Milliseconds 500
     }
 }
 
-if (-not $listener) {
-    Write-Host "エラー: 使用可能なポートが見つかりませんでした。" -ForegroundColor Red
+if ($null -eq $listener) {
+    # リッスンに失敗した場合はブラウザのみ開いて終了
+    if (-not $NoBrowser) {
+        Start-Process "$prefix$TargetPage"
+    }
     exit 1
 }
-
-$prefix = "http://127.0.0.1:$selectedPort/"
 
 Write-Host "====================================================" -ForegroundColor Cyan
 Write-Host "  勤務表作成システム 院内共有フォルダデータサーバー  " -ForegroundColor Cyan
 Write-Host "====================================================" -ForegroundColor Cyan
 Write-Host "アクセスURL: $prefix$TargetPage" -ForegroundColor Green
 Write-Host "データ保存先: $dataDir" -ForegroundColor Yellow
-Write-Host "（このウィンドウを最小化してお使いください）" -ForegroundColor Gray
 
-# ブラウザ自動起動
+# ブラウザ起動（Windows標準の高速ローカル起動）
 if (-not $NoBrowser) {
     Start-Process "$prefix$TargetPage"
 }
@@ -100,15 +115,20 @@ $mimeTypes = @{
 }
 
 $lastAccessTime = Get-Date
+$asyncResult = $null
 
 try {
     while ($listener.IsListening) {
-        # 非同期待機（5秒タイムアウトでアイドル監視）
-        $asyncContext = $listener.BeginGetContext($null, $null)
-        $signaled = $asyncContext.AsyncWaitHandle.WaitOne(5000)
+        # ★ 決定的な修正：未完了の BeginGetContext がある間は新しく発行しない！
+        if ($null -eq $asyncResult) {
+            $asyncResult = $listener.BeginGetContext($null, $null)
+        }
+
+        # 2秒待機
+        $signaled = $asyncResult.AsyncWaitHandle.WaitOne(2000)
 
         if (-not $signaled) {
-            # 30分間アクセスがなければ自動終了（PCリソース解放）
+            # 30分間アクセスがなければ自動終了（リソース解放）
             $idleMinutes = ((Get-Date) - $lastAccessTime).TotalMinutes
             if ($idleMinutes -ge 30) {
                 Write-Host "30分間無操作のためサーバーを自動終了します。" -ForegroundColor Yellow
@@ -117,12 +137,15 @@ try {
             continue
         }
 
-        $context = $listener.EndGetContext($asyncContext)
-        $request = $context.Request
-        $response = $context.Response
+        # リクエスト到着！コンテキスト取得＆asyncResultクリア
+        $context = $listener.EndGetContext($asyncResult)
+        $asyncResult = $null
         $lastAccessTime = Get-Date
 
-        # キャッシュ無効化 ＆ CORS ヘッダー
+        $request = $context.Request
+        $response = $context.Response
+
+        # CORS & キャッシュ無効化ヘッダー
         $response.Headers.Add("Access-Control-Allow-Origin", "*")
         $response.Headers.Add("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
         $response.Headers.Add("Access-Control-Allow-Headers", "Content-Type")
@@ -171,7 +194,6 @@ try {
                     if (Test-Path $filePath) {
                         $utf8NoBom = New-Object System.Text.UTF8Encoding($false)
                         $jsonContent = [System.IO.File]::ReadAllText($filePath, $utf8NoBom).Trim()
-                        # 先頭BOMの念押し除去
                         if ($jsonContent.Length -gt 0 -and [int][char]$jsonContent[0] -eq 65279) {
                             $jsonContent = $jsonContent.Substring(1)
                         }
@@ -229,7 +251,7 @@ try {
                         }
                     }
 
-                    # 安全なアトミック保存（GUID付き一時ファイル ＆ 最大3回リトライ）
+                    # 安全なアトミック保存
                     $saveJson = ConvertTo-Json $merged -Depth 20
                     $uniqueId = [System.Guid]::NewGuid().ToString("N")
                     $tmpPath = "$filePath.tmp.$uniqueId"
@@ -247,7 +269,6 @@ try {
                         }
                     }
                     if (-not $moved) {
-                        # フォールバック直接上書き
                         [System.IO.File]::WriteAllText($filePath, $saveJson, $utf8NoBom)
                     }
                     if (Test-Path $tmpPath) {
@@ -273,16 +294,25 @@ try {
             }
         }
 
-        # 静的ファイル配信（systemDir と rootDir の双方を探索）
+        # ★ 静的ファイル探索（systemフォルダ、直下、rootDirの全てを探索）
         $reqPath = $path.TrimStart('/')
         if ([string]::IsNullOrWhiteSpace($reqPath)) { $reqPath = "index.html" }
-        
-        $filePath = Join-Path $systemDir $reqPath
-        if (-not (Test-Path $filePath -PathType Leaf)) {
-            $filePath = Join-Path $rootDir $reqPath
+
+        $candidates = @(
+            (Join-Path (Join-Path $rootDir "system") $reqPath),
+            (Join-Path (Join-Path $scriptDir "system") $reqPath),
+            (Join-Path $scriptDir $reqPath),
+            (Join-Path $rootDir $reqPath)
+        )
+        $filePath = $null
+        foreach ($c in $candidates) {
+            if (Test-Path $c -PathType Leaf) {
+                $filePath = $c
+                break
+            }
         }
 
-        if (Test-Path $filePath -PathType Leaf) {
+        if ($filePath -and (Test-Path $filePath -PathType Leaf)) {
             $ext = [System.IO.Path]::GetExtension($filePath).ToLower()
             $cType = if ($mimeTypes.ContainsKey($ext)) { $mimeTypes[$ext] } else { "application/octet-stream" }
             $bytes = [System.IO.File]::ReadAllBytes($filePath)
@@ -291,7 +321,6 @@ try {
             $response.OutputStream.Write($bytes, 0, $bytes.Length)
             $response.Close()
         } else {
-            $response.StatusCode = 404
             $errBytes = [System.Text.Encoding]::UTF8.GetBytes("File Not Found: $reqPath")
             $response.StatusCode = 404
             $response.ContentType = "text/plain; charset=utf-8"
