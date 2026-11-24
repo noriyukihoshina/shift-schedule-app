@@ -493,8 +493,19 @@ document.addEventListener('DOMContentLoaded', () => {
         function tryAuth() {
             if (input.value === expectedPassword) {
                 sessionStorage.setItem(authKey, 'true');
+                if (isMaster) {
+                    sessionStorage.setItem('auth_master', 'true');
+                    sessionStorage.setItem('is_master_admin', 'true');
+                }
                 overlay.classList.add('hidden');
-                setTimeout(() => overlay.remove(), 250);
+                setTimeout(() => {
+                    overlay.remove();
+                    const dNav = document.querySelector('.dept-nav-container');
+                    if (dNav) {
+                        const isMasterAdmin = isMaster || sessionStorage.getItem('auth_master') === 'true' || sessionStorage.getItem('is_master_admin') === 'true';
+                        dNav.style.display = isMasterAdmin ? 'flex' : 'none';
+                    }
+                }, 250);
             } else {
                 errorMsg.style.display = 'block';
                 input.value = '';
@@ -11931,11 +11942,18 @@ function renderMasterIntegrationView() {
     }
     renderSavedTermsSelect();
 
-    // ★ 各病棟画面（1F/2F/3F/南/ST/生活期）では他病棟への切替ボタンを非表示化・勝手な行き来を遮断！
-    // マスターテーブルのみが全体統括としてテーブル切替バーを表示する
+    // ★ テーブル切替バー（dept-nav-container）の表示・非表示制御:
+    // マスターテーブル自身、またはマスターテーブル認証済み（統括管理者セッション: sessionStorage.getItem('auth_master') === 'true'）の場合、
+    // 各病棟画面（1F/2F/3F/南/ST/生活期）でもテーブル切替バーを表示し、マスターテーブルや他フロアへ自由に行ったり来たりできるようにする。
+    // 一般スタッフ（単独病棟起動・auth_master未所持）の場合は非表示（display: none）を保ち、他病棟の閲覧・改ざんを物理遮断する。
     const deptNavContainer = document.querySelector('.dept-nav-container');
-    if (deptNavContainer && !isMaster) {
-        deptNavContainer.style.display = 'none';
+    if (deptNavContainer) {
+        const isMasterAdminSession = isMaster || (typeof sessionStorage !== 'undefined' && (sessionStorage.getItem('auth_master') === 'true' || sessionStorage.getItem('is_master_admin') === 'true'));
+        if (isMasterAdminSession) {
+            deptNavContainer.style.display = 'flex';
+        } else {
+            deptNavContainer.style.display = 'none';
+        }
     }
 
     if (isMaster) {

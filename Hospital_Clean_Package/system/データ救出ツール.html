@@ -1,0 +1,200 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>勤務表データ救出・バックアップツール</title>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+            background: #f1f5f9;
+            color: #1e293b;
+            padding: 2rem;
+            line-height: 1.6;
+        }
+        .card {
+            max-width: 720px;
+            margin: 0 auto;
+            background: #ffffff;
+            border-radius: 12px;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.08);
+            padding: 2rem;
+            border-top: 6px solid #2563eb;
+        }
+        h1 {
+            font-size: 1.4rem;
+            color: #1e3a8a;
+            margin-top: 0;
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+        .alert {
+            background: #eff6ff;
+            border-left: 4px solid #3b82f6;
+            padding: 1rem;
+            border-radius: 6px;
+            margin-bottom: 1.5rem;
+            font-size: 0.95rem;
+        }
+        .btn-rescue {
+            display: inline-block;
+            background: #2563eb;
+            color: #ffffff;
+            font-weight: 700;
+            font-size: 1.1rem;
+            padding: 12px 28px;
+            border-radius: 8px;
+            border: none;
+            cursor: pointer;
+            box-shadow: 0 2px 6px rgba(37,99,235,0.3);
+            transition: all 0.2s;
+        }
+        .btn-rescue:hover {
+            background: #1d4ed8;
+            transform: translateY(-1px);
+        }
+        .result-box {
+            margin-top: 1.5rem;
+            background: #f8fafc;
+            border: 1px solid #e2e8f0;
+            border-radius: 6px;
+            padding: 1rem;
+            max-height: 300px;
+            overflow-y: auto;
+            font-size: 0.88rem;
+        }
+        .dept-item {
+            display: flex;
+            justify-content: space-between;
+            padding: 6px 0;
+            border-bottom: 1px solid #f1f5f9;
+        }
+    </style>
+</head>
+<body>
+    <div class="card">
+        <h1>🚑 勤務表データ救出・バックアップツール</h1>
+        
+        <div class="alert">
+            💡 <strong>このPCのブラウザに保存されている全病棟のスタッフ名・勤務データを自動スキャンして救出します。</strong><br>
+            ※作業を行ったブラウザ（ChromeまたはEdge）でこのファイルを開き、下のボタンを押してください。
+        </div>
+
+        <div style="text-align: center; margin: 1.5rem 0;">
+            <button class="btn-rescue" id="exportBtn" onclick="exportAllData()">
+                📥 入力済みデータをすべて救出（JSON保存）
+            </button>
+        </div>
+
+        <div id="statusText" style="font-weight: 700; color: #047857; text-align: center;"></div>
+
+        <h3 style="font-size: 1rem; margin-top: 1.5rem; color: #475569;">🔍 このブラウザで見つかったデータ一覧:</h3>
+        <div class="result-box" id="dataList">
+            スキャン中...
+        </div>
+    </div>
+
+    <script>
+        function scanData() {
+            const listEl = document.getElementById('dataList');
+            listEl.innerHTML = '';
+            
+            const depts = [
+                { id: '1f', name: '1階病棟' },
+                { id: '2f', name: '2階病棟' },
+                { id: '3f', name: '3階病棟' },
+                { id: 'south', name: '南病棟' },
+                { id: 'life', name: '生活期' },
+                { id: 'st', name: 'ST' },
+                { id: 'master', name: 'マスターテーブル' }
+            ];
+
+            let foundCount = 0;
+            let totalStaffCount = 0;
+
+            depts.forEach(d => {
+                const key = `shift_schedule_${d.id}_staff_master`;
+                const raw = localStorage.getItem(key);
+                if (raw) {
+                    try {
+                        const list = JSON.parse(raw);
+                        if (Array.isArray(list)) {
+                            const validNames = list.filter(s => s && s.name && !s.name.startsWith('スタッフ ') && !s.name.startsWith('NoName'));
+                            const div = document.createElement('div');
+                            div.className = 'dept-item';
+                            div.innerHTML = `<strong>${d.name} (${d.id})</strong>: <span>入力済み氏名: <strong>${validNames.length}名</strong> / 全${list.length}枠</span>`;
+                            listEl.appendChild(div);
+                            if (validNames.length > 0) {
+                                foundCount++;
+                                totalStaffCount += validNames.length;
+                            }
+                        }
+                    } catch(e) {}
+                }
+            });
+
+            // ターム勤務表データ
+            let termCount = 0;
+            for (let i = 0; i < localStorage.length; i++) {
+                const k = localStorage.key(i);
+                if (k.includes('_term_')) {
+                    termCount++;
+                }
+            }
+
+            const termDiv = document.createElement('div');
+            termDiv.className = 'dept-item';
+            termDiv.innerHTML = `<strong>保存済み勤務表データ</strong>: <span>${termCount}件</span>`;
+            listEl.appendChild(termDiv);
+
+            if (foundCount === 0 && totalStaffCount === 0) {
+                listEl.innerHTML = '<div style="color: #ef4444; padding: 10px;">⚠️ このブラウザには入力済みスタッフ名が見つかりませんでした。<br>※もし別のブラウザ（例：EdgeではなくChrome）で入力されていた場合は、その入力作業を行ったブラウザでこのファイルを開き直してください。</div>';
+            } else {
+                document.getElementById('statusText').innerText = `✅ 合計 ${totalStaffCount} 名のスタッフ名データが確認できました！`;
+            }
+        }
+
+        function exportAllData() {
+            const exportData = {
+                exportedAt: new Date().toISOString(),
+                staffMasters: {},
+                terms: {},
+                allRawKeys: {}
+            };
+
+            for (let i = 0; i < localStorage.length; i++) {
+                const k = localStorage.key(i);
+                if (k.startsWith('shift_schedule')) {
+                    try {
+                        const val = JSON.parse(localStorage.getItem(k));
+                        exportData.allRawKeys[k] = val;
+                        if (k.endsWith('_staff_master')) {
+                            exportData.staffMasters[k] = val;
+                        } else if (k.includes('_term_')) {
+                            exportData.terms[k] = val;
+                        }
+                    } catch(e) {
+                        exportData.allRawKeys[k] = localStorage.getItem(k);
+                    }
+                }
+            }
+
+            const jsonStr = JSON.stringify(exportData, null, 2);
+            const blob = new Blob([jsonStr], { type: 'application/json' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = `救出データ_病院勤務表_${new Date().toISOString().slice(0,10)}.json`;
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            URL.revokeObjectURL(url);
+
+            document.getElementById('statusText').innerHTML = '🎉 救出データをダウンロードしました！<br>このダウンロードされたJSONファイルをUSBなどで持ち帰り、共有フォルダへ移せば完了です。';
+        }
+
+        window.onload = scanData;
+    </script>
+</body>
+</html>
