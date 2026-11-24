@@ -229,23 +229,47 @@ try {
                         } catch {}
                     }
 
-                    # 実名保護マージ（送信側が全員スタッフXXで、既存側に実名がある場合は上書き破壊を防止）
-                    $hasExistingValid = $false
+                    # プレースホルダー判定関数
+                    function Test-IsPlaceholderName([string]$n) {
+                        if ([string]::IsNullOrWhiteSpace($n)) { return $true }
+                        $t = $n.Trim()
+                        if ($t -in @('a','b','c','あ','い','う','テスト')) { return $true }
+                        if ($t -like "スタッフ*") { return $true }
+                        if ($t -like "訪問スタッフ*") { return $true }
+                        if ($t -like "通所スタッフ*") { return $true }
+                        if ($t -like "ハーフ*" -or $t -like "ハ1*" -or $t -like "ハ2*" -or $t -like "ハ3*" -or $t -like "ハ4*") { return $true }
+                        if ($t -like "クラーク*" -or $t -like "通所トレ*") { return $true }
+                        return $false
+                    }
+
+                    # 実名数カウント
+                    $existingValidCount = 0
                     if ($currentData.staffMaster) {
                         foreach ($sm in $currentData.staffMaster) {
-                            if ($sm.name -and -not ($sm.name -like "スタッフ *")) { $hasExistingValid = $true; break }
+                            if (-not (Test-IsPlaceholderName $sm.name)) { $existingValidCount++ }
                         }
                     }
-                    $hasIncomingValid = $false
+                    $incomingValidCount = 0
                     if ($bodyObj.staffMaster) {
                         foreach ($sm in $bodyObj.staffMaster) {
-                            if ($sm.name -and -not ($sm.name -like "スタッフ *")) { $hasIncomingValid = $true; break }
+                            if (-not (Test-IsPlaceholderName $sm.name)) { $incomingValidCount++ }
                         }
                     }
 
                     $resolvedMaster = @()
-                    if ($hasExistingValid -and -not $hasIncomingValid) {
+                    if ($existingValidCount -gt 0 -and $incomingValidCount -lt $existingValidCount) {
+                        # 既存の方が実名が多い場合、既存マスタを最優先維持し、プレースホルダーでない新規実名のみ反映
                         $resolvedMaster = @($currentData.staffMaster)
+                        if ($bodyObj.staffMaster) {
+                            for ($idx = 0; $idx -lt $bodyObj.staffMaster.Count; $idx++) {
+                                $incName = $bodyObj.staffMaster[$idx].name
+                                if ($idx -lt $resolvedMaster.Count) {
+                                    if (-not (Test-IsPlaceholderName $incName)) {
+                                        $resolvedMaster[$idx] = $bodyObj.staffMaster[$idx]
+                                    }
+                                }
+                            }
+                        }
                     } elseif ($bodyObj.staffMaster) {
                         $resolvedMaster = @($bodyObj.staffMaster)
                     } elseif ($currentData.staffMaster) {
@@ -268,12 +292,12 @@ try {
                     }
                     if ($bodyObj.termDate -and $bodyObj.termData) {
                         $tData = $bodyObj.termData
-                        # ターム内のスタッフ名保護: 既存タームに実名があり、送信側がスタッフXXの場合は実名をマージ維持
+                        # ターム内のスタッフ名保護: 既存タームに実名があり、送信側がプレースホルダーの場合は実名をマージ維持
                         if ($merged.terms.$($bodyObj.termDate) -and $merged.terms.$($bodyObj.termDate).staffList -and $tData.staffList) {
                             $oldList = $merged.terms.$($bodyObj.termDate).staffList
                             for ($idx = 0; $idx -lt $tData.staffList.Count; $idx++) {
-                                if ($idx -lt $oldList.Count -and $oldList[$idx].name -and -not ($oldList[$idx].name -like "スタッフ *")) {
-                                    if (-not $tData.staffList[$idx].name -or ($tData.staffList[$idx].name -like "スタッフ *")) {
+                                if ($idx -lt $oldList.Count -and (-not (Test-IsPlaceholderName $oldList[$idx].name))) {
+                                    if (Test-IsPlaceholderName $tData.staffList[$idx].name) {
                                         $tData.staffList[$idx].name = $oldList[$idx].name
                                     }
                                 }
