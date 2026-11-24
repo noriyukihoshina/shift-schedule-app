@@ -1013,31 +1013,23 @@ document.addEventListener('DOMContentLoaded', () => {
                     });
                 }
 
+                // ★ 完全同期モード: クラウド／サーバー側（data/dept_*.json）に有意なスタッフ名が存在する場合、
+                // ローカルストレージの古いキャッシュ（テストゴミやプレースホルダー）を問答無用で完全上書きし、一発で同期を完了する！
+                const cloudValidNames = Array.isArray(cloud.staffMaster) ? cloud.staffMaster.filter(s => s && s.name && !isPlaceholderStaffName(s.name)) : [];
+                const localValidNames = Array.isArray(localMasterList) ? localMasterList.filter(s => s && s.name && !isPlaceholderStaffName(s.name)) : [];
+
                 let shouldApplyMaster = false;
-                if (!localMasterRaw || !isLocalCustomized) {
-                    // ローカルが未設定または初期デフォルトならクラウドのデータを適用
-                    if (Array.isArray(cloud.staffMaster) && cloud.staffMaster.length > 0) {
+                if (cloudValidNames.length > 0) {
+                    // サーバー側に正規の実名が存在する場合:
+                    // サーバー側の実名数がローカル以上、またはローカルに実名がほとんどない（テスト入力のみ等）場合は、サーバーデータを100%完全適用！
+                    if (cloudValidNames.length >= localValidNames.length || localValidNames.length <= 3) {
                         shouldApplyMaster = true;
-                    }
-                } else if (showToastMsg) {
-                    // ユーザーが手動で「情報更新 / 同期」を押した場合はクラウド側がカスタマイズされていれば復元
-                    if (isCloudCustomized) {
-                        shouldApplyMaster = true;
-                    }
-                } else if (isInitialBoot) {
-                    // 起動時: ローカルに有効な編集名がある場合、クラウド側が初期デフォルトなら上書き禁止！
-                    if (isLocalCustomized && !isCloudCustomized) {
-                        shouldApplyMaster = false;
-                        // 逆にローカルの最新編集をクラウド／サーバー側へ即時保存して永続化を確定！
-                        setTimeout(() => pushStateToCloud(false), 300);
-                    } else if (isLocalCustomized && isCloudCustomized) {
-                        // 双方にカスタマイズがある場合、ローカルに入力された名前を最優先保持
-                        // ローカルの名前が初期プレースホルダーの行のみクラウドの名前を取り込む
+                    } else {
+                        // ローカル側にも多数の実名がある場合のみマージ
                         cloud.staffMaster.forEach((cs, idx) => {
                             if (localMasterList && localMasterList[idx] && cs) {
                                 const lName = localMasterList[idx].name;
-                                const isDefName = isPlaceholderStaffName(lName);
-                                if (isDefName && cs.name && !isPlaceholderStaffName(cs.name)) {
+                                if (isPlaceholderStaffName(lName) && !isPlaceholderStaffName(cs.name)) {
                                     localMasterList[idx].name = cs.name;
                                 }
                             }
@@ -1045,6 +1037,14 @@ document.addEventListener('DOMContentLoaded', () => {
                         window.localStorage.setItem(STORAGE_KEY_STAFF_MASTER, JSON.stringify(localMasterList));
                         applyMasterArrayToStaffList(localMasterList);
                         shouldApplyMaster = false;
+                    }
+                } else if (!localMasterRaw || !isLocalCustomized) {
+                    if (Array.isArray(cloud.staffMaster) && cloud.staffMaster.length > 0) {
+                        shouldApplyMaster = true;
+                    }
+                } else if (showToastMsg) {
+                    if (isCloudCustomized) {
+                        shouldApplyMaster = true;
                     }
                 }
 
@@ -1071,8 +1071,8 @@ document.addEventListener('DOMContentLoaded', () => {
                                         setTimeout(() => pushStateToCloud(false), 500);
                                         return;
                                     }
-                                    // 手動更新(showToastMsg)以外は、ローカルの更新日時がクラウド以上ならローカルを保持（起動時も含めて保護！）
-                                    if (!showToastMsg && localTime >= cloudTime) {
+                                    // 手動更新(showToastMsg)以外、かつクラウドマスタ強制上書き(shouldApplyMaster)でない場合のみ、日時に基づく保護を行う
+                                    if (!showToastMsg && !shouldApplyMaster && localTime >= cloudTime) {
                                         return;
                                     }
                                 } catch (e) {}
