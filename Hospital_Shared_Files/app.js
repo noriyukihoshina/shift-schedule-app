@@ -446,8 +446,9 @@ document.addEventListener('DOMContentLoaded', () => {
 
         const authKey = `auth_${deptId}`;
         // ★ リロード時は不要、ブラウザで新しく開くたびにパスワードを要求（sessionStorage）
-        if (sessionStorage.getItem(authKey) === 'true') {
-            return; // 同一セッション認証済み
+        // ★ マスターテーブル認証済み（統括セッション）の場合は、全病棟への切り替えをシームレスに自動許可！
+        if (sessionStorage.getItem(authKey) === 'true' || sessionStorage.getItem('auth_master') === 'true') {
+            return; // 同一セッションまたは統括マスター認証済み
         }
 
         // 各フロアのテーマカラー＆アイコン情報
@@ -735,15 +736,15 @@ document.addEventListener('DOMContentLoaded', () => {
 
         const nowStr = new Date().toLocaleTimeString('ja-JP', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
         if (mode === 'syncing') {
-            badgeText.textContent = customText || `🔄 自動保存中... (${nowStr})`;
+            badgeText.textContent = customText || `🔄 院内保存中... (${nowStr})`;
             if (badge) { badge.style.background = '#eff6ff'; badge.style.color = '#1d4ed8'; badge.style.borderColor = '#93c5fd'; }
             if (dot) dot.style.background = '#3b82f6';
         } else if (mode === 'synced') {
-            badgeText.textContent = customText || `🟢 自動保存済み (${nowStr})`;
+            badgeText.textContent = customText || `🟢 院内保存済み (${nowStr})`;
             if (badge) { badge.style.background = '#ecfdf5'; badge.style.color = '#047857'; badge.style.borderColor = '#a7f3d0'; }
             if (dot) dot.style.background = '#10b981';
         } else {
-            badgeText.textContent = customText || `🟢 自動保存済み (${nowStr})`;
+            badgeText.textContent = customText || `🟢 院内保存済み (${nowStr})`;
             if (badge) { badge.style.background = '#ecfdf5'; badge.style.color = '#047857'; badge.style.borderColor = '#a7f3d0'; }
             if (dot) dot.style.background = '#10b981';
         }
@@ -757,16 +758,17 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     }
 
-    function scheduleCloudSync() {
-        if (!isCloudInitialSyncDone || isRestoringFromCloud) return;
-        setCloudStatusBadge('syncing', '☁️ クラウドへ自動保存中...');
+    function scheduleCloudSync(delayMs = 400) {
+        if (isRestoringFromCloud) return;
+        setCloudStatusBadge('syncing', '☁️ 自動保存中...');
         if (cloudSyncTimer) clearTimeout(cloudSyncTimer);
         cloudSyncTimer = setTimeout(() => {
             pushStateToCloud(false);
-        }, 500);
+        }, delayMs);
     }
 
     async function pushStateToCloud(includeAllLocalTerms = false) {
+        if (!isCloudInitialSyncDone) return;
         if (isRestoringFromCloud) return;
         if (isCloudSyncInFlight) {
             pendingCloudResave = true;
@@ -910,28 +912,8 @@ document.addEventListener('DOMContentLoaded', () => {
                     }
                 } catch (e) {}
 
-                // 2) 全体マスター(master)の最新クラウドデータも取得し、共通スタッフマスタ(トグル・役職・セクション)を同期！
-                try {
-                    const rMaster = await fetch(`/api/cloud_sync?deptId=master&t=${Date.now()}`, { cache: 'no-store' });
-                    if (rMaster.ok) {
-                        const jMaster = await rMaster.json();
-                        const mCloud = jMaster && (jMaster.cloudState || jMaster.data);
-                        if (mCloud && Array.isArray(mCloud.staffMaster) && mCloud.staffMaster.length > 0) {
-                            const curLocalMaster = window.localStorage.getItem(STORAGE_KEY_STAFF_MASTER);
-                            let needMasterSync = !curLocalMaster;
-                            if (curLocalMaster) {
-                                try {
-                                    const lList = JSON.parse(curLocalMaster);
-                                    needMasterSync = lList.every((s, i) => (!s.name || s.name === `スタッフ ${String(i+1).padStart(2,'0')}`) && !s.can8 && !s.isChief && !s.isHalf);
-                                } catch(e) { needMasterSync = true; }
-                            }
-                            if (needMasterSync) {
-                                window.localStorage.setItem(STORAGE_KEY_STAFF_MASTER, JSON.stringify(mCloud.staffMaster));
-                                applyMasterArrayToStaffList(mCloud.staffMaster);
-                            }
-                        }
-                    }
-                } catch (e) {}
+                // 2) 全体マスター(master)のマスタ同期は病棟テーブルの個別マスタ保護のためスキップ（各病棟は固有のdeptIdマスタを使用）
+
             }
 
             const resp = await fetch(`/api/cloud_sync?deptId=${encodeURIComponent(deptId)}&t=${Date.now()}`, {
@@ -984,20 +966,74 @@ document.addEventListener('DOMContentLoaded', () => {
 
             isRestoringFromCloud = true;
             try {
-                // 1. スタッフマスター（全トグル・役職・所属・氏名・備考）のクラウド復元
-                // 判定ロジック:
-                // - showToastMsg（手動更新）または isInitialBoot（起動時）
-                // - またはローカルが未編集の初期デフォルト（名前がスタッフ01かつトグルが空）の場合
-                // ➔ クラウドのトグル設定・マスタを確実に復元・画面へ即座に反映！
+                // 1. スタッフマスター（全トグル・役職・所属・氏名・備考）のクラウド同期判定
+                // ★ ユーザー編集名の絶対保護ルール:
+                // - ローカルに個別入力された氏名やトグルが存在する場合、クラウド側の初期デフォルト（「スタッフ 01...」）で絶対に上書き破壊しない！
+                // - クラウド側に有意なカスタマイズが存在し、ローカルが初期デフォルトの場合はクラウドを適用。
+                // - 双方にカスタマイズがある場合、手動更新(showToastMsg)時はクラウド優先、起動時はローカル編集を保持しつつ未設定項目を補完。
                 const localMasterRaw = window.localStorage.getItem(STORAGE_KEY_STAFF_MASTER);
-                let shouldApplyMaster = (!localMasterRaw || showToastMsg || isInitialBoot);
-                if (localMasterRaw && !showToastMsg && !isInitialBoot) {
+                let localMasterList = null;
+                let isLocalCustomized = false;
+                if (localMasterRaw) {
                     try {
-                        const localList = JSON.parse(localMasterRaw);
-                        const isLocalDefault = Array.isArray(localList) && localList.every((s, i) => (!s.name || s.name === `スタッフ ${String(i+1).padStart(2,'0')}`) && !s.can8 && !s.isChief && !s.isHalf);
-                        if (isLocalDefault) shouldApplyMaster = true;
+                        localMasterList = JSON.parse(localMasterRaw);
+                        if (Array.isArray(localMasterList) && localMasterList.length > 0) {
+                            isLocalCustomized = localMasterList.some((s, i) => {
+                                if (!s) return false;
+                                const defName = `スタッフ ${String(i+1).padStart(2,'0')}`;
+                                const hasCustomName = s.name && s.name.trim() !== '' && s.name !== defName && !s.name.startsWith('スタッフ ');
+                                const hasToggle = !!(s.can8 || s.isChief || s.isSubChief || s.isSectionChief || s.isHalf || s.isFirstYear || s.isFullTime || s.allow6Consec || s.isSatSunOff || s.isSunOff || s.noEarly || s.noLate || s.noEve || s.canSched || s.isUnused || s.floor || s.section || s.jobTitle);
+                                return hasCustomName || hasToggle;
+                            });
+                        }
                     } catch (e) {
+                        localMasterList = null;
+                    }
+                }
+
+                let isCloudCustomized = false;
+                if (Array.isArray(cloud.staffMaster) && cloud.staffMaster.length > 0) {
+                    isCloudCustomized = cloud.staffMaster.some((s, i) => {
+                        if (!s) return false;
+                        const defName = `スタッフ ${String(i+1).padStart(2,'0')}`;
+                        const hasCustomName = s.name && s.name.trim() !== '' && s.name !== defName && !s.name.startsWith('スタッフ ');
+                        const hasToggle = !!(s.can8 || s.isChief || s.isSubChief || s.isSectionChief || s.isHalf || s.isFirstYear || s.isFullTime || s.allow6Consec || s.isSatSunOff || s.isSunOff || s.noEarly || s.noLate || s.noEve || s.canSched || s.isUnused || s.floor || s.section || s.jobTitle);
+                        return hasCustomName || hasToggle;
+                    });
+                }
+
+                let shouldApplyMaster = false;
+                if (!localMasterRaw || !isLocalCustomized) {
+                    // ローカルが未設定または初期デフォルトならクラウドのデータを適用
+                    if (Array.isArray(cloud.staffMaster) && cloud.staffMaster.length > 0) {
                         shouldApplyMaster = true;
+                    }
+                } else if (showToastMsg) {
+                    // ユーザーが手動で「情報更新 / 同期」を押した場合はクラウド側がカスタマイズされていれば復元
+                    if (isCloudCustomized) {
+                        shouldApplyMaster = true;
+                    }
+                } else if (isInitialBoot) {
+                    // 起動時: ローカルに有効な編集名がある場合、クラウド側が初期デフォルトなら上書き禁止！
+                    if (isLocalCustomized && !isCloudCustomized) {
+                        shouldApplyMaster = false;
+                        // 逆にローカルの最新編集をクラウド／サーバー側へ即時保存して永続化を確定！
+                        setTimeout(() => pushStateToCloud(false), 300);
+                    } else if (isLocalCustomized && isCloudCustomized) {
+                        // 双方にカスタマイズがある場合、ローカルに入力された名前を最優先保持
+                        // ローカルの名前が「スタッフ XX」の行のみクラウドの名前を取り込む
+                        cloud.staffMaster.forEach((cs, idx) => {
+                            if (localMasterList && localMasterList[idx] && cs) {
+                                const lName = localMasterList[idx].name;
+                                const isDefName = !lName || lName === `スタッフ ${String(idx+1).padStart(2,'0')}` || lName.startsWith('スタッフ ');
+                                if (isDefName && cs.name && !cs.name.startsWith('スタッフ ')) {
+                                    localMasterList[idx].name = cs.name;
+                                }
+                            }
+                        });
+                        window.localStorage.setItem(STORAGE_KEY_STAFF_MASTER, JSON.stringify(localMasterList));
+                        applyMasterArrayToStaffList(localMasterList);
+                        shouldApplyMaster = false;
                     }
                 }
 
@@ -1016,8 +1052,16 @@ document.addEventListener('DOMContentLoaded', () => {
                                     const lT = JSON.parse(curLocal);
                                     const localTime = new Date(lT.updatedAt || 0).getTime();
                                     const cloudTime = new Date(cloud.terms[tDate].updatedAt || 0).getTime();
-                                    // ローカルのタイムスタンプがクラウドと同等以上なら、白紙化状態も含めて絶対に上書きしない（※起動時および手動更新時はクラウドを最優先復元）
-                                    if (!showToastMsg && !isInitialBoot && localTime >= cloudTime) {
+                                    // ★ ユーザー作成勤務の完全保護:
+                                    // ローカルに勤務表（outputGridまたは希望勤務）が存在し、サーバー側が空の場合は絶対に上書きしない
+                                    const hasLocalGrid = lT.outputGrid && lT.outputGrid.length > 0;
+                                    const hasCloudGrid = cloud.terms[tDate].outputGrid && cloud.terms[tDate].outputGrid.length > 0;
+                                    if (hasLocalGrid && !hasCloudGrid) {
+                                        setTimeout(() => pushStateToCloud(false), 500);
+                                        return;
+                                    }
+                                    // 手動更新(showToastMsg)以外は、ローカルの更新日時がクラウド以上ならローカルを保持（起動時も含めて保護！）
+                                    if (!showToastMsg && localTime >= cloudTime) {
                                         return;
                                     }
                                 } catch (e) {}
@@ -1069,7 +1113,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
             setCloudStatusBadge('synced');
             if (showToastMsg) {
-                showToast('☁️ クラウドから最新の勤務表・トグル設定を同期しました！');
+                showToast('💻 院内共有フォルダから最新データを同期しました！');
             }
             return true;
         } catch (err) {
@@ -1230,6 +1274,9 @@ document.addEventListener('DOMContentLoaded', () => {
             updateSavedTermsList(startDate);
             saveStaffMaster();
             updateSaveStatusUI(new Date());
+            if (typeof scheduleCloudSync === 'function') {
+                scheduleCloudSync(50);
+            }
         } catch (err) {
             console.error('自動保存に失敗しました:', err);
         }
@@ -1275,7 +1322,15 @@ document.addEventListener('DOMContentLoaded', () => {
             // 2. スタッフのターム固有データ（prevDays, days）および基本属性の復元
             data.staffList.forEach((s, idx) => {
                 if (staffList[idx]) {
-                    staffList[idx].name = cleanTextValue(s.name) || staffList[idx].name;
+                    const termName = cleanTextValue(s.name);
+                    const curMasterName = staffList[idx].name;
+                    if (termName && !termName.startsWith('スタッフ ')) {
+                        staffList[idx].name = termName;
+                    } else if (curMasterName && !curMasterName.startsWith('スタッフ ')) {
+                        // マスター側の実名を優先維持
+                    } else {
+                        staffList[idx].name = termName || curMasterName;
+                    }
                     staffList[idx].isUnused = s.isUnused !== undefined ? !!s.isUnused : (idx >= 48);
                     staffList[idx].floor = s.floor || staffList[idx].floor || '';
                     staffList[idx].section = s.section || '';
@@ -2877,6 +2932,7 @@ document.addEventListener('DOMContentLoaded', () => {
                     e.target.value = newName;
                     saveStaffMaster();
                     saveCurrentTermToStorage();
+                    scheduleCloudSync(50);
                 }
             });
         });
@@ -3111,7 +3167,7 @@ document.addEventListener('DOMContentLoaded', () => {
             });
         });
 
-        document.querySelectorAll('.day-cell').forEach(cell => {
+        document.querySelectorAll('#inputTableBody .day-cell').forEach(cell => {
             cell.addEventListener('click', (e) => {
                 const s = parseInt(cell.dataset.s, 10);
                 const type = cell.dataset.type;
@@ -4758,9 +4814,27 @@ document.addEventListener('DOMContentLoaded', () => {
                         : '✨ 特殊勤務（早3名・遅1名・E2名・8時1名）を割り当て、「最終チェック&完成」を表示しました！';
                     showToast(toastMsg);
                 } else {
+                    const term = getTermInfo();
+                    const stdHolidayVal = parseFloat(document.getElementById('standardHolidaySelect')?.value || '8.0');
+                    const curGrid = (lastScheduler && lastScheduler.grid) ? lastScheduler.grid : (lastSolveResult ? lastSolveResult.grid : []);
+                    const valRes = validateScheduleGrid(curGrid, staffList, {
+                        dates: term.dates,
+                        standardHolidays: stdHolidayVal,
+                        isFinal: false,
+                        isST: isST,
+                        isSouth: isSouth,
+                        isLife: isLife,
+                        stStaffData: linkedStStaffData,
+                        linkedStStaffData: linkedStStaffData
+                    });
+                    const conflictsToApply = (specialResult.conflictCells && specialResult.conflictCells.length > 0)
+                        ? specialResult.conflictCells
+                        : (valRes.conflictCells || []);
+                    applyOutputConflictHighlights(conflictsToApply, specialResult.errors);
+
                     showErrorModal(specialResult.errors, {
                         title: '特殊勤務割当の指摘・エラー検知',
-                        subtitle: '特殊勤務の候補者不足や制約との衝突があります。',
+                        subtitle: '特殊勤務の候補者不足や制約との衝突があります（該当セルを青い網掛けで表示中）。',
                         desc: '内容をご確認の上修正するか、あえて無視して可能な限り特殊勤務を割り当てて「最終チェック&完成」へ進むことができます。',
                         onForceSpecial: () => {
                             // エラーを無視して特殊勤務を割り当て！
@@ -6250,6 +6324,43 @@ document.addEventListener('DOMContentLoaded', () => {
 
         if (isMaster) {
             renderMasterIntegrationView();
+        }
+
+        // ★ 再描画直後に現在の網掛け（currentOutputConflicts）を完全復元（網掛け蒸発防止）
+        if (currentOutputConflicts && currentOutputConflicts.length > 0) {
+            currentOutputConflicts.forEach(item => {
+                if (item.footerStat) {
+                    const footCells = document.querySelectorAll(
+                        `#outputTableFoot td[data-d="${item.dayIndex}"][data-footer-stat="${item.footerStat}"], ` +
+                        `#checkTableFoot td[data-d="${item.dayIndex}"][data-footer-stat="${item.footerStat}"]`
+                    );
+                    footCells.forEach(cell => {
+                        cell.classList.add('conflict-highlight');
+                        cell.setAttribute('data-conflict-reason', item.reason || '特殊勤務人数不整合');
+                        cell.title = `⚠️ 【人数不整合】${item.reason || '必要人数と一致していません'}`;
+                    });
+                } else if (item.statType) {
+                    const statCells = document.querySelectorAll(
+                        `#outputTableBody td[data-s="${item.staffIndex}"][data-stat="${item.statType}"], ` +
+                        `#checkTableBody td[data-s="${item.staffIndex}"][data-stat="${item.statType}"]`
+                    );
+                    statCells.forEach(cell => {
+                        cell.classList.add('conflict-highlight');
+                        cell.setAttribute('data-conflict-reason', item.reason || '集計不整合');
+                        cell.title = `⚠️ 【集計不整合】${item.reason || '集計値が基準と一致していません'}`;
+                    });
+                } else if (item.dayIndex !== undefined && item.staffIndex !== undefined) {
+                    const cells = document.querySelectorAll(
+                        `#outputTableBody td[data-s="${item.staffIndex}"][data-d="${item.dayIndex}"], ` +
+                        `#checkTableBody td[data-s="${item.staffIndex}"][data-d="${item.dayIndex}"]`
+                    );
+                    cells.forEach(cell => {
+                        cell.classList.add('conflict-highlight');
+                        cell.setAttribute('data-conflict-reason', item.reason || '制約違反');
+                        cell.title = `⚠️ 【制約違反】${item.reason || '制約が守られていません'}`;
+                    });
+                }
+            });
         }
 
         attachOutputTableEvents();
@@ -7845,7 +7956,12 @@ function renderMasterIntegrationView() {
 
             // サマリー行1: ±補正 (5行目相当)
             html += `<tr style="background:${fc.bg}; font-weight:700;">
-                <td class="sticky-col-1" rowspan="8" style="background:${fc.headerBg}; color:${fc.badgeColor}; font-size:1.05rem; font-weight:800; vertical-align:middle; text-align:center; border-right:1px solid ${fc.border}; width:44px; min-width:44px; max-width:44px;">${fc.label}</td>
+                <td class="sticky-col-1" rowspan="8" style="background:${fc.headerBg}; color:${fc.badgeColor}; font-size:0.95rem; font-weight:800; vertical-align:middle; text-align:center; border-right:1px solid ${fc.border}; width:44px; min-width:44px; max-width:44px;">
+                    <a href="${fc.id}.html" title="${fc.label}病棟テーブルを開く" style="color:${fc.badgeColor}; text-decoration:none; display:flex; flex-direction:column; align-items:center; gap:2px; cursor:pointer;">
+                        <span>${fc.label}</span>
+                        <span style="font-size:0.68rem; background:#ffffff; border:1px solid ${fc.border}; border-radius:4px; padding:1px 3px; font-weight:700; box-shadow:0 1px 2px rgba(0,0,0,0.06);">↗開く</span>
+                    </a>
+                </td>
                 <td class="sticky-col-2" style="background:${fc.bg}; color:#1e293b; border-right:2px solid #475569; font-weight:700; width:125px; min-width:125px; max-width:125px;">±補正</td>`;
             for (let d = 0; d < numDays; d++) {
                 const thickCls = getDayBorderClass(d);
@@ -7938,9 +8054,14 @@ function renderMasterIntegrationView() {
             // サマリー行8: 「！表示する」トグルボタン行 (12行目相当)
             html += `<tr style="background:${fc.bg}; border-bottom: 2px solid ${fc.border};">
                 <td class="sticky-col-2" style="background:${fc.bg}; border-right:2px solid #475569; padding:4px 6px; width:125px; min-width:125px; max-width:125px;">
-                    <button type="button" class="btn btn-outline toggle-master-floor-btn" data-floor="${fc.id}" style="width:100%; font-size:0.75rem; padding:2px 6px; font-weight:700; background:${isExp ? '#f1f5f9' : '#ffffff'}; color:${fc.badgeColor}; border-color:${fc.border}; box-shadow: 0 1px 2px rgba(0,0,0,0.05); cursor:pointer;">
-                        ${isExp ? '▲折りたたむ' : '⚡表示する'}
-                    </button>
+                    <div style="display:flex; flex-direction:column; gap:4px;">
+                        <button type="button" class="btn btn-outline toggle-master-floor-btn" data-floor="${fc.id}" style="width:100%; font-size:0.75rem; padding:2px 6px; font-weight:700; background:${isExp ? '#f1f5f9' : '#ffffff'}; color:${fc.badgeColor}; border-color:${fc.border}; box-shadow: 0 1px 2px rgba(0,0,0,0.05); cursor:pointer;">
+                            ${isExp ? '▲折りたたむ' : '⚡表示する'}
+                        </button>
+                        <a href="${fc.id}.html" class="btn btn-outline" style="width:100%; box-sizing:border-box; font-size:0.72rem; padding:2px 4px; font-weight:700; text-align:center; text-decoration:none; background:#ffffff; color:${fc.badgeColor}; border-color:${fc.border}; box-shadow:0 1px 2px rgba(0,0,0,0.05);" title="${fc.label}病棟テーブルを別画面で開く">
+                            🔗 ${fc.label}を開く
+                        </a>
+                    </div>
                 </td>`;
             for (let d = 0; d < numDays; d++) {
                 const thickCls = getDayBorderClass(d);
@@ -11901,7 +12022,10 @@ function renderMasterIntegrationView() {
         if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'c') {
             if (activeCell) {
                 clipboardSymbol = activeCell.textContent.trim();
-                showToast(`📋 【${clipboardSymbol || '空欄'}】をコピーしました (Ctrl+C)`);
+                // 既存のコピー元枠を解除し、現在のセルにコピー元枠（破線太枠）を固定
+                document.querySelectorAll('.copied-source-cell').forEach(c => c.classList.remove('copied-source-cell'));
+                activeCell.classList.add('copied-source-cell');
+                showToast(`📋 【${clipboardSymbol || '空欄'}】をコピーしました (Ctrl+C) ➔ 貼り付けたいセルを選択して Ctrl+V`);
                 e.preventDefault();
             }
         } else if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'v') {

@@ -229,10 +229,32 @@ try {
                         } catch {}
                     }
 
-                    # マージ
+                    # 実名保護マージ（送信側が全員スタッフXXで、既存側に実名がある場合は上書き破壊を防止）
+                    $hasExistingValid = $false
+                    if ($currentData.staffMaster) {
+                        foreach ($sm in $currentData.staffMaster) {
+                            if ($sm.name -and -not ($sm.name -like "スタッフ *")) { $hasExistingValid = $true; break }
+                        }
+                    }
+                    $hasIncomingValid = $false
+                    if ($bodyObj.staffMaster) {
+                        foreach ($sm in $bodyObj.staffMaster) {
+                            if ($sm.name -and -not ($sm.name -like "スタッフ *")) { $hasIncomingValid = $true; break }
+                        }
+                    }
+
+                    $resolvedMaster = @()
+                    if ($hasExistingValid -and -not $hasIncomingValid) {
+                        $resolvedMaster = @($currentData.staffMaster)
+                    } elseif ($bodyObj.staffMaster) {
+                        $resolvedMaster = @($bodyObj.staffMaster)
+                    } elseif ($currentData.staffMaster) {
+                        $resolvedMaster = @($currentData.staffMaster)
+                    }
+
                     $merged = [ordered]@{
                         deptId = $deptId
-                        staffMaster = if ($bodyObj.staffMaster) { @($bodyObj.staffMaster) } else { if ($currentData.staffMaster) { @($currentData.staffMaster) } else { @() } }
+                        staffMaster = $resolvedMaster
                         lastActiveDate = if ($bodyObj.lastActiveDate) { $bodyObj.lastActiveDate } else { if ($currentData.lastActiveDate) { $currentData.lastActiveDate } else { "2026-04-01" } }
                         savedTerms = if ($bodyObj.savedTerms) { @($bodyObj.savedTerms) } else { if ($currentData.savedTerms) { @($currentData.savedTerms) } else { @() } }
                         terms = if ($currentData.terms) { $currentData.terms } else { [ordered]@{} }
@@ -245,7 +267,19 @@ try {
                         }
                     }
                     if ($bodyObj.termDate -and $bodyObj.termData) {
-                        $merged.terms | Add-Member -MemberType NoteProperty -Name $bodyObj.termDate -Value $bodyObj.termData -Force
+                        $tData = $bodyObj.termData
+                        # ターム内のスタッフ名保護: 既存タームに実名があり、送信側がスタッフXXの場合は実名をマージ維持
+                        if ($merged.terms.$($bodyObj.termDate) -and $merged.terms.$($bodyObj.termDate).staffList -and $tData.staffList) {
+                            $oldList = $merged.terms.$($bodyObj.termDate).staffList
+                            for ($idx = 0; $idx -lt $tData.staffList.Count; $idx++) {
+                                if ($idx -lt $oldList.Count -and $oldList[$idx].name -and -not ($oldList[$idx].name -like "スタッフ *")) {
+                                    if (-not $tData.staffList[$idx].name -or ($tData.staffList[$idx].name -like "スタッフ *")) {
+                                        $tData.staffList[$idx].name = $oldList[$idx].name
+                                    }
+                                }
+                            }
+                        }
+                        $merged.terms | Add-Member -MemberType NoteProperty -Name $bodyObj.termDate -Value $tData -Force
                         if ($merged.savedTerms -notcontains $bodyObj.termDate) {
                             $merged.savedTerms += $bodyObj.termDate
                         }

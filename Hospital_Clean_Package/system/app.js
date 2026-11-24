@@ -768,6 +768,7 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     async function pushStateToCloud(includeAllLocalTerms = false) {
+        if (!isCloudInitialSyncDone) return;
         if (isRestoringFromCloud) return;
         if (isCloudSyncInFlight) {
             pendingCloudResave = true;
@@ -911,28 +912,8 @@ document.addEventListener('DOMContentLoaded', () => {
                     }
                 } catch (e) {}
 
-                // 2) 全体マスター(master)の最新クラウドデータも取得し、共通スタッフマスタ(トグル・役職・セクション)を同期！
-                try {
-                    const rMaster = await fetch(`/api/cloud_sync?deptId=master&t=${Date.now()}`, { cache: 'no-store' });
-                    if (rMaster.ok) {
-                        const jMaster = await rMaster.json();
-                        const mCloud = jMaster && (jMaster.cloudState || jMaster.data);
-                        if (mCloud && Array.isArray(mCloud.staffMaster) && mCloud.staffMaster.length > 0) {
-                            const curLocalMaster = window.localStorage.getItem(STORAGE_KEY_STAFF_MASTER);
-                            let needMasterSync = !curLocalMaster;
-                            if (curLocalMaster) {
-                                try {
-                                    const lList = JSON.parse(curLocalMaster);
-                                    needMasterSync = lList.every((s, i) => (!s.name || s.name === `スタッフ ${String(i+1).padStart(2,'0')}`) && !s.can8 && !s.isChief && !s.isHalf);
-                                } catch(e) { needMasterSync = true; }
-                            }
-                            if (needMasterSync) {
-                                window.localStorage.setItem(STORAGE_KEY_STAFF_MASTER, JSON.stringify(mCloud.staffMaster));
-                                applyMasterArrayToStaffList(mCloud.staffMaster);
-                            }
-                        }
-                    }
-                } catch (e) {}
+                // 2) 全体マスター(master)のマスタ同期は病棟テーブルの個別マスタ保護のためスキップ（各病棟は固有のdeptIdマスタを使用）
+
             }
 
             const resp = await fetch(`/api/cloud_sync?deptId=${encodeURIComponent(deptId)}&t=${Date.now()}`, {
@@ -1341,7 +1322,15 @@ document.addEventListener('DOMContentLoaded', () => {
             // 2. スタッフのターム固有データ（prevDays, days）および基本属性の復元
             data.staffList.forEach((s, idx) => {
                 if (staffList[idx]) {
-                    staffList[idx].name = cleanTextValue(s.name) || staffList[idx].name;
+                    const termName = cleanTextValue(s.name);
+                    const curMasterName = staffList[idx].name;
+                    if (termName && !termName.startsWith('スタッフ ')) {
+                        staffList[idx].name = termName;
+                    } else if (curMasterName && !curMasterName.startsWith('スタッフ ')) {
+                        // マスター側の実名を優先維持
+                    } else {
+                        staffList[idx].name = termName || curMasterName;
+                    }
                     staffList[idx].isUnused = s.isUnused !== undefined ? !!s.isUnused : (idx >= 48);
                     staffList[idx].floor = s.floor || staffList[idx].floor || '';
                     staffList[idx].section = s.section || '';
