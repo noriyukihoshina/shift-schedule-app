@@ -1,7 +1,7 @@
 
     function updateMasterNavLinks(targetTerm) {
         const curTerm = targetTerm || currentWorkingStartDate || '2026-04-01';
-        document.querySelectorAll('.dept-nav-container a, a.dept-nav-btn').forEach(btn => {
+        document.querySelectorAll('.dept-nav-container a, a.dept-nav-btn, a[title*="病棟テーブル"], a.master-dept-link').forEach(btn => {
             let href = btn.getAttribute('href');
             if (href && !href.includes('index.html') && !href.includes('master') && !href.includes('javascript:')) {
                 const baseUrl = href.split('?')[0];
@@ -10,16 +10,22 @@
                 btn.href = newHref;
             }
         });
-        document.querySelectorAll('a[title*="病棟テーブルを別画面で開く"]').forEach(a => {
-            let href = a.getAttribute('href');
-            if (href) {
-                const baseUrl = href.split('?')[0];
-                const newHref = `${baseUrl}?from=master&term=${curTerm}`;
-                a.setAttribute('href', newHref);
-                a.href = newHref;
-            }
-        });
     }
+
+// ★ 出勤記号判定（全病棟・全職種共通）
+function isWorkSymbol(sym) {
+    if (!sym || typeof sym !== 'string') return false;
+    const s = sym.trim();
+    if (s === '○' || s === '〇' || s === '早' || s === '遅' || s === 'E' || s === '8時' || s === '出' || s === '出勤' || s === 'ハヤ' || s === 'オソ' || s === 'イブ') return true;
+    if (['A', 'B', 'C', 'D', 'F', 'G'].includes(s)) return true;
+    return false;
+}
+
+// ★ 半休・半勤記号判定
+function isHalfDuty(sym) {
+    if (!sym || typeof sym !== 'string') return false;
+    return sym.includes('/');
+}
 
 // ★ リフレッシュ休暇記号判定（上1〜5、下1〜3。これらはいかなる場合も赤字固定にせず通常黒字！）
 function isRefreshHolidaySymbol(sym) {
@@ -1112,16 +1118,10 @@ document.addEventListener('DOMContentLoaded', () => {
                                     const lT = JSON.parse(curLocal);
                                     const localTime = new Date(lT.updatedAt || 0).getTime();
                                     const cloudTime = new Date(cloud.terms[tDate].updatedAt || 0).getTime();
-                                    // ★ ユーザー作成勤務の完全保護:
-                                    // ローカルに勤務表（outputGridまたは希望勤務）が存在し、サーバー側が空の場合は絶対に上書きしない
-                                    const hasLocalGrid = lT.outputGrid && lT.outputGrid.length > 0;
-                                    const hasCloudGrid = cloud.terms[tDate].outputGrid && cloud.terms[tDate].outputGrid.length > 0;
-                                    if (hasLocalGrid && !hasCloudGrid) {
-                                        setTimeout(() => pushStateToCloud(false), 500);
-                                        return;
-                                    }
-                                    // 手動更新(showToastMsg)以外、かつクラウドマスタ強制上書き(shouldApplyMaster)でない場合のみ、日時に基づく保護を行う
-                                    if (!showToastMsg && !shouldApplyMaster && localTime >= cloudTime) {
+                                    // ★ マスターテーブルからの遷移時、またはサーバー側の方が新しい場合はサーバー側データを100%最優先適用！
+                                    const urlParamsCheck = new URLSearchParams(window.location.search);
+                                    const isFromMaster = (urlParamsCheck.get('from') === 'master');
+                                    if (!isFromMaster && !showToastMsg && !shouldApplyMaster && localTime > cloudTime) {
                                         return;
                                     }
                                 } catch (e) {}
@@ -1542,81 +1542,92 @@ document.addEventListener('DOMContentLoaded', () => {
                 );
                 const maxTeamSpread = Math.max(calcSpread(secArrays.teamA), calcSpread(secArrays.teamB));
 
-                if (loadedLoadDiff > 3.0 || (!data.sectionTeamLeveledRev45 && (maxSecSpread >= 5 || maxTeamSpread >= 6))) {
-                    // まず既存のグリッドに対してクロススワップ平準化を適用
-                    scheduler.balanceDailyWorkforce();
-                    // もし初期配置から組み直した方がさらにセクション・チームのブレが小さく制約エラーも0件なら採用
-                    const freshSched = new ShiftScheduler(staffList, {
-                        standardHolidays: stdVal,
-                        dates: term.dates,
-                        dayOffsets: [...dayOffsets],
-                        isST: isST,
-                        isSouth: isSouth,
-                        isLife: isLife,
-                        lifeDailyWork: getLinkedLifeDailyWork(),
-                        stDailyWork: getLinkedSTDailyWork(),
-                        stDailyHeadCount: getLinkedSTDailyHeadCount(),
-                        stDailyFtWork: getLinkedSTDailyFtWork(),
-                        stDailyEarly: getLinkedSTDailyEarly(),
-                        stDailyLate: getLinkedSTDailyLate(),
-                        stDailyEve: getLinkedSTDailyEve(),
-                        stFloorFtCount: getLinkedSTFloorFtCount()
-                    });
-                    const reBase = freshSched.solveBaseSchedule({ force: true });
-                    if (reBase && reBase.grid) {
-                        if (hasUnfixedSpecialInLoaded) {
-                            const reSpec = freshSched.assignSpecialDutiesToGrid({ force: true });
-                            if (reSpec && reSpec.grid) {
-                                freshSched.grid = reSpec.grid;
+                try {
+                    if (loadedLoadDiff > 3.0 || (!data.sectionTeamLeveledRev45 && (maxSecSpread >= 5 || maxTeamSpread >= 6))) {
+                        // まず既存のグリッドに対してクロススワップ平準化を適用
+                        if (typeof scheduler.balanceDailyWorkforce === 'function') scheduler.balanceDailyWorkforce();
+                        // もし初期配置から組み直した方がさらにセクション・チームのブレが小さく制約エラーも0件なら採用
+                        const freshSched = new ShiftScheduler(staffList, {
+                            standardHolidays: stdVal,
+                            dates: term.dates,
+                            dayOffsets: [...dayOffsets],
+                            isST: isST,
+                            isSouth: isSouth,
+                            isLife: isLife,
+                            lifeDailyWork: getLinkedLifeDailyWork(),
+                            stDailyWork: getLinkedSTDailyWork(),
+                            stDailyHeadCount: getLinkedSTDailyHeadCount(),
+                            stDailyFtWork: getLinkedSTDailyFtWork(),
+                            stDailyEarly: getLinkedSTDailyEarly(),
+                            stDailyLate: getLinkedSTDailyLate(),
+                            stDailyEve: getLinkedSTDailyEve(),
+                            stFloorFtCount: getLinkedSTFloorFtCount()
+                        });
+                        const reBase = freshSched.solveBaseSchedule({ force: true });
+                        if (reBase && reBase.grid) {
+                            if (hasUnfixedSpecialInLoaded) {
+                                const reSpec = freshSched.assignSpecialDutiesToGrid({ force: true });
+                                if (reSpec && reSpec.grid) {
+                                    freshSched.grid = reSpec.grid;
+                                }
+                            }
+                            const freshVal = validateScheduleGrid(freshSched.grid, staffList, {
+                                dates: term.dates,
+                                standardHolidays: stdVal,
+                                isFinal: hasUnfixedSpecialInLoaded,
+                                isST: isST,
+                                isSouth: isSouth,
+                                isLife: isLife,
+                                stStaffData: linkedStStaffData,
+                                linkedStStaffData: linkedStStaffData
+                            });
+                            const curVal = validateScheduleGrid(scheduler.grid, staffList, {
+                                dates: term.dates,
+                                standardHolidays: stdVal,
+                                isFinal: hasUnfixedSpecialInLoaded,
+                                isST: isST,
+                                isSouth: isSouth,
+                                isLife: isLife,
+                                stStaffData: linkedStStaffData,
+                                linkedStStaffData: linkedStStaffData
+                            });
+                            if (freshVal.errors.length <= curVal.errors.length) {
+                                scheduler.grid = freshSched.grid;
                             }
                         }
-                        const freshVal = validateScheduleGrid(freshSched.grid, staffList, {
-                            dates: term.dates,
-                            standardHolidays: stdVal,
-                            isFinal: hasUnfixedSpecialInLoaded,
-                            isST: isST,
-                            isSouth: isSouth,
-                            isLife: isLife,
-                            stStaffData: linkedStStaffData,
-                            linkedStStaffData: linkedStStaffData
-                        });
-                        const curVal = validateScheduleGrid(scheduler.grid, staffList, {
-                            dates: term.dates,
-                            standardHolidays: stdVal,
-                            isFinal: hasUnfixedSpecialInLoaded,
-                            isST: isST,
-                            isSouth: isSouth,
-                            isLife: isLife,
-                            stStaffData: linkedStStaffData,
-                            linkedStStaffData: linkedStStaffData
-                        });
-                        if (freshVal.errors.length <= curVal.errors.length) {
-                            scheduler.grid = freshSched.grid;
-                        }
+                        data.outputGrid = scheduler.grid;
+                        data.sectionTeamLeveledRev45 = true;
+                        try {
+                            localStorage.setItem(`${STORAGE_KEY_PREFIX}${targetStart}`, JSON.stringify(data));
+                        } catch (e) {}
+                    } else if (!data.sectionTeamLeveledRev45) {
+                        if (typeof scheduler.balanceDailyWorkforce === 'function') scheduler.balanceDailyWorkforce();
+                        data.outputGrid = scheduler.grid;
+                        data.sectionTeamLeveledRev45 = true;
+                        try {
+                            localStorage.setItem(`${STORAGE_KEY_PREFIX}${targetStart}`, JSON.stringify(data));
+                        } catch (e) {}
                     }
-                    data.outputGrid = scheduler.grid;
-                    data.sectionTeamLeveledRev45 = true;
-                    try {
-                        localStorage.setItem(`${STORAGE_KEY_PREFIX}${targetStart}`, JSON.stringify(data));
-                    } catch (e) {}
-                } else if (!data.sectionTeamLeveledRev45) {
-                    scheduler.balanceDailyWorkforce();
-                    data.outputGrid = scheduler.grid;
-                    data.sectionTeamLeveledRev45 = true;
-                    try {
-                        localStorage.setItem(`${STORAGE_KEY_PREFIX}${targetStart}`, JSON.stringify(data));
-                    } catch (e) {}
-                }
 
-                const newStats = scheduler.calculateStats();
-                lastScheduler = scheduler;
-                lastSolveResult = {
-                    success: true,
-                    grid: scheduler.grid,
-                    stats: newStats
-                };
-                renderOutputTable(lastSolveResult.grid, newStats);
-                renderStatsDashboard(newStats);
+                    const newStats = scheduler.calculateStats();
+                    lastScheduler = scheduler;
+                    lastSolveResult = {
+                        success: true,
+                        grid: scheduler.grid,
+                        stats: newStats
+                    };
+                    renderOutputTable(lastSolveResult.grid, newStats);
+                    renderStatsDashboard(newStats);
+                } catch (gridErr) {
+                    console.warn('outputGrid復元フォールバック:', gridErr);
+                    lastScheduler = scheduler;
+                    lastSolveResult = {
+                        success: true,
+                        grid: scheduler.grid,
+                        stats: calculateGridStats(scheduler.grid)
+                    };
+                    renderOutputTable(lastSolveResult.grid, lastSolveResult.stats);
+                }
             } else {
                 lastSolveResult = null;
                 lastScheduler = null;
@@ -3853,6 +3864,22 @@ document.addEventListener('DOMContentLoaded', () => {
                 fData.outputGrid = fData.staffList.map(st => {
                     if (Array.isArray(st.days)) return st.days.map(sym => ({ symbol: sym || '', isFixed: false }));
                     return new Array(NUM_DAYS).fill(null).map(() => ({ symbol: '', isFixed: false }));
+                });
+            } else {
+                // ★ 既存のoutputGridがある場合でも、空セルにstaffList.days（希望入力の○等）を安全補完マージ！
+                fData.staffList.forEach((st, s) => {
+                    if (!fData.outputGrid[s]) {
+                        fData.outputGrid[s] = new Array(NUM_DAYS).fill(null).map(() => ({ symbol: '', isFixed: false }));
+                    }
+                    if (Array.isArray(st.days)) {
+                        for (let d = 0; d < NUM_DAYS; d++) {
+                            const c = fData.outputGrid[s][d];
+                            const curSym = (c && typeof c === 'object') ? c.symbol : (c || '');
+                            if (!curSym && st.days[d]) {
+                                fData.outputGrid[s][d] = { symbol: st.days[d], isFixed: false };
+                            }
+                        }
+                    }
                 });
             }
             while (fData.outputGrid.length < fData.staffList.length) {
@@ -7972,122 +7999,208 @@ function renderMasterIntegrationView() {
                 });
             }
 
-            // 日別集計（±補正, 出勤人数合計, 実数合計, 早, 遅, E, 8時）
+            // ★ 添付1・2準拠: 定数およびセクション名称定義
+            const isSouthFloor = (fc.id === 'south');
+            const targetEarly = isSouthFloor ? 2 : 3;
+            const targetLate = isSouthFloor ? 2 : 1;
+            const targetEve = 2;
+            const targetH8 = 1;
+            const secPta = isSouthFloor ? 'PT 2' : 'PT A';
+            const secOta = isSouthFloor ? 'OT 2' : 'OT A';
+            const secPtb = isSouthFloor ? 'PT 3' : 'PT B';
+            const secOtb = isSouthFloor ? 'OT 3' : 'OT B';
+
+            // ★ 詳細行群（並び順: PTA → PTB → OTA → OTB → 一般 → ST → ハーフマン）の先行構築
+            const orderedStaffList = [];
+            const sections = ['PT A', 'PT B', 'OT A', 'OT B'];
+
+            sections.forEach(sec => {
+                fStaffList.forEach((s, sIdx) => {
+                    if (!s.isUnused && s.section === sec) {
+                        const row = [];
+                        const rawRow = (fGrid && fGrid[sIdx]) ? fGrid[sIdx] : null;
+                        for (let d = 0; d < numDays; d++) {
+                            const c = rawRow ? rawRow[d] : null;
+                            let sym = (c && typeof c === 'object') ? (c.symbol || '') : (c || '');
+                            if (!sym && s.days && s.days[d]) sym = s.days[d]; // ★ 1階で入力された○等の希望を確実に復元！
+                            const isFixed = (c && typeof c === 'object') ? !!c.isFixed : false;
+                            row.push({ symbol: sym, isFixed: isFixed });
+                        }
+                        orderedStaffList.push({ staff: s, sec: sec, gridRow: row, isST: false });
+                    }
+                });
+            });
+
+            // セクション未設定のその他スタッフ
+            fStaffList.forEach((s, sIdx) => {
+                if (!s.isUnused && !sections.includes(s.section)) {
+                    const row = [];
+                    const rawRow = (fGrid && fGrid[sIdx]) ? fGrid[sIdx] : null;
+                    for (let d = 0; d < numDays; d++) {
+                        const c = rawRow ? rawRow[d] : null;
+                        let sym = (c && typeof c === 'object') ? (c.symbol || '') : (c || '');
+                        if (!sym && s.days && s.days[d]) sym = s.days[d];
+                        const isFixed = (c && typeof c === 'object') ? !!c.isFixed : false;
+                        row.push({ symbol: sym, isFixed: isFixed });
+                    }
+                    orderedStaffList.push({ staff: s, sec: s.section || '一般', gridRow: row, isST: false });
+                }
+            });
+
+            // STスタッフ
+            floorStStaff.forEach((st, si) => {
+                const row = [];
+                const rawRow = floorStGrid[si] || null;
+                for (let d = 0; d < numDays; d++) {
+                    const c = rawRow ? rawRow[d] : null;
+                    let sym = (c && typeof c === 'object') ? (c.symbol || '') : (c || '');
+                    if (!sym && st.days && st.days[d]) sym = st.days[d];
+                    const isFixed = (c && typeof c === 'object') ? !!c.isFixed : false;
+                    row.push({ symbol: sym, isFixed: isFixed });
+                }
+                orderedStaffList.push({ staff: st, sec: 'ST', gridRow: row, isST: true });
+            });
+
+            // ハーフマン（生活期ハ応援）
+            const haDef = haFloorDefs.find(d => d.flId === fc.id);
+            if (haDef) {
+                let haStaffFound = false;
+                baseLifeStaff.forEach((st, idx) => {
+                    if (st.isUnused || st.isZeroCount) return;
+                    const matches = (st.haSection === haDef.target || (haDef.target === 'ハ4' && st.haSection === 'ハ南'));
+                    if (!matches) return;
+                    haStaffFound = true;
+                    const rawRow = (lifeData && lifeData.outputGrid && lifeData.outputGrid[idx]) ? lifeData.outputGrid[idx] : null;
+                    const row = [];
+                    for (let d = 0; d < numDays; d++) {
+                        let cellVal = rawRow ? rawRow[d] : null;
+                        let sym = '';
+                        if (cellVal !== null && cellVal !== undefined) {
+                            sym = (typeof cellVal === 'object') ? (cellVal.symbol !== undefined ? cellVal.symbol : '') : (cellVal || '');
+                        } else if (st.days && st.days[d]) {
+                            sym = st.days[d];
+                        }
+                        const isFixed = (cellVal && typeof cellVal === 'object') ? !!cellVal.isFixed : false;
+                        row.push({ symbol: sym, isFixed: isFixed });
+                    }
+                    orderedStaffList.push({
+                        staff: st,
+                        sec: 'ﾊｰﾌﾏﾝ',
+                        gridRow: row,
+                        isST: false,
+                        isHa: true,
+                        lifeStaffIdx: idx
+                    });
+                });
+                if (!haStaffFound && lifeData && lifeData.outputGrid && lifeData.outputGrid.length > 0) {
+                    const dummyStaff = {
+                        id: (haDef.target === 'ハ1' ? 41 : (haDef.target === 'ハ2' ? 42 : (haDef.target === 'ハ3' ? 43 : 44))),
+                        name: `ハーフマン (${haDef.target})`,
+                        haSection: haDef.target
+                    };
+                    const row = [];
+                    for (let d = 0; d < numDays; d++) {
+                        row.push({ symbol: '', isFixed: false });
+                    }
+                    orderedStaffList.push({
+                        staff: dummyStaff,
+                        sec: 'ﾊｰﾌﾏﾝ',
+                        gridRow: row,
+                        isST: false,
+                        isHa: true,
+                        lifeStaffIdx: -1
+                    });
+                }
+            }
+
+            // 日別集計（±補正, 出勤人数合計, 実数合計, 早, 遅, E, 8時, 各セクション実数）の一元集計
             const dailyOffsets = [];
             const dailyReal = [];
             const dailyTotal = [];
-            const dailyEarly = [];
-            const dailyLate = [];
-            const dailyEve = [];
-            const dailyH8 = [];
+            const dailyEarly = new Array(numDays).fill(0);
+            const dailyLate = new Array(numDays).fill(0);
+            const dailyEve = new Array(numDays).fill(0);
+            const dailyH8 = new Array(numDays).fill(0);
+            const dailyPta = new Array(numDays).fill(0);
+            const dailyOta = new Array(numDays).fill(0);
+            const dailyPtb = new Array(numDays).fill(0);
+            const dailyOtb = new Array(numDays).fill(0);
+            const dailyStWork = new Array(numDays).fill(0);
+            const dailyHaWork = new Array(numDays).fill(0);
+            const dailyFloorRealWork = new Array(numDays).fill(0);
+            const dailyFloorHeadCount = new Array(numDays).fill(0);
 
             for (let d = 0; d < numDays; d++) {
                 const offset = (fOffsets && fOffsets[d] !== undefined) ? fOffsets[d] : 0;
                 dailyOffsets.push(offset);
 
-                let headCount = 0;
-                let realCount = 0;
-                let earlyCount = 0;
-                let lateCount = 0;
-                let eveCount = 0;
-                let h8Count = 0;
+                orderedStaffList.forEach(item => {
+                    const s = item.staff;
+                    if (s.isUnused || s.isZeroCount) return;
+                    const c = item.gridRow ? item.gridRow[d] : null;
+                    const sym = (c && typeof c === 'object') ? (c.symbol || '') : (c || '');
+                    if (!sym) return;
 
-                // 病棟スタッフ集計（fGrid がない時は staff.days から確実に集計！）
-                if (fStaffList.length > 0) {
-                    for (let s = 0; s < fStaffList.length; s++) {
-                        const staff = fStaffList[s];
-                        if (staff.isUnused || staff.isZeroCount) continue;
-                        const cell = fGrid ? fGrid[s] : null;
-                        let sym = (cell && cell[d] && typeof cell[d] === 'object') ? cell[d].symbol : (cell && cell[d] ? cell[d] : '');
-                        if (!sym && staff.days && staff.days[d]) sym = staff.days[d]; // ★ 希望・事前入力セルを確実に参照！
-
-                        const isHalfStaff = !!staff.isHalf; // ★ 係長0.5等の0.5スタッフ
-                        const hVal = isHalfStaff ? 0.5 : 1.0;
+                    if (item.isHa) {
+                        if (isWorkSymbol(sym) && sym !== '研' && sym !== '張') {
+                            dailyHaWork[d] = 0.5;
+                            dailyFloorRealWork[d] += 0.5;
+                            dailyFloorHeadCount[d] += 0.5;
+                        } else if (isHalfDuty(sym)) {
+                            dailyHaWork[d] = 0.25;
+                            dailyFloorRealWork[d] += 0.25;
+                            dailyFloorHeadCount[d] += 0.25;
+                        }
+                    } else {
+                        const isHalfStaff = !!s.isHalf;
+                        const wVal = isHalfStaff ? 0.5 : 1.0;
 
                         if (sym === '早') {
-                            earlyCount++;
-                            headCount += hVal;
-                            realCount += hVal;
+                            dailyEarly[d]++;
+                            dailyFloorRealWork[d] += wVal;
+                            dailyFloorHeadCount[d] += wVal;
                         } else if (sym === '遅') {
-                            lateCount++;
-                            headCount += hVal;
-                            realCount += hVal;
+                            dailyLate[d]++;
+                            dailyFloorRealWork[d] += wVal;
+                            dailyFloorHeadCount[d] += wVal;
                         } else if (sym === 'E') {
-                            eveCount++;
-                            headCount += hVal;
-                            realCount += hVal;
+                            dailyEve[d]++;
+                            dailyFloorRealWork[d] += wVal;
+                            dailyFloorHeadCount[d] += wVal;
                         } else if (sym === '8時') {
-                            h8Count++;
-                            headCount += hVal;
-                            realCount += hVal;
+                            dailyH8[d]++;
+                            dailyFloorRealWork[d] += wVal;
+                            dailyFloorHeadCount[d] += wVal;
                         } else if (isWorkSymbol(sym) && sym !== '研' && sym !== '張') {
-                            headCount += hVal;
-                            realCount += hVal;
-                        } else if (sym === '○/休' || sym === '休/○' || sym === '○/有' || sym === '有/○' || sym === '〇/休' || sym === '休/〇' || sym === '〇/有' || sym === '有/〇') {
-                            headCount += (isHalfStaff ? 0.25 : 0.5);
-                            realCount += (isHalfStaff ? 0.25 : 0.5);
+                            dailyFloorRealWork[d] += wVal;
+                            dailyFloorHeadCount[d] += wVal;
+                        } else if (isHalfDuty(sym)) {
+                            dailyFloorRealWork[d] += (isHalfStaff ? 0.25 : 0.5);
+                            dailyFloorHeadCount[d] += (isHalfStaff ? 0.25 : 0.5);
+                        }
+
+                        if (isWorkSymbol(sym) && sym !== '研' && sym !== '張') {
+                            if (item.isST) dailyStWork[d] += wVal;
+                            else if (item.sec === secPta) dailyPta[d] += wVal;
+                            else if (item.sec === secOta) dailyOta[d] += wVal;
+                            else if (item.sec === secPtb) dailyPtb[d] += wVal;
+                            else if (item.sec === secOtb) dailyOtb[d] += wVal;
                         }
                     }
-                }
+                });
 
-                // 所属STスタッフ集計の合算
-                for (let si = 0; si < floorStStaff.length; si++) {
-                    const st = floorStStaff[si];
-                    if (st.isUnused || st.isZeroCount) continue;
-                    const cell = floorStGrid ? floorStGrid[si] : null;
-                    let sym = (cell && cell[d] && typeof cell[d] === 'object') ? cell[d].symbol : (cell && cell[d] ? cell[d] : '');
-                    if (!sym && st.days && st.days[d]) sym = st.days[d];
-
-                    const isHalfSt = !!st.isHalf;
-                    const hVal = isHalfSt ? 0.5 : 1.0;
-
-                    if (sym === '早') {
-                        earlyCount++;
-                        headCount += hVal;
-                        realCount += hVal;
-                    } else if (sym === '遅') {
-                        lateCount++;
-                        headCount += hVal;
-                        realCount += hVal;
-                    } else if (sym === 'E') {
-                        eveCount++;
-                        headCount += hVal;
-                        realCount += hVal;
-                    } else if (sym === '8時') {
-                        h8Count++;
-                        headCount += hVal;
-                        realCount += hVal;
-                    } else if (isWorkSymbol(sym) && sym !== '研' && sym !== '張') {
-                        headCount += hVal;
-                        realCount += hVal;
-                    } else if (sym === '○/休' || sym === '休/○' || sym === '○/有' || sym === '有/○' || sym === '〇/休' || sym === '休/〇' || sym === '〇/有' || sym === '有/〇') {
-                        headCount += (isHalfSt ? 0.25 : 0.5);
-                        realCount += (isHalfSt ? 0.25 : 0.5);
-                    }
-                }
-
-                // ★ 生活期ハ応援実数の合算（ハーフマンが0.5出勤していれば正確に合算！）
-                const lifeHaWork = (lifeHaDataMap[fc.id] && lifeHaDataMap[fc.id][d]) ? lifeHaDataMap[fc.id][d] : 0;
-                if (lifeHaWork > 0) {
-                    realCount += lifeHaWork;
-                    headCount += lifeHaWork; // ★ 出勤人数・実数の両方に0.5を加算！
-                }
-
-                dailyReal.push(realCount);
-                dailyEarly.push(earlyCount);
-                dailyLate.push(lateCount);
-                dailyEve.push(eveCount);
-                dailyH8.push(h8Count);
-                const displayTotal = headCount > 0 ? (headCount + (offset > 0 ? offset : 0)) : 0;
+                const rCount = dailyFloorRealWork[d];
+                const hCount = dailyFloorHeadCount[d];
+                dailyReal.push(rCount);
+                const displayTotal = hCount > 0 ? (hCount + (offset > 0 ? offset : 0)) : 0;
                 dailyTotal.push(displayTotal);
 
-                // 全フロア合算に加算
                 grandTotal[d] += displayTotal;
-                grandReal[d] += realCount;
-                grandEarly[d] += earlyCount;
-                grandLate[d] += lateCount;
-                grandEve[d] += eveCount;
-                grandH8[d] += h8Count;
+                grandReal[d] += rCount;
+                grandEarly[d] += dailyEarly[d];
+                grandLate[d] += dailyLate[d];
+                grandEve[d] += dailyEve[d];
+                grandH8[d] += dailyH8[d];
             }
 
             // テーブルヘッダー1: 日付ヘッダー（最右端まで太い横罫線を引く: border-top: 4px solid #334155 !important;）
@@ -8127,7 +8240,7 @@ function renderMasterIntegrationView() {
             // サマリー行1: ±補正 (5行目相当)
             html += `<tr style="background:${fc.bg}; font-weight:700;">
                 <td class="sticky-col-1" rowspan="8" style="background:${fc.headerBg}; color:${fc.badgeColor}; font-size:0.95rem; font-weight:800; vertical-align:middle; text-align:center; border-right:1px solid ${fc.border}; width:44px; min-width:44px; max-width:44px;">
-                    <a href="${fc.id}.html" title="${fc.label}病棟テーブルを開く" style="color:${fc.badgeColor}; text-decoration:none; display:flex; flex-direction:column; align-items:center; gap:2px; cursor:pointer;">
+                    <a href="${fc.id}.html?from=master&term=${curStartDate}" class="master-dept-link" title="${fc.label}病棟テーブルを開く（選択中のタームを連動）" style="color:${fc.badgeColor}; text-decoration:none; display:flex; flex-direction:column; align-items:center; gap:2px; cursor:pointer;">
                         <span>${fc.label}</span>
                         <span style="font-size:0.68rem; background:#ffffff; border:1px solid ${fc.border}; border-radius:4px; padding:1px 3px; font-weight:700; box-shadow:0 1px 2px rgba(0,0,0,0.06);">↗開く</span>
                     </a>
@@ -8159,13 +8272,6 @@ function renderMasterIntegrationView() {
                 html += `<td class="${thickCls} col-day-fixed" style="width:52px; min-width:52px; max-width:52px; background:#e2e8f0; color:#0369a1; font-weight:800; border-bottom:1px solid #cbd5e1; text-align:center;">${dailyReal[d]}</td>`;
             }
             html += `<td colspan="9" style="background:#e2e8f0;"></td></tr>`;
-
-            // 定数定義（1〜3階: 早3/遅1/E2/8時1、南: 早2/遅2/E2/8時1 ★南病棟も8時毎日1名！）
-            const isSouthFloor = (fc.id === 'south');
-            const targetEarly = isSouthFloor ? 2 : 3;
-            const targetLate = isSouthFloor ? 2 : 1;
-            const targetEve = 2;
-            const targetH8 = 1;
 
             // サマリー行4: 早 (8行目相当)
             html += `<tr style="background:${fc.bg}; font-weight:600;">
@@ -8238,89 +8344,6 @@ function renderMasterIntegrationView() {
                 html += `<td class="${thickCls} col-day-fixed" style="width:52px; min-width:52px; max-width:52px; background:${fc.bg}; border-bottom:2px solid ${fc.border};"></td>`;
             }
             html += `<td colspan="9" style="background:${fc.bg};"></td></tr>`;
-
-            // 詳細行群: デフォルト非表示、並び順: PTA → PTB → OTA → OTB → ST
-            const orderedStaffList = [];
-            const sections = ['PT A', 'PT B', 'OT A', 'OT B'];
-
-            sections.forEach(sec => {
-                fStaffList.forEach((s, sIdx) => {
-                    if (!s.isUnused && s.section === sec) {
-                        const gridRow = fGrid ? fGrid[sIdx] : (s.days || []);
-                        orderedStaffList.push({ staff: s, sec: sec, gridRow: gridRow, isST: false });
-                    }
-                });
-            });
-
-            // セクション未設定のその他スタッフ
-            fStaffList.forEach((s, sIdx) => {
-                if (!s.isUnused && !sections.includes(s.section)) {
-                    const gridRow = fGrid ? fGrid[sIdx] : (s.days || []);
-                    orderedStaffList.push({ staff: s, sec: s.section || '一般', gridRow: gridRow, isST: false });
-                }
-            });
-
-            // STスタッフ
-            floorStStaff.forEach((st, si) => {
-                const gridRow = floorStGrid[si] || (st.days || []);
-                orderedStaffList.push({ staff: st, sec: 'ST', gridRow: gridRow, isST: true });
-            });
-
-            // ★ 添付2要件: ST最下端の下にハーフマン（生活期ハ応援）の出勤を表示（記号パレットで修正可能に）
-            const haDef = haFloorDefs.find(d => d.flId === fc.id);
-            if (haDef) {
-                let haStaffFound = false;
-                baseLifeStaff.forEach((st, idx) => {
-                    if (st.isUnused || st.isZeroCount) return;
-                    const matches = (st.haSection === haDef.target || (haDef.target === 'ハ4' && st.haSection === 'ハ南'));
-                    if (!matches) return;
-                    haStaffFound = true;
-                    const rawRow = (lifeData && lifeData.outputGrid && lifeData.outputGrid[idx]) ? lifeData.outputGrid[idx] : null;
-                    const row = [];
-                    for (let d = 0; d < numDays; d++) {
-                        let cellVal = rawRow ? rawRow[d] : null;
-                        let sym = '';
-                        if (cellVal !== null && cellVal !== undefined) {
-                            // ★ 保存済みセルが存在する場合（空欄 '' に消去された場合も含む）はそれを尊重し、st.days で勝手に○に戻さない！
-                            sym = (typeof cellVal === 'object') ? (cellVal.symbol !== undefined ? cellVal.symbol : '') : (cellVal || '');
-                        } else if (st.days && st.days[d]) {
-                            // 未保存の場合のみ st.days を参照
-                            sym = st.days[d];
-                        }
-                        const isFixed = (cellVal && typeof cellVal === 'object') ? !!cellVal.isFixed : false;
-                        row.push({ symbol: sym, isFixed: isFixed });
-                    }
-                    orderedStaffList.push({
-                        staff: st,
-                        sec: 'ﾊｰﾌﾏﾝ',
-                        gridRow: row,
-                        isST: false,
-                        isHa: true,
-                        lifeStaffIdx: idx
-                    });
-                });
-                // ★ ユーザー指示: まだ生活期で組んでいない場合や該当スタッフがいない場合は、勝手にダミーのハーフマンを生成しない！
-                if (!haStaffFound && lifeData && lifeData.outputGrid && lifeData.outputGrid.length > 0) {
-                    // 生活期の勤務表が存在するが担当者が未設定の場合のみ空枠として待機（○で勝手に埋めない）
-                    const dummyStaff = {
-                        id: (haDef.target === 'ハ1' ? 41 : (haDef.target === 'ハ2' ? 42 : (haDef.target === 'ハ3' ? 43 : 44))),
-                        name: `ハーフマン (${haDef.target})`,
-                        haSection: haDef.target
-                    };
-                    const row = [];
-                    for (let d = 0; d < numDays; d++) {
-                        row.push({ symbol: '', isFixed: false });
-                    }
-                    orderedStaffList.push({
-                        staff: dummyStaff,
-                        sec: 'ﾊｰﾌﾏﾝ',
-                        gridRow: row,
-                        isST: false,
-                        isHa: true,
-                        lifeStaffIdx: -1
-                    });
-                }
-            }
 
             if (orderedStaffList.length === 0) {
                 html += `<tr class="master-detail-row master-detail-${fc.id}" style="display:${isExp ? 'table-row' : 'none'}; background:#ffffff;">
@@ -8453,69 +8476,7 @@ function renderMasterIntegrationView() {
             });
 
             // ★ 添付1・2準拠: 最下端STの下に当該フロアの集計部分を表示（展開時連動）！
-            // 項目: 出勤人数合計, 実数合計, PT A/2出勤, OT A/2出勤, PT B/3出勤, OT B/3出勤, ST出勤, 早, 遅, E, 8時
-            const secPta = isSouthFloor ? 'PT 2' : 'PT A';
-            const secOta = isSouthFloor ? 'OT 2' : 'OT A';
-            const secPtb = isSouthFloor ? 'PT 3' : 'PT B';
-            const secOtb = isSouthFloor ? 'OT 3' : 'OT B';
-
-            const dailyPta = new Array(numDays).fill(0);
-            const dailyOta = new Array(numDays).fill(0);
-            const dailyPtb = new Array(numDays).fill(0);
-            const dailyOtb = new Array(numDays).fill(0);
-            const dailyStWork = new Array(numDays).fill(0);
-            const dailyHaWork = new Array(numDays).fill(0); // ★ 各階自律集計
-            const dailyFloorRealWork = new Array(numDays).fill(0); // ★ 当該フロアの実数合計（PT+OT+ST+ハーフマン）
-            const dailyFloorHeadCount = new Array(numDays).fill(0); // ★ 当該フロアの出勤人数合計
-
-            orderedStaffList.forEach(item => {
-                const s = item.staff;
-                if (s.isUnused || s.isZeroCount) return;
-                for (let d = 0; d < numDays; d++) {
-                    const cell = item.gridRow ? item.gridRow[d] : null;
-                    const sym = (cell && typeof cell === 'object') ? (cell.symbol || '') : (cell || '');
-                    if (item.isHa) {
-                        // ハ応援スタッフの出勤実数集計（出勤0.5、半勤0.25、予定なし・空欄は0）
-                        if (isWorkSymbol(sym) && sym !== '研' && sym !== '張') {
-                            dailyHaWork[d] = 0.5;
-                            dailyFloorRealWork[d] += 0.5;
-                            dailyFloorHeadCount[d] += 0.5;
-                        } else if (sym === '○/休' || sym === '休/○' || sym === '○/有' || sym === '有/○' || sym === '〇/休' || sym === '休/〇' || sym === '〇/有' || sym === '有/〇') {
-                            dailyHaWork[d] = 0.25;
-                            dailyFloorRealWork[d] += 0.25;
-                            dailyFloorHeadCount[d] += 0.25;
-                        } else {
-                            dailyHaWork[d] = 0;
-                        }
-                    } else if (isWorkSymbol(sym) && sym !== '研' && sym !== '張') {
-                        const wVal = (s.isHalf ? 0.5 : 1.0);
-                        dailyFloorRealWork[d] += wVal;
-                        dailyFloorHeadCount[d] += wVal;
-                        if (item.isST) {
-                            dailyStWork[d] += wVal;
-                        } else {
-                            if (item.sec === secPta) dailyPta[d] += wVal;
-                            else if (item.sec === secOta) dailyOta[d] += wVal;
-                            else if (item.sec === secPtb) dailyPtb[d] += wVal;
-                            else if (item.sec === secOtb) dailyOtb[d] += wVal;
-                        }
-                    } else if (sym === '○/休' || sym === '休/○' || sym === '○/有' || sym === '有/○' || sym === '〇/休' || sym === '休/〇' || sym === '〇/有' || sym === '有/〇') {
-                        const wVal = (s.isHalf ? 0.25 : 0.5);
-                        dailyFloorRealWork[d] += wVal;
-                        dailyFloorHeadCount[d] += wVal;
-                        if (item.isST) dailyStWork[d] += wVal;
-                        else {
-                            if (item.sec === secPta) dailyPta[d] += wVal;
-                            else if (item.sec === secOta) dailyOta[d] += wVal;
-                            else if (item.sec === secPtb) dailyPtb[d] += wVal;
-                            else if (item.sec === secOtb) dailyOtb[d] += wVal;
-                        }
-                    }
-                }
-            });
-
-            // 集計フッター行のリスト定義
-            // ★ PT A(0.5) + ハーフマン(0.5) 等の小数合算を正確に反映
+            // 集計フッター行のリスト定義（先頭で計算した集計配列と100%完全連動）
             const floorFooterRows = [
                 { label: '出勤人数合計', vals: dailyFloorHeadCount, color: '#0f172a', bg: '#f1f5f9', bold: true },
                 { label: '実数合計', vals: dailyFloorRealWork, color: '#0369a1', bg: '#e2e8f0', bold: true },

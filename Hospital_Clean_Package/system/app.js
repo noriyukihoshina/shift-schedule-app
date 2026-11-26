@@ -1,3 +1,32 @@
+
+    function updateMasterNavLinks(targetTerm) {
+        const curTerm = targetTerm || currentWorkingStartDate || '2026-04-01';
+        document.querySelectorAll('.dept-nav-container a, a.dept-nav-btn, a[title*="病棟テーブル"], a.master-dept-link').forEach(btn => {
+            let href = btn.getAttribute('href');
+            if (href && !href.includes('index.html') && !href.includes('master') && !href.includes('javascript:')) {
+                const baseUrl = href.split('?')[0];
+                const newHref = `${baseUrl}?from=master&term=${curTerm}`;
+                btn.setAttribute('href', newHref);
+                btn.href = newHref;
+            }
+        });
+    }
+
+// ★ 出勤記号判定（全病棟・全職種共通）
+function isWorkSymbol(sym) {
+    if (!sym || typeof sym !== 'string') return false;
+    const s = sym.trim();
+    if (s === '○' || s === '〇' || s === '早' || s === '遅' || s === 'E' || s === '8時' || s === '出' || s === '出勤' || s === 'ハヤ' || s === 'オソ' || s === 'イブ') return true;
+    if (['A', 'B', 'C', 'D', 'F', 'G'].includes(s)) return true;
+    return false;
+}
+
+// ★ 半休・半勤記号判定
+function isHalfDuty(sym) {
+    if (!sym || typeof sym !== 'string') return false;
+    return sym.includes('/');
+}
+
 // ★ リフレッシュ休暇記号判定（上1〜5、下1〜3。これらはいかなる場合も赤字固定にせず通常黒字！）
 function isRefreshHolidaySymbol(sym) {
     if (!sym || typeof sym !== 'string') return false;
@@ -181,9 +210,10 @@ document.addEventListener('DOMContentLoaded', () => {
         const select = document.getElementById('termSelect');
         if (!select) return;
 
-        const curStart = shouldSyncGlobalTerm
+        const urlTermParam = (new URLSearchParams(window.location.search)).get('term');
+        const curStart = urlTermParam || (shouldSyncGlobalTerm
             ? (localStorage.getItem(STORAGE_KEY_GLOBAL_CURRENT_TERM) || localStorage.getItem(STORAGE_KEY_LAST_ACTIVE) || localStorage.getItem('shift_schedule_current_start_date') || document.getElementById('termStartDate')?.value || currentWorkingStartDate || '2026-04-01')
-            : (localStorage.getItem(STORAGE_KEY_LAST_ACTIVE) || document.getElementById('termStartDate')?.value || currentWorkingStartDate || '2026-04-01');
+            : (localStorage.getItem(STORAGE_KEY_LAST_ACTIVE) || document.getElementById('termStartDate')?.value || currentWorkingStartDate || '2026-04-01'));
         currentWorkingStartDate = curStart;
         const startDateInput = document.getElementById('termStartDate');
         if (startDateInput) startDateInput.value = curStart;
@@ -213,6 +243,9 @@ document.addEventListener('DOMContentLoaded', () => {
                 localStorage.setItem(STORAGE_KEY_LAST_ACTIVE, newDate);
                 localStorage.setItem(STORAGE_KEY_GLOBAL_CURRENT_TERM, newDate);
                 localStorage.setItem('shift_schedule_current_start_date', newDate);
+                if (typeof updateMasterNavLinks === 'function') {
+                    updateMasterNavLinks(newDate); // ★ ターム変更時に他病棟へのリンクURLを即座に新しいタームに更新！
+                }
 
                 const termInfo = getTermInfo(newDate);
                 const endDisplay = document.getElementById('termEndDateDisplay');
@@ -1085,16 +1118,10 @@ document.addEventListener('DOMContentLoaded', () => {
                                     const lT = JSON.parse(curLocal);
                                     const localTime = new Date(lT.updatedAt || 0).getTime();
                                     const cloudTime = new Date(cloud.terms[tDate].updatedAt || 0).getTime();
-                                    // ★ ユーザー作成勤務の完全保護:
-                                    // ローカルに勤務表（outputGridまたは希望勤務）が存在し、サーバー側が空の場合は絶対に上書きしない
-                                    const hasLocalGrid = lT.outputGrid && lT.outputGrid.length > 0;
-                                    const hasCloudGrid = cloud.terms[tDate].outputGrid && cloud.terms[tDate].outputGrid.length > 0;
-                                    if (hasLocalGrid && !hasCloudGrid) {
-                                        setTimeout(() => pushStateToCloud(false), 500);
-                                        return;
-                                    }
-                                    // 手動更新(showToastMsg)以外、かつクラウドマスタ強制上書き(shouldApplyMaster)でない場合のみ、日時に基づく保護を行う
-                                    if (!showToastMsg && !shouldApplyMaster && localTime >= cloudTime) {
+                                    // ★ マスターテーブルからの遷移時、またはサーバー側の方が新しい場合はサーバー側データを100%最優先適用！
+                                    const urlParamsCheck = new URLSearchParams(window.location.search);
+                                    const isFromMaster = (urlParamsCheck.get('from') === 'master');
+                                    if (!isFromMaster && !showToastMsg && !shouldApplyMaster && localTime > cloudTime) {
                                         return;
                                     }
                                 } catch (e) {}
@@ -1112,9 +1139,10 @@ document.addEventListener('DOMContentLoaded', () => {
 
                 // 4. 表示中タームの再読込＆画面反映
                 // ★ ユーザー指示: 他テーブルへ遷移した際にクラウドの古い日付でタームが進んだり戻ったりするのを完全遮断！
-                const targetTermDate = shouldSyncGlobalTerm
+                const urlTermParam2 = (new URLSearchParams(window.location.search)).get('term');
+                const targetTermDate = urlTermParam2 || (shouldSyncGlobalTerm
                     ? (window.localStorage.getItem(STORAGE_KEY_GLOBAL_CURRENT_TERM) || currentWorkingStartDate || (isInitialBoot && cloud.lastActiveDate ? cloud.lastActiveDate : '2026-04-01'))
-                    : (window.localStorage.getItem(STORAGE_KEY_LAST_ACTIVE) || currentWorkingStartDate || (isInitialBoot && cloud.lastActiveDate ? cloud.lastActiveDate : '2026-04-01'));
+                    : (window.localStorage.getItem(STORAGE_KEY_LAST_ACTIVE) || currentWorkingStartDate || (isInitialBoot && cloud.lastActiveDate ? cloud.lastActiveDate : '2026-04-01')));
 
                 const matchedTerm = findTermByStartDate(targetTermDate);
                 const finalDate = matchedTerm ? matchedTerm.startDate : targetTermDate;
@@ -1125,13 +1153,12 @@ document.addEventListener('DOMContentLoaded', () => {
                 if (dateInput) dateInput.value = finalDate;
                 const termSelect = document.getElementById('termSelect');
                 if (termSelect) termSelect.value = finalDate;
+                getTermInfo(finalDate); // ★ タームの日数・タイトルを確実に最新化！
 
                 if (window.localStorage.getItem(`${STORAGE_KEY_PREFIX}${finalDate}`)) {
                     loadTermFromStorage(finalDate);
                 } else {
-                    loadStaffMaster();
-                    staffList.forEach(s => { s.remarks = ''; });
-                    renderInputTable();
+                    initNewTerm(finalDate);
                 }
                 renderSavedTermsSelect();
                 // トグル状態および入力テーブルを画面へ確実に反映
@@ -1467,11 +1494,14 @@ document.addEventListener('DOMContentLoaded', () => {
                     stDailyEve: getLinkedSTDailyEve(),
                     stFloorFtCount: getLinkedSTFloorFtCount()
                 });
-                scheduler.grid = data.outputGrid.map(row => {
+                scheduler.grid = (Array.isArray(data.outputGrid) ? data.outputGrid : []).map(row => {
                     const rCopy = Array.isArray(row) ? row.map(c => ({ ...c })) : [];
                     while (rCopy.length < NUM_DAYS) rCopy.push({ symbol: '', isFixed: false });
                     return rCopy.slice(0, NUM_DAYS);
                 });
+                while (scheduler.grid.length < NUM_STAFF) {
+                    scheduler.grid.push(new Array(NUM_DAYS).fill(null).map(() => ({ symbol: '', isFixed: false })));
+                }
 
                 // ★ 過去の旧エンジン（rev37以前）で生成された出力データがクラウドに残っており、
                 // 26日目（日曜）に25.5名のような極端な落ち込み（実数負荷の最大-最小差 > 3.0）がある場合は、
@@ -1512,81 +1542,92 @@ document.addEventListener('DOMContentLoaded', () => {
                 );
                 const maxTeamSpread = Math.max(calcSpread(secArrays.teamA), calcSpread(secArrays.teamB));
 
-                if (loadedLoadDiff > 3.0 || (!data.sectionTeamLeveledRev45 && (maxSecSpread >= 5 || maxTeamSpread >= 6))) {
-                    // まず既存のグリッドに対してクロススワップ平準化を適用
-                    scheduler.balanceDailyWorkforce();
-                    // もし初期配置から組み直した方がさらにセクション・チームのブレが小さく制約エラーも0件なら採用
-                    const freshSched = new ShiftScheduler(staffList, {
-                        standardHolidays: stdVal,
-                        dates: term.dates,
-                        dayOffsets: [...dayOffsets],
-                        isST: isST,
-                        isSouth: isSouth,
-                        isLife: isLife,
-                        lifeDailyWork: getLinkedLifeDailyWork(),
-                        stDailyWork: getLinkedSTDailyWork(),
-                        stDailyHeadCount: getLinkedSTDailyHeadCount(),
-                        stDailyFtWork: getLinkedSTDailyFtWork(),
-                        stDailyEarly: getLinkedSTDailyEarly(),
-                        stDailyLate: getLinkedSTDailyLate(),
-                        stDailyEve: getLinkedSTDailyEve(),
-                        stFloorFtCount: getLinkedSTFloorFtCount()
-                    });
-                    const reBase = freshSched.solveBaseSchedule({ force: true });
-                    if (reBase && reBase.grid) {
-                        if (hasUnfixedSpecialInLoaded) {
-                            const reSpec = freshSched.assignSpecialDutiesToGrid({ force: true });
-                            if (reSpec && reSpec.grid) {
-                                freshSched.grid = reSpec.grid;
+                try {
+                    if (loadedLoadDiff > 3.0 || (!data.sectionTeamLeveledRev45 && (maxSecSpread >= 5 || maxTeamSpread >= 6))) {
+                        // まず既存のグリッドに対してクロススワップ平準化を適用
+                        if (typeof scheduler.balanceDailyWorkforce === 'function') scheduler.balanceDailyWorkforce();
+                        // もし初期配置から組み直した方がさらにセクション・チームのブレが小さく制約エラーも0件なら採用
+                        const freshSched = new ShiftScheduler(staffList, {
+                            standardHolidays: stdVal,
+                            dates: term.dates,
+                            dayOffsets: [...dayOffsets],
+                            isST: isST,
+                            isSouth: isSouth,
+                            isLife: isLife,
+                            lifeDailyWork: getLinkedLifeDailyWork(),
+                            stDailyWork: getLinkedSTDailyWork(),
+                            stDailyHeadCount: getLinkedSTDailyHeadCount(),
+                            stDailyFtWork: getLinkedSTDailyFtWork(),
+                            stDailyEarly: getLinkedSTDailyEarly(),
+                            stDailyLate: getLinkedSTDailyLate(),
+                            stDailyEve: getLinkedSTDailyEve(),
+                            stFloorFtCount: getLinkedSTFloorFtCount()
+                        });
+                        const reBase = freshSched.solveBaseSchedule({ force: true });
+                        if (reBase && reBase.grid) {
+                            if (hasUnfixedSpecialInLoaded) {
+                                const reSpec = freshSched.assignSpecialDutiesToGrid({ force: true });
+                                if (reSpec && reSpec.grid) {
+                                    freshSched.grid = reSpec.grid;
+                                }
+                            }
+                            const freshVal = validateScheduleGrid(freshSched.grid, staffList, {
+                                dates: term.dates,
+                                standardHolidays: stdVal,
+                                isFinal: hasUnfixedSpecialInLoaded,
+                                isST: isST,
+                                isSouth: isSouth,
+                                isLife: isLife,
+                                stStaffData: linkedStStaffData,
+                                linkedStStaffData: linkedStStaffData
+                            });
+                            const curVal = validateScheduleGrid(scheduler.grid, staffList, {
+                                dates: term.dates,
+                                standardHolidays: stdVal,
+                                isFinal: hasUnfixedSpecialInLoaded,
+                                isST: isST,
+                                isSouth: isSouth,
+                                isLife: isLife,
+                                stStaffData: linkedStStaffData,
+                                linkedStStaffData: linkedStStaffData
+                            });
+                            if (freshVal.errors.length <= curVal.errors.length) {
+                                scheduler.grid = freshSched.grid;
                             }
                         }
-                        const freshVal = validateScheduleGrid(freshSched.grid, staffList, {
-                            dates: term.dates,
-                            standardHolidays: stdVal,
-                            isFinal: hasUnfixedSpecialInLoaded,
-                            isST: isST,
-                            isSouth: isSouth,
-                            isLife: isLife,
-                            stStaffData: linkedStStaffData,
-                            linkedStStaffData: linkedStStaffData
-                        });
-                        const curVal = validateScheduleGrid(scheduler.grid, staffList, {
-                            dates: term.dates,
-                            standardHolidays: stdVal,
-                            isFinal: hasUnfixedSpecialInLoaded,
-                            isST: isST,
-                            isSouth: isSouth,
-                            isLife: isLife,
-                            stStaffData: linkedStStaffData,
-                            linkedStStaffData: linkedStStaffData
-                        });
-                        if (freshVal.errors.length <= curVal.errors.length) {
-                            scheduler.grid = freshSched.grid;
-                        }
+                        data.outputGrid = scheduler.grid;
+                        data.sectionTeamLeveledRev45 = true;
+                        try {
+                            localStorage.setItem(`${STORAGE_KEY_PREFIX}${targetStart}`, JSON.stringify(data));
+                        } catch (e) {}
+                    } else if (!data.sectionTeamLeveledRev45) {
+                        if (typeof scheduler.balanceDailyWorkforce === 'function') scheduler.balanceDailyWorkforce();
+                        data.outputGrid = scheduler.grid;
+                        data.sectionTeamLeveledRev45 = true;
+                        try {
+                            localStorage.setItem(`${STORAGE_KEY_PREFIX}${targetStart}`, JSON.stringify(data));
+                        } catch (e) {}
                     }
-                    data.outputGrid = scheduler.grid;
-                    data.sectionTeamLeveledRev45 = true;
-                    try {
-                        localStorage.setItem(`${STORAGE_KEY_PREFIX}${targetStart}`, JSON.stringify(data));
-                    } catch (e) {}
-                } else if (!data.sectionTeamLeveledRev45) {
-                    scheduler.balanceDailyWorkforce();
-                    data.outputGrid = scheduler.grid;
-                    data.sectionTeamLeveledRev45 = true;
-                    try {
-                        localStorage.setItem(`${STORAGE_KEY_PREFIX}${targetStart}`, JSON.stringify(data));
-                    } catch (e) {}
-                }
 
-                const newStats = scheduler.calculateStats();
-                lastScheduler = scheduler;
-                lastSolveResult = {
-                    success: true,
-                    grid: scheduler.grid,
-                    stats: newStats
-                };
-                renderOutputTable(lastSolveResult.grid, newStats);
-                renderStatsDashboard(newStats);
+                    const newStats = scheduler.calculateStats();
+                    lastScheduler = scheduler;
+                    lastSolveResult = {
+                        success: true,
+                        grid: scheduler.grid,
+                        stats: newStats
+                    };
+                    renderOutputTable(lastSolveResult.grid, newStats);
+                    renderStatsDashboard(newStats);
+                } catch (gridErr) {
+                    console.warn('outputGrid復元フォールバック:', gridErr);
+                    lastScheduler = scheduler;
+                    lastSolveResult = {
+                        success: true,
+                        grid: scheduler.grid,
+                        stats: calculateGridStats(scheduler.grid)
+                    };
+                    renderOutputTable(lastSolveResult.grid, lastSolveResult.stats);
+                }
             } else {
                 lastSolveResult = null;
                 lastScheduler = null;
@@ -1789,6 +1830,39 @@ document.addEventListener('DOMContentLoaded', () => {
                         }
                     }
                 } catch (e) {}
+            }
+
+            // 1-2. マスターテーブル保存データ（shift_schedule_master_term_*）から最新微調整済みグリッドを抽出
+            if (prevStaffByName.size === 0) {
+                const rawMasterTerm = localStorage.getItem(`shift_schedule_master_term_${prevStartDateStr}`);
+                if (rawMasterTerm) {
+                    try {
+                        const mData = JSON.parse(rawMasterTerm);
+                        if (mData && Array.isArray(mData.staffList) && Array.isArray(mData.outputGrid)) {
+                            mData.staffList.forEach((mst, mIdx) => {
+                                const normName = (mst.name || '').trim();
+                                if (!normName) return;
+                                const row = mData.outputGrid[mIdx];
+                                if (Array.isArray(row) && row.length >= 7) {
+                                    const rLen = row.length;
+                                    const last7 = [
+                                        extractCellSymbol(row[rLen - 7]),
+                                        extractCellSymbol(row[rLen - 6]),
+                                        extractCellSymbol(row[rLen - 5]),
+                                        extractCellSymbol(row[rLen - 4]),
+                                        extractCellSymbol(row[rLen - 3]),
+                                        extractCellSymbol(row[rLen - 2]),
+                                        extractCellSymbol(row[rLen - 1])
+                                    ];
+                                    prevStaffByName.set(normName, last7);
+                                }
+                            });
+                            if (prevStaffByName.size > 0) {
+                                usedSource = '👑 マスターテーブル保存データ（微調整反映済）';
+                            }
+                        }
+                    } catch (e) {}
+                }
             }
 
             // 2. マスター確定データがない場合のフォールバック（フロアの保存データ）
@@ -3786,8 +3860,37 @@ document.addEventListener('DOMContentLoaded', () => {
             }
             if (stIdx === -1) return false;
 
-            if (!fData.outputGrid) fData.outputGrid = [];
-            if (!fData.outputGrid[stIdx]) fData.outputGrid[stIdx] = new Array(NUM_DAYS).fill({ symbol: '', isFixed: false });
+            if (!Array.isArray(fData.outputGrid)) {
+                fData.outputGrid = fData.staffList.map(st => {
+                    if (Array.isArray(st.days)) return st.days.map(sym => ({ symbol: sym || '', isFixed: false }));
+                    return new Array(NUM_DAYS).fill(null).map(() => ({ symbol: '', isFixed: false }));
+                });
+            } else {
+                // ★ 既存のoutputGridがある場合でも、空セルにstaffList.days（希望入力の○等）を安全補完マージ！
+                fData.staffList.forEach((st, s) => {
+                    if (!fData.outputGrid[s]) {
+                        fData.outputGrid[s] = new Array(NUM_DAYS).fill(null).map(() => ({ symbol: '', isFixed: false }));
+                    }
+                    if (Array.isArray(st.days)) {
+                        for (let d = 0; d < NUM_DAYS; d++) {
+                            const c = fData.outputGrid[s][d];
+                            const curSym = (c && typeof c === 'object') ? c.symbol : (c || '');
+                            if (!curSym && st.days[d]) {
+                                fData.outputGrid[s][d] = { symbol: st.days[d], isFixed: false };
+                            }
+                        }
+                    }
+                });
+            }
+            while (fData.outputGrid.length < fData.staffList.length) {
+                fData.outputGrid.push(new Array(NUM_DAYS).fill(null).map(() => ({ symbol: '', isFixed: false })));
+            }
+            if (!Array.isArray(fData.outputGrid[stIdx])) {
+                fData.outputGrid[stIdx] = new Array(NUM_DAYS).fill(null).map(() => ({ symbol: '', isFixed: false }));
+            }
+            while (fData.outputGrid[stIdx].length < NUM_DAYS) {
+                fData.outputGrid[stIdx].push({ symbol: '', isFixed: false });
+            }
 
             const curCell = fData.outputGrid[stIdx][dayIdx];
             const curFixed = (curCell && typeof curCell === 'object') ? !!curCell.isFixed : false;
@@ -3797,6 +3900,16 @@ document.addEventListener('DOMContentLoaded', () => {
                 fData.outputGrid[stIdx][dayIdx] = { symbol: curSym, isFixed: !curFixed };
             } else {
                 fData.outputGrid[stIdx][dayIdx] = { symbol: newSym, isFixed: curFixed };
+                // ★ 病棟テーブルの希望入力シート用 days も確実に更新！
+                if (fData.staffList && fData.staffList[stIdx]) {
+                    if (!Array.isArray(fData.staffList[stIdx].days)) {
+                        fData.staffList[stIdx].days = new Array(NUM_DAYS).fill('');
+                    }
+                    while (fData.staffList[stIdx].days.length < NUM_DAYS) {
+                        fData.staffList[stIdx].days.push('');
+                    }
+                    fData.staffList[stIdx].days[dayIdx] = newSym;
+                }
             }
 
             const openFloors = Array.from(masterExpandedFloors);
@@ -3812,6 +3925,27 @@ document.addEventListener('DOMContentLoaded', () => {
                 });
             }
             localStorage.setItem(targetKey, nextJson);
+
+            // ★ ユーザー指示: マスターでの修正内容を該当病棟のサーバー保存ファイル（data/dept_*.json）にも即時書き戻し！
+            try {
+                const saveDeptId = isLifeCell ? 'life' : (isStCell ? 'st' : floorId);
+                fetch('/api/cloud_sync', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        deptId: saveDeptId,
+                        lastActiveDate: curStartDate,
+                        termDate: curStartDate,
+                        termData: fData,
+                        savedTerms: [curStartDate]
+                    })
+                }).catch(e => console.warn('マスター修正のサーバーファイル保存失敗:', e));
+            } catch (err) {}
+
+            // ★ マスター確定直前7日実績も即時更新
+            if (typeof saveMasterConfirmedLast7Days === 'function') {
+                saveMasterConfirmedLast7Days(curStartDate);
+            }
 
             // 全体サマリー＆階別集計を即時再描画（masterExpandedFloorsにより展開行は折りたたまれず完全維持！）
             if (typeof renderMasterIntegrationView === 'function') {
@@ -4221,60 +4355,52 @@ document.addEventListener('DOMContentLoaded', () => {
         });
 
         try {
+            // ★ ユーザー指示: 病棟異動者（例: 6月まで1階、7月から2階）の過去データを全館横断で集約カウント！
             const terms = getSavedTerms();
-            terms.forEach(termDate => {
-                // 当ターム分は現在メモリ上の staffList.days / lastSolveResult.grid を最優先で参照するためスキップ
-                if (termDate === currentStartDate) return;
-                const isPast = (termDate < currentStartDate);
-                const raw = localStorage.getItem(`${STORAGE_KEY_PREFIX}${termDate}`);
-                if (!raw) return;
-                const data = JSON.parse(raw);
-                if (!data) return;
+            const allDeptPrefixes = [
+                'shift_schedule_1f_term_',
+                'shift_schedule_2f_term_',
+                'shift_schedule_3f_term_',
+                'shift_schedule_south_term_',
+                'shift_schedule_st_term_',
+                'shift_schedule_life_term_',
+                'shift_schedule_master_term_',
+                'shift_schedule_term_' // 旧バージョン互換
+            ];
 
-                if (data.outputGrid && Array.isArray(data.outputGrid)) {
-                    data.outputGrid.forEach((row, sIdx) => {
-                        const savedSt = (data.staffList && data.staffList[sIdx]);
-                        const sName = savedSt ? (savedSt.name || '').trim() : '';
-                        const sPrevName = savedSt ? (savedSt.prevName || '').trim() : '';
-                        let staffId = (sName && nameToCurrentId.has(sName)) ? nameToCurrentId.get(sName) :
-                                      (sPrevName && nameToCurrentId.has(sPrevName)) ? nameToCurrentId.get(sPrevName) :
-                                      (sIdx + 1);
+            const checkedKeys = new Set();
+            allDeptPrefixes.forEach(prefix => {
+                terms.forEach(termDate => {
+                    const key = `${prefix}${termDate}`;
+                    if (checkedKeys.has(key)) return;
+                    checkedKeys.add(key);
 
-                        if (!pastHistory[staffId]) pastHistory[staffId] = new Set();
-                        if (!futureHistory[staffId]) futureHistory[staffId] = new Set();
+                    // 当タームかつ現在病棟分は現在メモリ上のデータを最優先するためスキップ
+                    if (prefix === STORAGE_KEY_PREFIX && termDate === currentStartDate) return;
 
-                        row.forEach((cell, dIdx) => {
-                            const sym = (cell && cell.symbol) ? cell.symbol : cell;
-                            if (SYMBOLS.REF_SUMMER.includes(sym) || SYMBOLS.REF_WINTER.includes(sym)) {
-                                if (isPast) {
-                                    pastHistory[staffId].add(sym);
-                                } else {
-                                    futureHistory[staffId].add(sym);
-                                }
-                                allHistoryDetails.push({
-                                    staffId,
-                                    staffName: savedSt ? savedSt.name : `スタッフ ${staffId}`,
-                                    termDate,
-                                    symbol: sym,
-                                    dayIndex: dIdx,
-                                    isCurrent: false
-                                });
-                            }
-                        });
-                    });
-                } else if (data.staffList && Array.isArray(data.staffList)) {
-                    data.staffList.forEach((st, sIdx) => {
-                        const sName = (st.name || '').trim();
-                        const sPrevName = (st.prevName || '').trim();
-                        let staffId = (sName && nameToCurrentId.has(sName)) ? nameToCurrentId.get(sName) :
-                                      (sPrevName && nameToCurrentId.has(sPrevName)) ? nameToCurrentId.get(sPrevName) :
-                                      (st.id || (sIdx + 1));
+                    const isPast = (termDate < currentStartDate);
+                    const raw = localStorage.getItem(key);
+                    if (!raw) return;
 
-                        if (!pastHistory[staffId]) pastHistory[staffId] = new Set();
-                        if (!futureHistory[staffId]) futureHistory[staffId] = new Set();
+                    let data = null;
+                    try { data = JSON.parse(raw); } catch (e) { return; }
+                    if (!data) return;
 
-                        if (Array.isArray(st.days)) {
-                            st.days.forEach((sym, dIdx) => {
+                    if (data.outputGrid && Array.isArray(data.outputGrid)) {
+                        data.outputGrid.forEach((row, sIdx) => {
+                            const savedSt = (data.staffList && data.staffList[sIdx]);
+                            const sName = savedSt ? (savedSt.name || '').trim() : '';
+                            const sPrevName = savedSt ? (savedSt.prevName || '').trim() : '';
+                            let staffId = (sName && nameToCurrentId.has(sName)) ? nameToCurrentId.get(sName) :
+                                          (sPrevName && nameToCurrentId.has(sPrevName)) ? nameToCurrentId.get(sPrevName) : null;
+
+                            if (!staffId) return; // 現在の病棟にいないスタッフはスキップ
+
+                            if (!pastHistory[staffId]) pastHistory[staffId] = new Set();
+                            if (!futureHistory[staffId]) futureHistory[staffId] = new Set();
+
+                            row.forEach((cell, dIdx) => {
+                                const sym = (cell && cell.symbol) ? cell.symbol : cell;
                                 if (SYMBOLS.REF_SUMMER.includes(sym) || SYMBOLS.REF_WINTER.includes(sym)) {
                                     if (isPast) {
                                         pastHistory[staffId].add(sym);
@@ -4283,7 +4409,7 @@ document.addEventListener('DOMContentLoaded', () => {
                                     }
                                     allHistoryDetails.push({
                                         staffId,
-                                        staffName: st.name,
+                                        staffName: savedSt ? savedSt.name : `スタッフ ${staffId}`,
                                         termDate,
                                         symbol: sym,
                                         dayIndex: dIdx,
@@ -4291,9 +4417,41 @@ document.addEventListener('DOMContentLoaded', () => {
                                     });
                                 }
                             });
-                        }
-                    });
-                }
+                        });
+                    } else if (data.staffList && Array.isArray(data.staffList)) {
+                        data.staffList.forEach((st, sIdx) => {
+                            const sName = (st.name || '').trim();
+                            const sPrevName = (st.prevName || '').trim();
+                            let staffId = (sName && nameToCurrentId.has(sName)) ? nameToCurrentId.get(sName) :
+                                          (sPrevName && nameToCurrentId.has(sPrevName)) ? nameToCurrentId.get(sPrevName) : null;
+
+                            if (!staffId) return;
+
+                            if (!pastHistory[staffId]) pastHistory[staffId] = new Set();
+                            if (!futureHistory[staffId]) futureHistory[staffId] = new Set();
+
+                            if (Array.isArray(st.days)) {
+                                st.days.forEach((sym, dIdx) => {
+                                    if (SYMBOLS.REF_SUMMER.includes(sym) || SYMBOLS.REF_WINTER.includes(sym)) {
+                                        if (isPast) {
+                                            pastHistory[staffId].add(sym);
+                                        } else {
+                                            futureHistory[staffId].add(sym);
+                                        }
+                                        allHistoryDetails.push({
+                                            staffId,
+                                            staffName: st.name || `スタッフ ${staffId}`,
+                                            termDate,
+                                            symbol: sym,
+                                            dayIndex: dIdx,
+                                            isCurrent: false
+                                        });
+                                    }
+                                });
+                            }
+                        });
+                    }
+                });
             });
         } catch (e) {
             console.error('リフ取得履歴のスキャン中にエラー:', e);
@@ -5078,15 +5236,8 @@ document.addEventListener('DOMContentLoaded', () => {
                 let sym = (cellVal && typeof cellVal === 'object') ? (cellVal.symbol || '') : (cellVal || '');
                 if (!sym && st.days && st.days[d]) sym = st.days[d];
                 if (!sym) {
-                    const dInfo = (term && term.dates && term.dates[d]) ? term.dates[d] : null;
-                    const wIdx = dInfo ? dInfo.wIdx : (d % 7); // 0:月, 1:火, 2:水, 3:木, 4:金, 5:土, 6:日
-                    const weekNum = Math.floor(d / 7);
-                    let isOffDay = false;
-                    if (offPatternIdx === 0) isOffDay = (wIdx === 0 || wIdx === 5); // 月・土
-                    else if (offPatternIdx === 1) isOffDay = (wIdx === 1 || wIdx === 6); // 火・日
-                    else if (offPatternIdx === 2) isOffDay = (wIdx === 2 || wIdx === 5); // 水・土
-                    else if (offPatternIdx === 3) isOffDay = (weekNum % 2 === 0 ? (wIdx === 3 || wIdx === 4) : (wIdx === 4 || wIdx === 6)); // 木・金 / 金・日
-                    sym = isOffDay ? '休' : '○';
+                    // ★ ユーザー指示: ST予定が未入力の時は勝手に'○'を入れず空欄''のまま保持する！
+                    sym = '';
                 }
                 row.push({
                     symbol: sym,
@@ -5364,14 +5515,8 @@ document.addEventListener('DOMContentLoaded', () => {
                 let sym = (cellVal && typeof cellVal === 'object') ? (cellVal.symbol || '') : (cellVal || '');
                 if (!sym && st.days && st.days[d]) sym = st.days[d];
                 if (!sym) {
-                    const dInfo = (term && term.dates && term.dates[d]) ? term.dates[d] : null;
-                    const wDay = dInfo ? dInfo.weekday : (d % 7 === 5 ? '土' : (d % 7 === 6 ? '日' : '月'));
-                    if (isWeekendOff) {
-                        sym = (wDay === '土' || wDay === '日') ? '休' : '○';
-                    } else {
-                        // ハ3, ハ4（通所組み）: 日曜日休固定、月〜土は出勤○
-                        sym = (wDay === '日') ? '休' : '○';
-                    }
+                    // ★ ユーザー指示: まだ予定を入れていない時は勝手に'○'を入れず空欄''のまま保持する！
+                    sym = '';
                 }
                 const isFixed = (cellVal && typeof cellVal === 'object') ? !!cellVal.isFixed : false;
                 row.push({ symbol: sym, isFixed: isFixed });
@@ -7687,6 +7832,12 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
 function renderMasterIntegrationView() {
+        // ★ 選択中のタームを各病棟ナビリンクに常時即時反映！
+        if (typeof updateMasterNavLinks === 'function') {
+            const termSel = document.getElementById('masterTermSelect') || document.getElementById('termSelect');
+            const curDate = (termSel && termSel.value) ? termSel.value : (currentWorkingStartDate || '2026-04-01');
+            updateMasterNavLinks(curDate);
+        }
         const checkThead = document.getElementById('checkTableHead');
         const checkTbody = document.getElementById('checkTableBody');
         const checkTfoot = document.getElementById('checkTableFoot');
@@ -7797,9 +7948,12 @@ function renderMasterIntegrationView() {
                 const gridRow = (lifeData && lifeData.outputGrid && lifeData.outputGrid[idx]) ? lifeData.outputGrid[idx] : null;
                 for (let d = 0; d < numDays; d++) {
                     const c = gridRow ? gridRow[d] : null;
-                    // ★ ユーザー指示: まだ組んでいない時（gridRowが空、またはセルが空欄）は出勤とみなさず加算しない！
-                    // 実際に生活期テーブルで自動生成・確定された出勤記号がある場合のみ加算！
-                    let sym = (c && typeof c === 'object') ? (c.symbol || '') : (c || '');
+                    let sym = '';
+                    if (c !== null && c !== undefined) {
+                        sym = (typeof c === 'object') ? (c.symbol !== undefined ? c.symbol : '') : (c || '');
+                    } else if (st.days && st.days[d]) {
+                        sym = st.days[d];
+                    }
                     if (isWorkSymbol(sym) && sym !== '研' && sym !== '張') {
                         lifeHaDataMap[def.flId][d] += 0.5; // ★ 生活期ハ応援スタッフが出勤している日は病棟実数に0.5加算！
                     } else if (sym === '○/休' || sym === '休/○' || sym === '○/有' || sym === '有/○' || sym === '〇/休' || sym === '休/〇' || sym === '〇/有' || sym === '有/〇') {
@@ -7845,112 +7999,208 @@ function renderMasterIntegrationView() {
                 });
             }
 
-            // 日別集計（±補正, 出勤人数合計, 実数合計, 早, 遅, E, 8時）
+            // ★ 添付1・2準拠: 定数およびセクション名称定義
+            const isSouthFloor = (fc.id === 'south');
+            const targetEarly = isSouthFloor ? 2 : 3;
+            const targetLate = isSouthFloor ? 2 : 1;
+            const targetEve = 2;
+            const targetH8 = 1;
+            const secPta = isSouthFloor ? 'PT 2' : 'PT A';
+            const secOta = isSouthFloor ? 'OT 2' : 'OT A';
+            const secPtb = isSouthFloor ? 'PT 3' : 'PT B';
+            const secOtb = isSouthFloor ? 'OT 3' : 'OT B';
+
+            // ★ 詳細行群（並び順: PTA → PTB → OTA → OTB → 一般 → ST → ハーフマン）の先行構築
+            const orderedStaffList = [];
+            const sections = ['PT A', 'PT B', 'OT A', 'OT B'];
+
+            sections.forEach(sec => {
+                fStaffList.forEach((s, sIdx) => {
+                    if (!s.isUnused && s.section === sec) {
+                        const row = [];
+                        const rawRow = (fGrid && fGrid[sIdx]) ? fGrid[sIdx] : null;
+                        for (let d = 0; d < numDays; d++) {
+                            const c = rawRow ? rawRow[d] : null;
+                            let sym = (c && typeof c === 'object') ? (c.symbol || '') : (c || '');
+                            if (!sym && s.days && s.days[d]) sym = s.days[d]; // ★ 1階で入力された○等の希望を確実に復元！
+                            const isFixed = (c && typeof c === 'object') ? !!c.isFixed : false;
+                            row.push({ symbol: sym, isFixed: isFixed });
+                        }
+                        orderedStaffList.push({ staff: s, sec: sec, gridRow: row, isST: false });
+                    }
+                });
+            });
+
+            // セクション未設定のその他スタッフ
+            fStaffList.forEach((s, sIdx) => {
+                if (!s.isUnused && !sections.includes(s.section)) {
+                    const row = [];
+                    const rawRow = (fGrid && fGrid[sIdx]) ? fGrid[sIdx] : null;
+                    for (let d = 0; d < numDays; d++) {
+                        const c = rawRow ? rawRow[d] : null;
+                        let sym = (c && typeof c === 'object') ? (c.symbol || '') : (c || '');
+                        if (!sym && s.days && s.days[d]) sym = s.days[d];
+                        const isFixed = (c && typeof c === 'object') ? !!c.isFixed : false;
+                        row.push({ symbol: sym, isFixed: isFixed });
+                    }
+                    orderedStaffList.push({ staff: s, sec: s.section || '一般', gridRow: row, isST: false });
+                }
+            });
+
+            // STスタッフ
+            floorStStaff.forEach((st, si) => {
+                const row = [];
+                const rawRow = floorStGrid[si] || null;
+                for (let d = 0; d < numDays; d++) {
+                    const c = rawRow ? rawRow[d] : null;
+                    let sym = (c && typeof c === 'object') ? (c.symbol || '') : (c || '');
+                    if (!sym && st.days && st.days[d]) sym = st.days[d];
+                    const isFixed = (c && typeof c === 'object') ? !!c.isFixed : false;
+                    row.push({ symbol: sym, isFixed: isFixed });
+                }
+                orderedStaffList.push({ staff: st, sec: 'ST', gridRow: row, isST: true });
+            });
+
+            // ハーフマン（生活期ハ応援）
+            const haDef = haFloorDefs.find(d => d.flId === fc.id);
+            if (haDef) {
+                let haStaffFound = false;
+                baseLifeStaff.forEach((st, idx) => {
+                    if (st.isUnused || st.isZeroCount) return;
+                    const matches = (st.haSection === haDef.target || (haDef.target === 'ハ4' && st.haSection === 'ハ南'));
+                    if (!matches) return;
+                    haStaffFound = true;
+                    const rawRow = (lifeData && lifeData.outputGrid && lifeData.outputGrid[idx]) ? lifeData.outputGrid[idx] : null;
+                    const row = [];
+                    for (let d = 0; d < numDays; d++) {
+                        let cellVal = rawRow ? rawRow[d] : null;
+                        let sym = '';
+                        if (cellVal !== null && cellVal !== undefined) {
+                            sym = (typeof cellVal === 'object') ? (cellVal.symbol !== undefined ? cellVal.symbol : '') : (cellVal || '');
+                        } else if (st.days && st.days[d]) {
+                            sym = st.days[d];
+                        }
+                        const isFixed = (cellVal && typeof cellVal === 'object') ? !!cellVal.isFixed : false;
+                        row.push({ symbol: sym, isFixed: isFixed });
+                    }
+                    orderedStaffList.push({
+                        staff: st,
+                        sec: 'ﾊｰﾌﾏﾝ',
+                        gridRow: row,
+                        isST: false,
+                        isHa: true,
+                        lifeStaffIdx: idx
+                    });
+                });
+                if (!haStaffFound && lifeData && lifeData.outputGrid && lifeData.outputGrid.length > 0) {
+                    const dummyStaff = {
+                        id: (haDef.target === 'ハ1' ? 41 : (haDef.target === 'ハ2' ? 42 : (haDef.target === 'ハ3' ? 43 : 44))),
+                        name: `ハーフマン (${haDef.target})`,
+                        haSection: haDef.target
+                    };
+                    const row = [];
+                    for (let d = 0; d < numDays; d++) {
+                        row.push({ symbol: '', isFixed: false });
+                    }
+                    orderedStaffList.push({
+                        staff: dummyStaff,
+                        sec: 'ﾊｰﾌﾏﾝ',
+                        gridRow: row,
+                        isST: false,
+                        isHa: true,
+                        lifeStaffIdx: -1
+                    });
+                }
+            }
+
+            // 日別集計（±補正, 出勤人数合計, 実数合計, 早, 遅, E, 8時, 各セクション実数）の一元集計
             const dailyOffsets = [];
             const dailyReal = [];
             const dailyTotal = [];
-            const dailyEarly = [];
-            const dailyLate = [];
-            const dailyEve = [];
-            const dailyH8 = [];
+            const dailyEarly = new Array(numDays).fill(0);
+            const dailyLate = new Array(numDays).fill(0);
+            const dailyEve = new Array(numDays).fill(0);
+            const dailyH8 = new Array(numDays).fill(0);
+            const dailyPta = new Array(numDays).fill(0);
+            const dailyOta = new Array(numDays).fill(0);
+            const dailyPtb = new Array(numDays).fill(0);
+            const dailyOtb = new Array(numDays).fill(0);
+            const dailyStWork = new Array(numDays).fill(0);
+            const dailyHaWork = new Array(numDays).fill(0);
+            const dailyFloorRealWork = new Array(numDays).fill(0);
+            const dailyFloorHeadCount = new Array(numDays).fill(0);
 
             for (let d = 0; d < numDays; d++) {
                 const offset = (fOffsets && fOffsets[d] !== undefined) ? fOffsets[d] : 0;
                 dailyOffsets.push(offset);
 
-                let headCount = 0;
-                let realCount = 0;
-                let earlyCount = 0;
-                let lateCount = 0;
-                let eveCount = 0;
-                let h8Count = 0;
+                orderedStaffList.forEach(item => {
+                    const s = item.staff;
+                    if (s.isUnused || s.isZeroCount) return;
+                    const c = item.gridRow ? item.gridRow[d] : null;
+                    const sym = (c && typeof c === 'object') ? (c.symbol || '') : (c || '');
+                    if (!sym) return;
 
-                // 病棟スタッフ集計
-                if (fGrid && fStaffList.length > 0) {
-                    for (let s = 0; s < fStaffList.length; s++) {
-                        const staff = fStaffList[s];
-                        if (staff.isUnused) continue;
-                        const cell = fGrid[s] ? fGrid[s][d] : null;
-                        const sym = (cell && typeof cell === 'object') ? cell.symbol : (cell || '');
-                        // ★ ハヤ・オソ・イブは特殊勤務カウントから除外、通常出勤（〇）としてカウント
+                    if (item.isHa) {
+                        if (isWorkSymbol(sym) && sym !== '研' && sym !== '張') {
+                            dailyHaWork[d] = 0.5;
+                            dailyFloorRealWork[d] += 0.5;
+                            dailyFloorHeadCount[d] += 0.5;
+                        } else if (isHalfDuty(sym)) {
+                            dailyHaWork[d] = 0.25;
+                            dailyFloorRealWork[d] += 0.25;
+                            dailyFloorHeadCount[d] += 0.25;
+                        }
+                    } else {
+                        const isHalfStaff = !!s.isHalf;
+                        const wVal = isHalfStaff ? 0.5 : 1.0;
+
                         if (sym === '早') {
-                            earlyCount++;
-                            headCount += 1.0;
-                            realCount += (staff.isHalf ? 0.5 : 1.0);
+                            dailyEarly[d]++;
+                            dailyFloorRealWork[d] += wVal;
+                            dailyFloorHeadCount[d] += wVal;
                         } else if (sym === '遅') {
-                            lateCount++;
-                            headCount += 1.0;
-                            realCount += (staff.isHalf ? 0.5 : 1.0);
+                            dailyLate[d]++;
+                            dailyFloorRealWork[d] += wVal;
+                            dailyFloorHeadCount[d] += wVal;
                         } else if (sym === 'E') {
-                            eveCount++;
-                            headCount += 1.0;
-                            realCount += (staff.isHalf ? 0.5 : 1.0);
+                            dailyEve[d]++;
+                            dailyFloorRealWork[d] += wVal;
+                            dailyFloorHeadCount[d] += wVal;
                         } else if (sym === '8時') {
-                            h8Count++;
-                            headCount += 1.0;
-                            realCount += (staff.isHalf ? 0.5 : 1.0);
-                        } else if (sym === '○' || sym === '出' || sym === '研' || sym === '張' || sym === 'ハヤ' || sym === 'オソ' || sym === 'イブ') {
-                            headCount += 1.0;
-                            realCount += (staff.isHalf ? 0.5 : 1.0);
-                        } else if (sym === '○/休' || sym === '休/○' || sym === '○/有' || sym === '有/○' || sym === '〇/休' || sym === '休/〇' || sym === '〇/有' || sym === '有/〇') {
-                            headCount += 0.5;
-                            realCount += (staff.isHalf ? 0.25 : 0.5);
+                            dailyH8[d]++;
+                            dailyFloorRealWork[d] += wVal;
+                            dailyFloorHeadCount[d] += wVal;
+                        } else if (isWorkSymbol(sym) && sym !== '研' && sym !== '張') {
+                            dailyFloorRealWork[d] += wVal;
+                            dailyFloorHeadCount[d] += wVal;
+                        } else if (isHalfDuty(sym)) {
+                            dailyFloorRealWork[d] += (isHalfStaff ? 0.25 : 0.5);
+                            dailyFloorHeadCount[d] += (isHalfStaff ? 0.25 : 0.5);
+                        }
+
+                        if (isWorkSymbol(sym) && sym !== '研' && sym !== '張') {
+                            if (item.isST) dailyStWork[d] += wVal;
+                            else if (item.sec === secPta) dailyPta[d] += wVal;
+                            else if (item.sec === secOta) dailyOta[d] += wVal;
+                            else if (item.sec === secPtb) dailyPtb[d] += wVal;
+                            else if (item.sec === secOtb) dailyOtb[d] += wVal;
                         }
                     }
-                }
+                });
 
-                // 所属STスタッフ集計の合算（1〜3階・南病棟ともにPT+OT+ST合算で早・遅・E・8時を集計）
-                for (let si = 0; si < floorStStaff.length; si++) {
-                    const st = floorStStaff[si];
-                    const cell = floorStGrid[si] ? floorStGrid[si][d] : null;
-                    const sym = (cell && typeof cell === 'object') ? cell.symbol : (cell || '');
-                    if (sym === '早') {
-                        earlyCount++;
-                        headCount += 1.0;
-                        realCount += (st.isHalf ? 0.5 : 1.0);
-                    } else if (sym === '遅') {
-                        lateCount++;
-                        headCount += 1.0;
-                        realCount += (st.isHalf ? 0.5 : 1.0);
-                    } else if (sym === 'E') {
-                        eveCount++;
-                        headCount += 1.0;
-                        realCount += (st.isHalf ? 0.5 : 1.0);
-                    } else if (sym === '8時') {
-                        h8Count++;
-                        headCount += 1.0;
-                        realCount += (st.isHalf ? 0.5 : 1.0);
-                    } else if (sym === '○' || sym === '出' || sym === '研' || sym === '張' || sym === 'ハヤ' || sym === 'オソ' || sym === 'イブ') {
-                        headCount += 1.0;
-                        realCount += (st.isHalf ? 0.5 : 1.0);
-                    } else if (sym === '○/休' || sym === '休/○' || sym === '○/有' || sym === '有/○' || sym === '〇/休' || sym === '休/〇' || sym === '〇/有' || sym === '有/〇') {
-                        headCount += 0.5;
-                        realCount += (st.isHalf ? 0.25 : 0.5);
-                    }
-                }
-
-                // ★ 生活期ハ応援実数の合算（ハ1→1F, ハ2→2F, ハ3→3F, ハ南→南）
-                // ※ ユーザー指示: まだどのテーブルも組んでいない状態ではハーフマンの数字を加算しない（headCount > 0 の場合のみ加算）
-                const lifeHaWork = (lifeHaDataMap[fc.id] && lifeHaDataMap[fc.id][d]) ? lifeHaDataMap[fc.id][d] : 0;
-                if (headCount > 0) {
-                    realCount += lifeHaWork;
-                }
-
-                dailyReal.push(realCount);
-                dailyEarly.push(earlyCount);
-                dailyLate.push(lateCount);
-                dailyEve.push(eveCount);
-                dailyH8.push(h8Count);
-                const displayTotal = headCount > 0 ? (headCount + (offset > 0 ? offset : 0)) : 0;
+                const rCount = dailyFloorRealWork[d];
+                const hCount = dailyFloorHeadCount[d];
+                dailyReal.push(rCount);
+                const displayTotal = hCount > 0 ? (hCount + (offset > 0 ? offset : 0)) : 0;
                 dailyTotal.push(displayTotal);
 
-                // 全フロア合算に加算
                 grandTotal[d] += displayTotal;
-                grandReal[d] += realCount;
-                grandEarly[d] += earlyCount;
-                grandLate[d] += lateCount;
-                grandEve[d] += eveCount;
-                grandH8[d] += h8Count;
+                grandReal[d] += rCount;
+                grandEarly[d] += dailyEarly[d];
+                grandLate[d] += dailyLate[d];
+                grandEve[d] += dailyEve[d];
+                grandH8[d] += dailyH8[d];
             }
 
             // テーブルヘッダー1: 日付ヘッダー（最右端まで太い横罫線を引く: border-top: 4px solid #334155 !important;）
@@ -7990,7 +8240,7 @@ function renderMasterIntegrationView() {
             // サマリー行1: ±補正 (5行目相当)
             html += `<tr style="background:${fc.bg}; font-weight:700;">
                 <td class="sticky-col-1" rowspan="8" style="background:${fc.headerBg}; color:${fc.badgeColor}; font-size:0.95rem; font-weight:800; vertical-align:middle; text-align:center; border-right:1px solid ${fc.border}; width:44px; min-width:44px; max-width:44px;">
-                    <a href="${fc.id}.html" title="${fc.label}病棟テーブルを開く" style="color:${fc.badgeColor}; text-decoration:none; display:flex; flex-direction:column; align-items:center; gap:2px; cursor:pointer;">
+                    <a href="${fc.id}.html?from=master&term=${curStartDate}" class="master-dept-link" title="${fc.label}病棟テーブルを開く（選択中のタームを連動）" style="color:${fc.badgeColor}; text-decoration:none; display:flex; flex-direction:column; align-items:center; gap:2px; cursor:pointer;">
                         <span>${fc.label}</span>
                         <span style="font-size:0.68rem; background:#ffffff; border:1px solid ${fc.border}; border-radius:4px; padding:1px 3px; font-weight:700; box-shadow:0 1px 2px rgba(0,0,0,0.06);">↗開く</span>
                     </a>
@@ -8022,13 +8272,6 @@ function renderMasterIntegrationView() {
                 html += `<td class="${thickCls} col-day-fixed" style="width:52px; min-width:52px; max-width:52px; background:#e2e8f0; color:#0369a1; font-weight:800; border-bottom:1px solid #cbd5e1; text-align:center;">${dailyReal[d]}</td>`;
             }
             html += `<td colspan="9" style="background:#e2e8f0;"></td></tr>`;
-
-            // 定数定義（1〜3階: 早3/遅1/E2/8時1、南: 早2/遅2/E2/8時1 ★南病棟も8時毎日1名！）
-            const isSouthFloor = (fc.id === 'south');
-            const targetEarly = isSouthFloor ? 2 : 3;
-            const targetLate = isSouthFloor ? 2 : 1;
-            const targetEve = 2;
-            const targetH8 = 1;
 
             // サマリー行4: 早 (8行目相当)
             html += `<tr style="background:${fc.bg}; font-weight:600;">
@@ -8091,7 +8334,7 @@ function renderMasterIntegrationView() {
                         <button type="button" class="btn btn-outline toggle-master-floor-btn" data-floor="${fc.id}" style="width:100%; font-size:0.75rem; padding:2px 6px; font-weight:700; background:${isExp ? '#f1f5f9' : '#ffffff'}; color:${fc.badgeColor}; border-color:${fc.border}; box-shadow: 0 1px 2px rgba(0,0,0,0.05); cursor:pointer;">
                             ${isExp ? '▲折りたたむ' : '⚡表示する'}
                         </button>
-                        <a href="${fc.id}.html" class="btn btn-outline" style="width:100%; box-sizing:border-box; font-size:0.72rem; padding:2px 4px; font-weight:700; text-align:center; text-decoration:none; background:#ffffff; color:${fc.badgeColor}; border-color:${fc.border}; box-shadow:0 1px 2px rgba(0,0,0,0.05);" title="${fc.label}病棟テーブルを別画面で開く">
+                        <a href="${fc.id}.html?from=master&term=${curStartDate}" class="btn btn-outline" style="width:100%; box-sizing:border-box; font-size:0.72rem; padding:2px 4px; font-weight:700; text-align:center; text-decoration:none; background:#ffffff; color:${fc.badgeColor}; border-color:${fc.border}; box-shadow:0 1px 2px rgba(0,0,0,0.05);" title="${fc.label}病棟テーブルを別画面で開く（選択中のタームを連動）">
                             🔗 ${fc.label}を開く
                         </a>
                     </div>
@@ -8101,88 +8344,6 @@ function renderMasterIntegrationView() {
                 html += `<td class="${thickCls} col-day-fixed" style="width:52px; min-width:52px; max-width:52px; background:${fc.bg}; border-bottom:2px solid ${fc.border};"></td>`;
             }
             html += `<td colspan="9" style="background:${fc.bg};"></td></tr>`;
-
-            // 詳細行群: デフォルト非表示、並び順: PTA → PTB → OTA → OTB → ST
-            const orderedStaffList = [];
-            const sections = ['PT A', 'PT B', 'OT A', 'OT B'];
-
-            sections.forEach(sec => {
-                fStaffList.forEach((s, sIdx) => {
-                    if (!s.isUnused && s.section === sec) {
-                        const gridRow = fGrid ? fGrid[sIdx] : (s.days || []);
-                        orderedStaffList.push({ staff: s, sec: sec, gridRow: gridRow, isST: false });
-                    }
-                });
-            });
-
-            // セクション未設定のその他スタッフ
-            fStaffList.forEach((s, sIdx) => {
-                if (!s.isUnused && !sections.includes(s.section)) {
-                    const gridRow = fGrid ? fGrid[sIdx] : (s.days || []);
-                    orderedStaffList.push({ staff: s, sec: s.section || '一般', gridRow: gridRow, isST: false });
-                }
-            });
-
-            // STスタッフ
-            floorStStaff.forEach((st, si) => {
-                const gridRow = floorStGrid[si] || (st.days || []);
-                orderedStaffList.push({ staff: st, sec: 'ST', gridRow: gridRow, isST: true });
-            });
-
-            // ★ 添付2要件: ST最下端の下にハーフマン（生活期ハ応援）の出勤を表示（記号パレットで修正可能に）
-            const haDef = haFloorDefs.find(d => d.flId === fc.id);
-            if (haDef) {
-                let haStaffFound = false;
-                baseLifeStaff.forEach((st, idx) => {
-                    if (st.isUnused || st.isZeroCount) return;
-                    const matches = (st.haSection === haDef.target || (haDef.target === 'ハ4' && st.haSection === 'ハ南'));
-                    if (!matches) return;
-                    haStaffFound = true;
-                    const rawRow = (lifeData && lifeData.outputGrid && lifeData.outputGrid[idx]) ? lifeData.outputGrid[idx] : null;
-                    const row = [];
-                    for (let d = 0; d < numDays; d++) {
-                        let cellVal = rawRow ? rawRow[d] : null;
-                        let sym = (cellVal && typeof cellVal === 'object') ? (cellVal.symbol || '') : (cellVal || '');
-                        if (!sym && st.days && st.days[d]) sym = st.days[d];
-                        if (!sym) {
-                            const dInfo = (term && term.dates && term.dates[d]) ? term.dates[d] : null;
-                            const wDay = dInfo ? dInfo.weekday : (d % 7 === 5 ? '土' : (d % 7 === 6 ? '日' : '月'));
-                            sym = haDef.isWeekendOff ? ((wDay === '土' || wDay === '日') ? '休' : '○') : ((wDay === '日') ? '休' : '○');
-                        }
-                        const isFixed = (cellVal && typeof cellVal === 'object') ? !!cellVal.isFixed : false;
-                        row.push({ symbol: sym, isFixed: isFixed });
-                    }
-                    orderedStaffList.push({
-                        staff: st,
-                        sec: 'ﾊｰﾌﾏﾝ',
-                        gridRow: row,
-                        isST: false,
-                        isHa: true,
-                        lifeStaffIdx: idx
-                    });
-                });
-                // ★ ユーザー指示: まだ生活期で組んでいない場合や該当スタッフがいない場合は、勝手にダミーのハーフマンを生成しない！
-                if (!haStaffFound && lifeData && lifeData.outputGrid && lifeData.outputGrid.length > 0) {
-                    // 生活期の勤務表が存在するが担当者が未設定の場合のみ空枠として待機（○で勝手に埋めない）
-                    const dummyStaff = {
-                        id: (haDef.target === 'ハ1' ? 41 : (haDef.target === 'ハ2' ? 42 : (haDef.target === 'ハ3' ? 43 : 44))),
-                        name: `ハーフマン (${haDef.target})`,
-                        haSection: haDef.target
-                    };
-                    const row = [];
-                    for (let d = 0; d < numDays; d++) {
-                        row.push({ symbol: '', isFixed: false });
-                    }
-                    orderedStaffList.push({
-                        staff: dummyStaff,
-                        sec: 'ﾊｰﾌﾏﾝ',
-                        gridRow: row,
-                        isST: false,
-                        isHa: true,
-                        lifeStaffIdx: -1
-                    });
-                }
-            }
 
             if (orderedStaffList.length === 0) {
                 html += `<tr class="master-detail-row master-detail-${fc.id}" style="display:${isExp ? 'table-row' : 'none'}; background:#ffffff;">
@@ -8315,59 +8476,10 @@ function renderMasterIntegrationView() {
             });
 
             // ★ 添付1・2準拠: 最下端STの下に当該フロアの集計部分を表示（展開時連動）！
-            // 項目: 出勤人数合計, 実数合計, PT A/2出勤, OT A/2出勤, PT B/3出勤, OT B/3出勤, ST出勤, 早, 遅, E, 8時
-            const secPta = isSouthFloor ? 'PT 2' : 'PT A';
-            const secOta = isSouthFloor ? 'OT 2' : 'OT A';
-            const secPtb = isSouthFloor ? 'PT 3' : 'PT B';
-            const secOtb = isSouthFloor ? 'OT 3' : 'OT B';
-
-            const dailyPta = new Array(numDays).fill(0);
-            const dailyOta = new Array(numDays).fill(0);
-            const dailyPtb = new Array(numDays).fill(0);
-            const dailyOtb = new Array(numDays).fill(0);
-            const dailyStWork = new Array(numDays).fill(0);
-            const dailyHaWork = (lifeHaDataMap[fc.id] && Array.isArray(lifeHaDataMap[fc.id])) ? [...lifeHaDataMap[fc.id]] : new Array(numDays).fill(0);
-
-            orderedStaffList.forEach(item => {
-                const s = item.staff;
-                if (s.isUnused || s.isZeroCount) return;
-                for (let d = 0; d < numDays; d++) {
-                    const cell = item.gridRow ? item.gridRow[d] : null;
-                    const sym = (cell && typeof cell === 'object') ? (cell.symbol || '') : (cell || '');
-                    if (item.isHa) {
-                        // ハ応援スタッフの出勤実数集計（出勤0.5、半勤0.25）
-                        if (isWorkSymbol(sym) && sym !== '研' && sym !== '張') {
-                            dailyHaWork[d] = 0.5;
-                        } else if (sym === '○/休' || sym === '休/○' || sym === '○/有' || sym === '有/○' || sym === '〇/休' || sym === '休/〇' || sym === '〇/有' || sym === '有/〇') {
-                            dailyHaWork[d] = 0.25;
-                        } else if (sym === '休' || sym === '有' || sym.includes('リフ') || sym.startsWith('上') || sym.startsWith('下')) {
-                            dailyHaWork[d] = 0;
-                        }
-                    } else if (isWorkSymbol(sym) && sym !== '研' && sym !== '張') {
-                        if (item.isST) {
-                            dailyStWork[d] += (s.isHalf ? 0.5 : 1.0);
-                        } else {
-                            if (item.sec === secPta) dailyPta[d] += (s.isHalf ? 0.5 : 1.0);
-                            else if (item.sec === secOta) dailyOta[d] += (s.isHalf ? 0.5 : 1.0);
-                            else if (item.sec === secPtb) dailyPtb[d] += (s.isHalf ? 0.5 : 1.0);
-                            else if (item.sec === secOtb) dailyOtb[d] += (s.isHalf ? 0.5 : 1.0);
-                        }
-                    } else if (sym === '○/休' || sym === '休/○' || sym === '○/有' || sym === '有/○') {
-                        if (item.isST) dailyStWork[d] += 0.5;
-                        else {
-                            if (item.sec === secPta) dailyPta[d] += 0.5;
-                            else if (item.sec === secOta) dailyOta[d] += 0.5;
-                            else if (item.sec === secPtb) dailyPtb[d] += 0.5;
-                            else if (item.sec === secOtb) dailyOtb[d] += 0.5;
-                        }
-                    }
-                }
-            });
-
-            // 集計フッター行のリスト定義
+            // 集計フッター行のリスト定義（先頭で計算した集計配列と100%完全連動）
             const floorFooterRows = [
-                { label: '出勤人数合計', vals: dailyTotal, color: '#0f172a', bg: '#f1f5f9', bold: true },
-                { label: '実数合計', vals: dailyReal, color: '#0369a1', bg: '#e2e8f0', bold: true },
+                { label: '出勤人数合計', vals: dailyFloorHeadCount, color: '#0f172a', bg: '#f1f5f9', bold: true },
+                { label: '実数合計', vals: dailyFloorRealWork, color: '#0369a1', bg: '#e2e8f0', bold: true },
                 { label: `${secPta} 実数`, vals: dailyPta, color: '#ea580c', bg: '#fffaf5', bold: false },
                 { label: `${secOta} 実数`, vals: dailyOta, color: '#ea580c', bg: '#fffaf5', bold: false },
                 { label: `${secPtb} 実数`, vals: dailyPtb, color: '#1d4ed8', bg: '#f5f8ff', bold: false },
@@ -11966,11 +12078,12 @@ function renderMasterIntegrationView() {
         if (showDeptNav) {
             deptNavContainer.classList.remove('hidden-nav');
             deptNavContainer.style.setProperty('display', 'flex', 'important');
-            // 内部リンクにも ?from=master を維持して相互往来可能にする
+            // ★ 内部リンクにも ?from=master と選択中ターム(&term=)を維持して相互往来可能にする
             deptNavContainer.querySelectorAll('a.dept-nav-btn').forEach(btn => {
-                const href = btn.getAttribute('href');
-                if (href && !href.includes('index.html') && !href.includes('master') && !href.includes('from=master')) {
-                    btn.setAttribute('href', href + (href.includes('?') ? '&' : '?') + 'from=master');
+                let href = btn.getAttribute('href');
+                if (href && !href.includes('index.html') && !href.includes('master')) {
+                    const baseUrl = href.split('?')[0];
+                    btn.setAttribute('href', `${baseUrl}?from=master&term=${currentWorkingStartDate || '2026-04-01'}`);
                 }
             });
         } else {
