@@ -181,9 +181,10 @@ document.addEventListener('DOMContentLoaded', () => {
         const select = document.getElementById('termSelect');
         if (!select) return;
 
-        const curStart = shouldSyncGlobalTerm
+        const urlTermParam = (new URLSearchParams(window.location.search)).get('term');
+        const curStart = urlTermParam || (shouldSyncGlobalTerm
             ? (localStorage.getItem(STORAGE_KEY_GLOBAL_CURRENT_TERM) || localStorage.getItem(STORAGE_KEY_LAST_ACTIVE) || localStorage.getItem('shift_schedule_current_start_date') || document.getElementById('termStartDate')?.value || currentWorkingStartDate || '2026-04-01')
-            : (localStorage.getItem(STORAGE_KEY_LAST_ACTIVE) || document.getElementById('termStartDate')?.value || currentWorkingStartDate || '2026-04-01');
+            : (localStorage.getItem(STORAGE_KEY_LAST_ACTIVE) || document.getElementById('termStartDate')?.value || currentWorkingStartDate || '2026-04-01'));
         currentWorkingStartDate = curStart;
         const startDateInput = document.getElementById('termStartDate');
         if (startDateInput) startDateInput.value = curStart;
@@ -1112,9 +1113,10 @@ document.addEventListener('DOMContentLoaded', () => {
 
                 // 4. 表示中タームの再読込＆画面反映
                 // ★ ユーザー指示: 他テーブルへ遷移した際にクラウドの古い日付でタームが進んだり戻ったりするのを完全遮断！
-                const targetTermDate = shouldSyncGlobalTerm
+                const urlTermParam2 = (new URLSearchParams(window.location.search)).get('term');
+                const targetTermDate = urlTermParam2 || (shouldSyncGlobalTerm
                     ? (window.localStorage.getItem(STORAGE_KEY_GLOBAL_CURRENT_TERM) || currentWorkingStartDate || (isInitialBoot && cloud.lastActiveDate ? cloud.lastActiveDate : '2026-04-01'))
-                    : (window.localStorage.getItem(STORAGE_KEY_LAST_ACTIVE) || currentWorkingStartDate || (isInitialBoot && cloud.lastActiveDate ? cloud.lastActiveDate : '2026-04-01'));
+                    : (window.localStorage.getItem(STORAGE_KEY_LAST_ACTIVE) || currentWorkingStartDate || (isInitialBoot && cloud.lastActiveDate ? cloud.lastActiveDate : '2026-04-01')));
 
                 const matchedTerm = findTermByStartDate(targetTermDate);
                 const finalDate = matchedTerm ? matchedTerm.startDate : targetTermDate;
@@ -1789,6 +1791,39 @@ document.addEventListener('DOMContentLoaded', () => {
                         }
                     }
                 } catch (e) {}
+            }
+
+            // 1-2. マスターテーブル保存データ（shift_schedule_master_term_*）から最新微調整済みグリッドを抽出
+            if (prevStaffByName.size === 0) {
+                const rawMasterTerm = localStorage.getItem(`shift_schedule_master_term_${prevStartDateStr}`);
+                if (rawMasterTerm) {
+                    try {
+                        const mData = JSON.parse(rawMasterTerm);
+                        if (mData && Array.isArray(mData.staffList) && Array.isArray(mData.outputGrid)) {
+                            mData.staffList.forEach((mst, mIdx) => {
+                                const normName = (mst.name || '').trim();
+                                if (!normName) return;
+                                const row = mData.outputGrid[mIdx];
+                                if (Array.isArray(row) && row.length >= 7) {
+                                    const rLen = row.length;
+                                    const last7 = [
+                                        extractCellSymbol(row[rLen - 7]),
+                                        extractCellSymbol(row[rLen - 6]),
+                                        extractCellSymbol(row[rLen - 5]),
+                                        extractCellSymbol(row[rLen - 4]),
+                                        extractCellSymbol(row[rLen - 3]),
+                                        extractCellSymbol(row[rLen - 2]),
+                                        extractCellSymbol(row[rLen - 1])
+                                    ];
+                                    prevStaffByName.set(normName, last7);
+                                }
+                            });
+                            if (prevStaffByName.size > 0) {
+                                usedSource = '👑 マスターテーブル保存データ（微調整反映済）';
+                            }
+                        }
+                    } catch (e) {}
+                }
             }
 
             // 2. マスター確定データがない場合のフォールバック（フロアの保存データ）
@@ -3813,6 +3848,27 @@ document.addEventListener('DOMContentLoaded', () => {
             }
             localStorage.setItem(targetKey, nextJson);
 
+            // ★ ユーザー指示: マスターでの修正内容を該当病棟のサーバー保存ファイル（data/dept_*.json）にも即時書き戻し！
+            try {
+                const saveDeptId = isLifeCell ? 'life' : (isStCell ? 'st' : floorId);
+                fetch('/api/cloud_sync', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        deptId: saveDeptId,
+                        lastActiveDate: curStartDate,
+                        termDate: curStartDate,
+                        termData: fData,
+                        savedTerms: [curStartDate]
+                    })
+                }).catch(e => console.warn('マスター修正のサーバーファイル保存失敗:', e));
+            } catch (err) {}
+
+            // ★ マスター確定直前7日実績も即時更新
+            if (typeof saveMasterConfirmedLast7Days === 'function') {
+                saveMasterConfirmedLast7Days(curStartDate);
+            }
+
             // 全体サマリー＆階別集計を即時再描画（masterExpandedFloorsにより展開行は折りたたまれず完全維持！）
             if (typeof renderMasterIntegrationView === 'function') {
                 renderMasterIntegrationView();
@@ -4221,60 +4277,52 @@ document.addEventListener('DOMContentLoaded', () => {
         });
 
         try {
+            // ★ ユーザー指示: 病棟異動者（例: 6月まで1階、7月から2階）の過去データを全館横断で集約カウント！
             const terms = getSavedTerms();
-            terms.forEach(termDate => {
-                // 当ターム分は現在メモリ上の staffList.days / lastSolveResult.grid を最優先で参照するためスキップ
-                if (termDate === currentStartDate) return;
-                const isPast = (termDate < currentStartDate);
-                const raw = localStorage.getItem(`${STORAGE_KEY_PREFIX}${termDate}`);
-                if (!raw) return;
-                const data = JSON.parse(raw);
-                if (!data) return;
+            const allDeptPrefixes = [
+                'shift_schedule_1f_term_',
+                'shift_schedule_2f_term_',
+                'shift_schedule_3f_term_',
+                'shift_schedule_south_term_',
+                'shift_schedule_st_term_',
+                'shift_schedule_life_term_',
+                'shift_schedule_master_term_',
+                'shift_schedule_term_' // 旧バージョン互換
+            ];
 
-                if (data.outputGrid && Array.isArray(data.outputGrid)) {
-                    data.outputGrid.forEach((row, sIdx) => {
-                        const savedSt = (data.staffList && data.staffList[sIdx]);
-                        const sName = savedSt ? (savedSt.name || '').trim() : '';
-                        const sPrevName = savedSt ? (savedSt.prevName || '').trim() : '';
-                        let staffId = (sName && nameToCurrentId.has(sName)) ? nameToCurrentId.get(sName) :
-                                      (sPrevName && nameToCurrentId.has(sPrevName)) ? nameToCurrentId.get(sPrevName) :
-                                      (sIdx + 1);
+            const checkedKeys = new Set();
+            allDeptPrefixes.forEach(prefix => {
+                terms.forEach(termDate => {
+                    const key = `${prefix}${termDate}`;
+                    if (checkedKeys.has(key)) return;
+                    checkedKeys.add(key);
 
-                        if (!pastHistory[staffId]) pastHistory[staffId] = new Set();
-                        if (!futureHistory[staffId]) futureHistory[staffId] = new Set();
+                    // 当タームかつ現在病棟分は現在メモリ上のデータを最優先するためスキップ
+                    if (prefix === STORAGE_KEY_PREFIX && termDate === currentStartDate) return;
 
-                        row.forEach((cell, dIdx) => {
-                            const sym = (cell && cell.symbol) ? cell.symbol : cell;
-                            if (SYMBOLS.REF_SUMMER.includes(sym) || SYMBOLS.REF_WINTER.includes(sym)) {
-                                if (isPast) {
-                                    pastHistory[staffId].add(sym);
-                                } else {
-                                    futureHistory[staffId].add(sym);
-                                }
-                                allHistoryDetails.push({
-                                    staffId,
-                                    staffName: savedSt ? savedSt.name : `スタッフ ${staffId}`,
-                                    termDate,
-                                    symbol: sym,
-                                    dayIndex: dIdx,
-                                    isCurrent: false
-                                });
-                            }
-                        });
-                    });
-                } else if (data.staffList && Array.isArray(data.staffList)) {
-                    data.staffList.forEach((st, sIdx) => {
-                        const sName = (st.name || '').trim();
-                        const sPrevName = (st.prevName || '').trim();
-                        let staffId = (sName && nameToCurrentId.has(sName)) ? nameToCurrentId.get(sName) :
-                                      (sPrevName && nameToCurrentId.has(sPrevName)) ? nameToCurrentId.get(sPrevName) :
-                                      (st.id || (sIdx + 1));
+                    const isPast = (termDate < currentStartDate);
+                    const raw = localStorage.getItem(key);
+                    if (!raw) return;
 
-                        if (!pastHistory[staffId]) pastHistory[staffId] = new Set();
-                        if (!futureHistory[staffId]) futureHistory[staffId] = new Set();
+                    let data = null;
+                    try { data = JSON.parse(raw); } catch (e) { return; }
+                    if (!data) return;
 
-                        if (Array.isArray(st.days)) {
-                            st.days.forEach((sym, dIdx) => {
+                    if (data.outputGrid && Array.isArray(data.outputGrid)) {
+                        data.outputGrid.forEach((row, sIdx) => {
+                            const savedSt = (data.staffList && data.staffList[sIdx]);
+                            const sName = savedSt ? (savedSt.name || '').trim() : '';
+                            const sPrevName = savedSt ? (savedSt.prevName || '').trim() : '';
+                            let staffId = (sName && nameToCurrentId.has(sName)) ? nameToCurrentId.get(sName) :
+                                          (sPrevName && nameToCurrentId.has(sPrevName)) ? nameToCurrentId.get(sPrevName) : null;
+
+                            if (!staffId) return; // 現在の病棟にいないスタッフはスキップ
+
+                            if (!pastHistory[staffId]) pastHistory[staffId] = new Set();
+                            if (!futureHistory[staffId]) futureHistory[staffId] = new Set();
+
+                            row.forEach((cell, dIdx) => {
+                                const sym = (cell && cell.symbol) ? cell.symbol : cell;
                                 if (SYMBOLS.REF_SUMMER.includes(sym) || SYMBOLS.REF_WINTER.includes(sym)) {
                                     if (isPast) {
                                         pastHistory[staffId].add(sym);
@@ -4283,7 +4331,7 @@ document.addEventListener('DOMContentLoaded', () => {
                                     }
                                     allHistoryDetails.push({
                                         staffId,
-                                        staffName: st.name,
+                                        staffName: savedSt ? savedSt.name : `スタッフ ${staffId}`,
                                         termDate,
                                         symbol: sym,
                                         dayIndex: dIdx,
@@ -4291,9 +4339,41 @@ document.addEventListener('DOMContentLoaded', () => {
                                     });
                                 }
                             });
-                        }
-                    });
-                }
+                        });
+                    } else if (data.staffList && Array.isArray(data.staffList)) {
+                        data.staffList.forEach((st, sIdx) => {
+                            const sName = (st.name || '').trim();
+                            const sPrevName = (st.prevName || '').trim();
+                            let staffId = (sName && nameToCurrentId.has(sName)) ? nameToCurrentId.get(sName) :
+                                          (sPrevName && nameToCurrentId.has(sPrevName)) ? nameToCurrentId.get(sPrevName) : null;
+
+                            if (!staffId) return;
+
+                            if (!pastHistory[staffId]) pastHistory[staffId] = new Set();
+                            if (!futureHistory[staffId]) futureHistory[staffId] = new Set();
+
+                            if (Array.isArray(st.days)) {
+                                st.days.forEach((sym, dIdx) => {
+                                    if (SYMBOLS.REF_SUMMER.includes(sym) || SYMBOLS.REF_WINTER.includes(sym)) {
+                                        if (isPast) {
+                                            pastHistory[staffId].add(sym);
+                                        } else {
+                                            futureHistory[staffId].add(sym);
+                                        }
+                                        allHistoryDetails.push({
+                                            staffId,
+                                            staffName: st.name || `スタッフ ${staffId}`,
+                                            termDate,
+                                            symbol: sym,
+                                            dayIndex: dIdx,
+                                            isCurrent: false
+                                        });
+                                    }
+                                });
+                            }
+                        });
+                    }
+                });
             });
         } catch (e) {
             console.error('リフ取得履歴のスキャン中にエラー:', e);
@@ -8091,7 +8171,7 @@ function renderMasterIntegrationView() {
                         <button type="button" class="btn btn-outline toggle-master-floor-btn" data-floor="${fc.id}" style="width:100%; font-size:0.75rem; padding:2px 6px; font-weight:700; background:${isExp ? '#f1f5f9' : '#ffffff'}; color:${fc.badgeColor}; border-color:${fc.border}; box-shadow: 0 1px 2px rgba(0,0,0,0.05); cursor:pointer;">
                             ${isExp ? '▲折りたたむ' : '⚡表示する'}
                         </button>
-                        <a href="${fc.id}.html" class="btn btn-outline" style="width:100%; box-sizing:border-box; font-size:0.72rem; padding:2px 4px; font-weight:700; text-align:center; text-decoration:none; background:#ffffff; color:${fc.badgeColor}; border-color:${fc.border}; box-shadow:0 1px 2px rgba(0,0,0,0.05);" title="${fc.label}病棟テーブルを別画面で開く">
+                        <a href="${fc.id}.html?from=master&term=${curStartDate}" class="btn btn-outline" style="width:100%; box-sizing:border-box; font-size:0.72rem; padding:2px 4px; font-weight:700; text-align:center; text-decoration:none; background:#ffffff; color:${fc.badgeColor}; border-color:${fc.border}; box-shadow:0 1px 2px rgba(0,0,0,0.05);" title="${fc.label}病棟テーブルを別画面で開く（選択中のタームを連動）">
                             🔗 ${fc.label}を開く
                         </a>
                     </div>
@@ -8145,9 +8225,8 @@ function renderMasterIntegrationView() {
                         let sym = (cellVal && typeof cellVal === 'object') ? (cellVal.symbol || '') : (cellVal || '');
                         if (!sym && st.days && st.days[d]) sym = st.days[d];
                         if (!sym) {
-                            const dInfo = (term && term.dates && term.dates[d]) ? term.dates[d] : null;
-                            const wDay = dInfo ? dInfo.weekday : (d % 7 === 5 ? '土' : (d % 7 === 6 ? '日' : '月'));
-                            sym = haDef.isWeekendOff ? ((wDay === '土' || wDay === '日') ? '休' : '○') : ((wDay === '日') ? '休' : '○');
+                            // ★ ユーザー指示: まだ予定を入れていない時は勝手に'○'を代入せず空欄のまま保持する（ハーフマン実数0.5の誤表示防止）
+                            sym = '';
                         }
                         const isFixed = (cellVal && typeof cellVal === 'object') ? !!cellVal.isFixed : false;
                         row.push({ symbol: sym, isFixed: isFixed });
@@ -8326,7 +8405,9 @@ function renderMasterIntegrationView() {
             const dailyPtb = new Array(numDays).fill(0);
             const dailyOtb = new Array(numDays).fill(0);
             const dailyStWork = new Array(numDays).fill(0);
-            const dailyHaWork = (lifeHaDataMap[fc.id] && Array.isArray(lifeHaDataMap[fc.id])) ? [...lifeHaDataMap[fc.id]] : new Array(numDays).fill(0);
+            const dailyHaWork = new Array(numDays).fill(0); // ★ 各階自律集計
+            const dailyFloorRealWork = new Array(numDays).fill(0); // ★ 当該フロアの実数合計（PT+OT+ST+ハーフマン）
+            const dailyFloorHeadCount = new Array(numDays).fill(0); // ★ 当該フロアの出勤人数合計
 
             orderedStaffList.forEach(item => {
                 const s = item.staff;
@@ -8335,39 +8416,50 @@ function renderMasterIntegrationView() {
                     const cell = item.gridRow ? item.gridRow[d] : null;
                     const sym = (cell && typeof cell === 'object') ? (cell.symbol || '') : (cell || '');
                     if (item.isHa) {
-                        // ハ応援スタッフの出勤実数集計（出勤0.5、半勤0.25）
+                        // ハ応援スタッフの出勤実数集計（出勤0.5、半勤0.25、予定なし・空欄は0）
                         if (isWorkSymbol(sym) && sym !== '研' && sym !== '張') {
                             dailyHaWork[d] = 0.5;
+                            dailyFloorRealWork[d] += 0.5;
+                            dailyFloorHeadCount[d] += 0.5;
                         } else if (sym === '○/休' || sym === '休/○' || sym === '○/有' || sym === '有/○' || sym === '〇/休' || sym === '休/〇' || sym === '〇/有' || sym === '有/〇') {
                             dailyHaWork[d] = 0.25;
-                        } else if (sym === '休' || sym === '有' || sym.includes('リフ') || sym.startsWith('上') || sym.startsWith('下')) {
+                            dailyFloorRealWork[d] += 0.25;
+                            dailyFloorHeadCount[d] += 0.25;
+                        } else {
                             dailyHaWork[d] = 0;
                         }
                     } else if (isWorkSymbol(sym) && sym !== '研' && sym !== '張') {
+                        const wVal = (s.isHalf ? 0.5 : 1.0);
+                        dailyFloorRealWork[d] += wVal;
+                        dailyFloorHeadCount[d] += wVal;
                         if (item.isST) {
-                            dailyStWork[d] += (s.isHalf ? 0.5 : 1.0);
+                            dailyStWork[d] += wVal;
                         } else {
-                            if (item.sec === secPta) dailyPta[d] += (s.isHalf ? 0.5 : 1.0);
-                            else if (item.sec === secOta) dailyOta[d] += (s.isHalf ? 0.5 : 1.0);
-                            else if (item.sec === secPtb) dailyPtb[d] += (s.isHalf ? 0.5 : 1.0);
-                            else if (item.sec === secOtb) dailyOtb[d] += (s.isHalf ? 0.5 : 1.0);
+                            if (item.sec === secPta) dailyPta[d] += wVal;
+                            else if (item.sec === secOta) dailyOta[d] += wVal;
+                            else if (item.sec === secPtb) dailyPtb[d] += wVal;
+                            else if (item.sec === secOtb) dailyOtb[d] += wVal;
                         }
-                    } else if (sym === '○/休' || sym === '休/○' || sym === '○/有' || sym === '有/○') {
-                        if (item.isST) dailyStWork[d] += 0.5;
+                    } else if (sym === '○/休' || sym === '休/○' || sym === '○/有' || sym === '有/○' || sym === '〇/休' || sym === '休/〇' || sym === '〇/有' || sym === '有/〇') {
+                        const wVal = (s.isHalf ? 0.25 : 0.5);
+                        dailyFloorRealWork[d] += wVal;
+                        dailyFloorHeadCount[d] += wVal;
+                        if (item.isST) dailyStWork[d] += wVal;
                         else {
-                            if (item.sec === secPta) dailyPta[d] += 0.5;
-                            else if (item.sec === secOta) dailyOta[d] += 0.5;
-                            else if (item.sec === secPtb) dailyPtb[d] += 0.5;
-                            else if (item.sec === secOtb) dailyOtb[d] += 0.5;
+                            if (item.sec === secPta) dailyPta[d] += wVal;
+                            else if (item.sec === secOta) dailyOta[d] += wVal;
+                            else if (item.sec === secPtb) dailyPtb[d] += wVal;
+                            else if (item.sec === secOtb) dailyOtb[d] += wVal;
                         }
                     }
                 }
             });
 
             // 集計フッター行のリスト定義
+            // ★ PT A(0.5) + ハーフマン(0.5) 等の小数合算を正確に反映
             const floorFooterRows = [
-                { label: '出勤人数合計', vals: dailyTotal, color: '#0f172a', bg: '#f1f5f9', bold: true },
-                { label: '実数合計', vals: dailyReal, color: '#0369a1', bg: '#e2e8f0', bold: true },
+                { label: '出勤人数合計', vals: dailyFloorHeadCount, color: '#0f172a', bg: '#f1f5f9', bold: true },
+                { label: '実数合計', vals: dailyFloorRealWork, color: '#0369a1', bg: '#e2e8f0', bold: true },
                 { label: `${secPta} 実数`, vals: dailyPta, color: '#ea580c', bg: '#fffaf5', bold: false },
                 { label: `${secOta} 実数`, vals: dailyOta, color: '#ea580c', bg: '#fffaf5', bold: false },
                 { label: `${secPtb} 実数`, vals: dailyPtb, color: '#1d4ed8', bg: '#f5f8ff', bold: false },
@@ -11966,11 +12058,12 @@ function renderMasterIntegrationView() {
         if (showDeptNav) {
             deptNavContainer.classList.remove('hidden-nav');
             deptNavContainer.style.setProperty('display', 'flex', 'important');
-            // 内部リンクにも ?from=master を維持して相互往来可能にする
+            // ★ 内部リンクにも ?from=master と選択中ターム(&term=)を維持して相互往来可能にする
             deptNavContainer.querySelectorAll('a.dept-nav-btn').forEach(btn => {
-                const href = btn.getAttribute('href');
-                if (href && !href.includes('index.html') && !href.includes('master') && !href.includes('from=master')) {
-                    btn.setAttribute('href', href + (href.includes('?') ? '&' : '?') + 'from=master');
+                let href = btn.getAttribute('href');
+                if (href && !href.includes('index.html') && !href.includes('master')) {
+                    const baseUrl = href.split('?')[0];
+                    btn.setAttribute('href', `${baseUrl}?from=master&term=${currentWorkingStartDate || '2026-04-01'}`);
                 }
             });
         } else {
