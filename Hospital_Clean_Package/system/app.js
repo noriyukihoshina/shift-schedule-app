@@ -445,10 +445,13 @@ document.addEventListener('DOMContentLoaded', () => {
         }
 
         const authKey = `auth_${deptId}`;
+        const urlParams = new URLSearchParams(window.location.search);
+        const isMasterNavigated = (urlParams.get('from') === 'master') && (typeof sessionStorage !== 'undefined' && sessionStorage.getItem('auth_master') === 'true');
         // ★ リロード時は不要、ブラウザで新しく開くたびにパスワードを要求（sessionStorage）
-        // ★ マスターテーブル認証済み（統括セッション）の場合は、全病棟への切り替えをシームレスに自動許可！
-        if (sessionStorage.getItem(authKey) === 'true' || sessionStorage.getItem('auth_master') === 'true') {
-            return; // 同一セッションまたは統括マスター認証済み
+        // ★ マスターテーブルから「?from=master」で明示的に遷移してきた統括セッションの場合のみ、パスワードを自動スキップ！
+        // 単独バッチから直接起動した場合は、ブラウザ内にマスターの記憶があっても必ず自病棟パスワードを要求
+        if (sessionStorage.getItem(authKey) === 'true' || isMasterNavigated) {
+            return; // 同一セッションまたはマスターから遷移してきた統括管理者
         }
 
         // 各フロアのテーマカラー＆アイコン情報
@@ -502,8 +505,16 @@ document.addEventListener('DOMContentLoaded', () => {
                     overlay.remove();
                     const dNav = document.querySelector('.dept-nav-container');
                     if (dNav) {
-                        const isMasterAdmin = isMaster || sessionStorage.getItem('auth_master') === 'true' || sessionStorage.getItem('is_master_admin') === 'true';
-                        dNav.style.display = isMasterAdmin ? 'flex' : 'none';
+                        const urlParams = new URLSearchParams(window.location.search);
+                        const isMasterNav = (urlParams.get('from') === 'master') && (sessionStorage.getItem('auth_master') === 'true');
+                        const showNav = isMaster || isMasterNav;
+                        if (showNav) {
+                            dNav.classList.remove('hidden-nav');
+                            dNav.style.setProperty('display', 'flex', 'important');
+                        } else {
+                            dNav.classList.add('hidden-nav');
+                            dNav.style.setProperty('display', 'none', 'important');
+                        }
                     }
                 }, 250);
             } else {
@@ -11943,16 +11954,28 @@ function renderMasterIntegrationView() {
     renderSavedTermsSelect();
 
     // ★ テーブル切替バー（dept-nav-container）の表示・非表示制御:
-    // マスターテーブル自身、またはマスターテーブル認証済み（統括管理者セッション: sessionStorage.getItem('auth_master') === 'true'）の場合、
-    // 各病棟画面（1F/2F/3F/南/ST/生活期）でもテーブル切替バーを表示し、マスターテーブルや他フロアへ自由に行ったり来たりできるようにする。
-    // 一般スタッフ（単独病棟起動・auth_master未所持）の場合は非表示（display: none）を保ち、他病棟の閲覧・改ざんを物理遮断する。
+    // マスターテーブル自身（isMaster）、またはマスターテーブルから明示的に遷移してきた統括管理者（?from=master かつ auth_master === 'true'）の場合のみ、
+    // テーブル切替バーを表示し、マスターテーブルや他フロアへ自由に行ったり来たりできるようにする。
+    // 単独病棟起動時（各病棟バッチから起動、from=master なし）は、ブラウザ内のセッション記憶に関係なく絶対に非表示（display: none）を保ち、
+    // 他病棟への行き来ボタンを物理的に完全消滅させて自病棟専用画面として隔離する！
     const deptNavContainer = document.querySelector('.dept-nav-container');
     if (deptNavContainer) {
-        const isMasterAdminSession = isMaster || (typeof sessionStorage !== 'undefined' && (sessionStorage.getItem('auth_master') === 'true' || sessionStorage.getItem('is_master_admin') === 'true'));
-        if (isMasterAdminSession) {
-            deptNavContainer.style.display = 'flex';
+        const urlParams = new URLSearchParams(window.location.search);
+        const isMasterNavigated = (urlParams.get('from') === 'master') && (typeof sessionStorage !== 'undefined' && sessionStorage.getItem('auth_master') === 'true');
+        const showDeptNav = isMaster || isMasterNavigated;
+        if (showDeptNav) {
+            deptNavContainer.classList.remove('hidden-nav');
+            deptNavContainer.style.setProperty('display', 'flex', 'important');
+            // 内部リンクにも ?from=master を維持して相互往来可能にする
+            deptNavContainer.querySelectorAll('a.dept-nav-btn').forEach(btn => {
+                const href = btn.getAttribute('href');
+                if (href && !href.includes('index.html') && !href.includes('master') && !href.includes('from=master')) {
+                    btn.setAttribute('href', href + (href.includes('?') ? '&' : '?') + 'from=master');
+                }
+            });
         } else {
-            deptNavContainer.style.display = 'none';
+            deptNavContainer.classList.add('hidden-nav');
+            deptNavContainer.style.setProperty('display', 'none', 'important');
         }
     }
 
