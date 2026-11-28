@@ -57,13 +57,18 @@ if ($existingHealthy) {
 }
 
 # ★ 2. 応答がない（またはポート塞がり・ゾンビ化）の場合の自己修復クリーンアップ
-# 自身以外の server.ps1 / local_server.ps1 プロセスをすべて安全に終了してポートを解放
+# 同一ポートを使用している自身以外の server.ps1 / local_server.ps1 プロセスのみを安全に終了してポートを解放
 $myPid = $PID
 try {
     Get-CimInstance Win32_Process | Where-Object {
-        $_.ProcessId -ne $myPid -and 
-        $_.Name -eq "powershell.exe" -and 
-        ($_.CommandLine -match "server\.ps1" -or $_.CommandLine -match "local_server\.ps1")
+        if ($_.ProcessId -eq $myPid -or $_.Name -ne "powershell.exe") { return $false }
+        $cmd = $_.CommandLine
+        if (-not ($cmd -match "server\.ps1" -or $cmd -match "local_server\.ps1")) { return $false }
+        if ($Port -eq 38383) {
+            return (-not ($cmd -match "-Port\s+(?!38383\b)\d+"))
+        } else {
+            return ($cmd -match "-Port\s+$Port\b")
+        }
     } | ForEach-Object {
         Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue
     }
@@ -169,6 +174,11 @@ try {
         }
 
         $path = $request.Url.LocalPath
+
+        # ★ 作業・通信中（/api/tab_close と /shutdown 以外の全リクエスト）は終了予約を即座キャンセル！
+        if ($path -ne "/api/tab_close" -and $path -ne "/shutdown") {
+            $closeRequestedAt = $null
+        }
 
         # ヘルスチェック
         if ($path -eq "/ping") {

@@ -12251,9 +12251,11 @@ function renderMasterIntegrationView() {
         }
 
         async function sendHeartbeat() {
+            // バックグラウンド（別アプリ操作中・スリープ中）は誤検知防止のため失敗カウントを進めない
+            if (typeof document !== 'undefined' && document.visibilityState === 'hidden') return;
             try {
                 const ctrl = (typeof AbortController !== 'undefined') ? new AbortController() : null;
-                const tId = ctrl ? setTimeout(() => ctrl.abort(), 2500) : null;
+                const tId = ctrl ? setTimeout(() => ctrl.abort(), 6000) : null;
                 const resp = await fetch(`/api/heartbeat?t=${Date.now()}`, {
                     method: 'GET',
                     cache: 'no-store',
@@ -12265,17 +12267,22 @@ function renderMasterIntegrationView() {
                     hideServerDisconnectModal();
                 } else {
                     consecutiveFails++;
-                    if (consecutiveFails >= 2) showServerDisconnectModal();
+                    if (consecutiveFails >= 3) showServerDisconnectModal();
                 }
             } catch (e) {
                 consecutiveFails++;
-                if (consecutiveFails >= 2) showServerDisconnectModal();
+                if (consecutiveFails >= 3) showServerDisconnectModal();
             }
         }
 
-        // 初回送信および3秒間隔ハートビート
+        // 初回送信および5秒間隔ハートビート（自動生成・一括保存の瞬間負荷で誤検知しない余裕設計）
         sendHeartbeat();
-        setInterval(sendHeartbeat, 3000);
+        setInterval(sendHeartbeat, 5000);
+        document.addEventListener('visibilitychange', () => {
+            if (document.visibilityState === 'visible') {
+                sendHeartbeat();
+            }
+        });
 
         // タブ閉鎖時に終了予約を送信（画面遷移・他タブ稼働時は次のハートビートで自動キャンセル）
         const notifyTabClose = () => {
