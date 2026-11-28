@@ -2520,8 +2520,6 @@ document.addEventListener('DOMContentLoaded', () => {
                 <th class="flag-col" rowspan="2" title="0.5（実数合計計算時に0.5人で計算）" style="background:#f3e8ff; color:#6b21a8; font-weight:800;">0.5</th>
                 <th class="flag-col" rowspan="2" title="1年目スタッフ" style="background:#fef08a; color:#854d0e; font-weight:800;">1年目</th>
                 <th class="flag-col" rowspan="2" title="専従" style="background:#dcfce7; color:#166534;">専従</th>
-                <th class="flag-col" rowspan="2" title="土日休（事前希望がない限り土日休み固定）" style="background:#dbeafe; color:#1e40af; font-weight:800;">土日休</th>
-                <th class="flag-col" rowspan="2" title="日休（日曜日固定公休＋平日分散配置）" style="background:#fef3c7; color:#92400e; font-weight:800;">日休</th>
                 <th class="flag-col" rowspan="2" title="6連勤例外許可" style="background:#fee2e2; color:#991b1b;">6連勤<br>可</th>
                 <th class="flag-col" rowspan="2" title="休暇（育休・産休・傷病休暇：自動作成で全日『ー』入力、出勤人数・実数から除外）" style="background:#e2e8f0; color:#334155; font-weight:800;">休暇</th>
                 <th class="flag-col" rowspan="2" title="改姓・旧姓（前タームの氏名）" style="background:#f1f5f9; color:#475569; min-width:80px;">旧姓</th>
@@ -2725,18 +2723,6 @@ document.addEventListener('DOMContentLoaded', () => {
                     <td class="flag-col" style="background:#f0fdf4;">
                         <label class="toggle-switch" title="専従">
                             <input type="checkbox" ${staff.isFullTime ? 'checked' : ''} data-flag="isFullTime" data-s="${sIdx}">
-                            <span class="toggle-slider"></span>
-                        </label>
-                    </td>
-                    <td class="flag-col" style="background:#eff6ff;">
-                        <label class="toggle-switch" title="土日休（事前希望がない限り土日休み固定）">
-                            <input type="checkbox" ${staff.isSatSunOff ? 'checked' : ''} data-off-type="satSun" data-s="${sIdx}">
-                            <span class="toggle-slider"></span>
-                        </label>
-                    </td>
-                    <td class="flag-col" style="background:#fefce8;">
-                        <label class="toggle-switch" title="日休（日曜日固定公休＋平日分散配置）">
-                            <input type="checkbox" ${staff.isSunOff ? 'checked' : ''} data-off-type="sunOnly" data-s="${sIdx}">
                             <span class="toggle-slider"></span>
                         </label>
                     </td>

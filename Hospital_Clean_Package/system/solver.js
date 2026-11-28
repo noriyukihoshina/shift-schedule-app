@@ -1359,6 +1359,18 @@ class ShiftScheduler {
                     this.setSymbol(s, d, SYMBOLS.WORK, false);
                 }
             }
+            // ★ ユーザー指示: 希望休等で初期パターンが5連勤超過・週休2日違反になった場合、厳格CSP週次ソルバーで即座修復！
+            if (!this.isStaffHardValid(s)) {
+                const maxConsec = this.staffList[s].allow6Consec ? 6 : 5;
+                const solved = this.solveStaffScheduleWeekly(s, stdHols, maxConsec);
+                if (solved) {
+                    for (let d = 0; d < this.numDays; d++) {
+                        if (!this.grid[s][d].isFixed) {
+                            this.grid[s][d].symbol = solved[d];
+                        }
+                    }
+                }
+            }
         }
     }
 
@@ -1603,26 +1615,32 @@ class ShiftScheduler {
                 for (let k = 0; k < need && k < offFt.length; k++) {
                     const s = offFt[k];
                     let swapped = false;
+                    // 優先1: 他の超過日とハード制約厳守でスワップ（距離が近い日を優先）
+                    const candDays = [];
                     for (let otherD = 0; otherD < this.numDays; otherD++) {
                         if (otherD === d) continue;
                         if (!isWorkSymbol(this.grid[s][otherD].symbol) || this.grid[s][otherD].isFixed) continue;
                         const otherFtWorkCount = fullTimeStaff.filter(otherS => isWorkSymbol(this.grid[otherS][otherD].symbol)).length;
-                        if (otherFtWorkCount > TARGET_DAILY_FULLTIME) {
-                            const symWork = this.grid[s][otherD].symbol === '早' ? '早' : '○';
-                            this.grid[s][d] = { symbol: symWork, isFixed: false };
-                            this.grid[s][otherD] = { symbol: '休', isFixed: false };
+                        candDays.push({ otherD, excess: otherFtWorkCount - TARGET_DAILY_FULLTIME, dist: Math.abs(otherD - d) });
+                    }
+                    candDays.sort((a, b) => {
+                        if ((b.excess > 0 ? 1 : 0) !== (a.excess > 0 ? 1 : 0)) return (b.excess > 0 ? 1 : 0) - (a.excess > 0 ? 1 : 0);
+                        return a.dist - b.dist;
+                    });
+                    for (const cand of candDays) {
+                        const otherD = cand.otherD;
+                        const origD = { ...this.grid[s][d] };
+                        const origOther = { ...this.grid[s][otherD] };
+                        const symWork = origOther.symbol === '早' ? '早' : '○';
+                        this.grid[s][d] = { symbol: symWork, isFixed: false };
+                        this.grid[s][otherD] = { symbol: '休', isFixed: false };
+                        // ★ 絶対制約チェック: 5連勤超過・週休2日違反・公休間隔違反を起こすスワップは即座ロールバック！
+                        if (this.isStaffHardValid(s)) {
                             swapped = true;
                             break;
-                        }
-                    }
-                    if (!swapped) {
-                        for (let otherD = 0; otherD < this.numDays; otherD++) {
-                            if (otherD === d) continue;
-                            if (!isWorkSymbol(this.grid[s][otherD].symbol) || this.grid[s][otherD].isFixed) continue;
-                            const symWork = this.grid[s][otherD].symbol === '早' ? '早' : '○';
-                            this.grid[s][d] = { symbol: symWork, isFixed: false };
-                            this.grid[s][otherD] = { symbol: '休', isFixed: false };
-                            break;
+                        } else {
+                            this.grid[s][d] = origD;
+                            this.grid[s][otherD] = origOther;
                         }
                     }
                 }
@@ -1632,16 +1650,28 @@ class ShiftScheduler {
                     const s = workingFt[k];
                     if (this.grid[s][d].isFixed) continue;
 
+                    const candDays = [];
                     for (let otherD = 0; otherD < this.numDays; otherD++) {
                         if (otherD === d) continue;
                         if (!isFullOffSymbol(this.grid[s][otherD].symbol) || this.grid[s][otherD].isFixed) continue;
-
                         const otherFtWorkCount = fullTimeStaff.filter(otherS => isWorkSymbol(this.grid[otherS][otherD].symbol)).length;
                         if (otherFtWorkCount < TARGET_DAILY_FULLTIME) {
-                            const origSym = this.grid[s][d].symbol;
-                            this.grid[s][d] = { symbol: '休', isFixed: false };
-                            this.grid[s][otherD] = { symbol: origSym, isFixed: false };
+                            candDays.push({ otherD, dist: Math.abs(otherD - d) });
+                        }
+                    }
+                    candDays.sort((a, b) => a.dist - b.dist);
+                    for (const cand of candDays) {
+                        const otherD = cand.otherD;
+                        const origD = { ...this.grid[s][d] };
+                        const origOther = { ...this.grid[s][otherD] };
+                        this.grid[s][d] = { symbol: '休', isFixed: false };
+                        this.grid[s][otherD] = { symbol: origD.symbol, isFixed: false };
+                        // ★ 絶対制約チェック: 5連勤超過・週休2日違反・公休間隔違反を起こすスワップは即座ロールバック！
+                        if (this.isStaffHardValid(s)) {
                             break;
+                        } else {
+                            this.grid[s][d] = origD;
+                            this.grid[s][otherD] = origOther;
                         }
                     }
                 }
