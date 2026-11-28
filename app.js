@@ -1692,31 +1692,61 @@ document.addEventListener('DOMContentLoaded', () => {
     // 直前ターム（終了日が新ターム開始日の前日、または直近の過去ターム）を検索
     function findPreviousTerm(startDateStr) {
         try {
-            const terms = getSavedTerms();
-            if (!terms || terms.length === 0) return null;
+            if (!startDateStr) return null;
 
-            const curD = new Date(startDateStr + 'T00:00:00');
-            const prevEndD = new Date(curD);
-            prevEndD.setDate(prevEndD.getDate() - 1);
-            const prevEndYMD = `${prevEndD.getFullYear()}-${String(prevEndD.getMonth() + 1).padStart(2, '0')}-${String(prevEndD.getDate()).padStart(2, '0')}`;
-
-            // 1. 終了日（開始日+27日）が新タームの前日と完全に一致するタームを探す
-            for (const t of terms) {
-                if (t === startDateStr) continue;
-                const tD = new Date(t + 'T00:00:00');
-                tD.setDate(tD.getDate() + (NUM_DAYS - 1));
-                const tEndYMD = `${tD.getFullYear()}-${String(tD.getMonth() + 1).padStart(2, '0')}-${String(tD.getDate()).padStart(2, '0')}`;
-                if (tEndYMD === prevEndYMD) {
-                    return t;
+            // ★ ユーザー指示 (ver.36.9): 厳密に1つ前のタームのみを対象とし、未保存時は過去ターム（第1ターム等）へフォールバックせず空白（null）とする！
+            let expectedPrevStart = null;
+            if (Array.isArray(GLOBAL_TERMS)) {
+                const curIdx = GLOBAL_TERMS.findIndex(t => t.startDate === startDateStr);
+                if (curIdx > 0) {
+                    expectedPrevStart = GLOBAL_TERMS[curIdx - 1].startDate;
                 }
             }
-
-            // 2. フォールバック: startDateStr より過去で最新の保存ターム
-            const pastTerms = terms.filter(t => t < startDateStr).sort().reverse();
-            if (pastTerms.length > 0) {
-                return pastTerms[0];
+            if (!expectedPrevStart) {
+                const curD = new Date(startDateStr + 'T00:00:00');
+                const prevStartD = new Date(curD);
+                prevStartD.setDate(prevStartD.getDate() - 28);
+                expectedPrevStart = `${prevStartD.getFullYear()}-${String(prevStartD.getMonth() + 1).padStart(2, '0')}-${String(prevStartD.getDate()).padStart(2, '0')}`;
             }
 
+            // 1. マスター確定最終7日キャッシュに直前タームの有意データがあるか確認
+            const rawMaster7 = localStorage.getItem(`shift_schedule_master_confirmed_last7_${expectedPrevStart}`);
+            if (rawMaster7) {
+                try {
+                    const mObj = JSON.parse(rawMaster7);
+                    if (mObj && typeof mObj === 'object' && Object.values(mObj).some(arr => Array.isArray(arr) && arr.some(v => v && String(v).trim() !== ''))) {
+                        return expectedPrevStart;
+                    }
+                } catch (e) {}
+            }
+
+            // 2. 全病棟（1f, 2f, 3f, south, st, life, master）のいずれかに直前タームの有意な勤務データがあるか横断確認
+            const allPrefixes = [
+                'shift_schedule_1f_term_',
+                'shift_schedule_2f_term_',
+                'shift_schedule_3f_term_',
+                'shift_schedule_south_term_',
+                'shift_schedule_st_term_',
+                'shift_schedule_life_term_',
+                'shift_schedule_master_term_'
+            ];
+            for (const pfx of allPrefixes) {
+                const raw = localStorage.getItem(`${pfx}${expectedPrevStart}`);
+                if (!raw) continue;
+                try {
+                    const d = JSON.parse(raw);
+                    const hasGridData = Array.isArray(d.outputGrid) && d.outputGrid.some(row => Array.isArray(row) && row.some(c => {
+                        const sym = (c && typeof c === 'object') ? c.symbol : c;
+                        return sym && String(sym).trim() !== '';
+                    }));
+                    const hasDaysData = Array.isArray(d.staffList) && d.staffList.some(st => Array.isArray(st.days) && st.days.some(v => v && String(v).trim() !== ''));
+                    if (hasGridData || hasDaysData) {
+                        return expectedPrevStart;
+                    }
+                } catch (e) {}
+            }
+
+            // 直前タームに有意データがなければ null（空白のまま）を返す！
             return null;
         } catch (e) {
             console.error('直前タームの検索エラー:', e);
@@ -4355,22 +4385,28 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     }
 
-    // 前ターム実績を自動取込ボタン（直前の保存済み勤務表の最終5日間実績を反映）
+    // 前ターム実績を自動取込ボタン（直前の保存済み勤務表の最終7日間実績を反映）
     const syncPrevTermHistoryBtn = document.getElementById('syncPrevTermHistoryBtn');
     if (syncPrevTermHistoryBtn) {
         syncPrevTermHistoryBtn.addEventListener('click', () => {
             const curDate = document.getElementById('termStartDate')?.value || currentWorkingStartDate;
             const prevTerm = findPreviousTerm(curDate);
             if (!prevTerm) {
-                alert('直前の保存済み勤務表データが見つかりませんでした。\n先に前ターム（例: 4/1～4/28）を作成・保存してください。');
+                let prevLabel = '直前ターム';
+                if (Array.isArray(GLOBAL_TERMS)) {
+                    const idx = GLOBAL_TERMS.findIndex(t => t.startDate === curDate);
+                    if (idx > 0) prevLabel = GLOBAL_TERMS[idx - 1].label;
+                }
+                alert(`直前の勤務表【${prevLabel}】の保存データが見つからないため、前ターム最終7日間実績は空白のままにします。`);
                 return;
             }
+            const pTermDef = (typeof findTermByStartDate === 'function') ? findTermByStartDate(prevTerm) : null;
             const pD = new Date(prevTerm + 'T00:00:00');
             const pEndD = new Date(pD);
-            pEndD.setDate(pEndD.getDate() + 27);
+            pEndD.setDate(pEndD.getDate() + ((pTermDef && pTermDef.numDays ? pTermDef.numDays : 28) - 1));
             const pTitle = `${pD.getMonth() + 1}/${pD.getDate()}～${pEndD.getMonth() + 1}/${pEndD.getDate()}`;
 
-            if (confirm(`直前の勤務表【${pTitle}】の最終5日間の勤務実績を、この期間の「前ターム最終5日間実績」に取り込みますか？\n（※現在入力されている前実績は上書きされます）`)) {
+            if (confirm(`直前の勤務表【${pTitle}】の最終7日間の勤務実績を、この期間の「前ターム最終7日間実績」に取り込みますか？\n（※現在入力されている前実績は上書きされます）`)) {
                 pushHistory();
                 applyPreviousTermHistory(prevTerm, true);
             }
