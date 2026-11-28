@@ -115,6 +115,7 @@ $mimeTypes = @{
 }
 
 $lastAccessTime = Get-Date
+$closeRequestedAt = $null
 $asyncResult = $null
 
 try {
@@ -124,10 +125,18 @@ try {
             $asyncResult = $listener.BeginGetContext($null, $null)
         }
 
-        # 2秒待機
-        $signaled = $asyncResult.AsyncWaitHandle.WaitOne(2000)
+        # 1秒待機
+        $signaled = $asyncResult.AsyncWaitHandle.WaitOne(1000)
 
         if (-not $signaled) {
+            # ★ ブラウザの「×」で最後のタブが閉じられてから4秒間ハートビートがなければ自動安全終了
+            if ($null -ne $closeRequestedAt) {
+                $sinceClose = ((Get-Date) - $closeRequestedAt).TotalSeconds
+                if ($sinceClose -ge 4) {
+                    Write-Host "ブラウザが閉じられたため、データサーバーを自動終了します。" -ForegroundColor Yellow
+                    break
+                }
+            }
             # 30分間アクセスがなければ自動終了（リソース解放）
             $idleMinutes = ((Get-Date) - $lastAccessTime).TotalMinutes
             if ($idleMinutes -ge 30) {
@@ -166,6 +175,29 @@ try {
             $pong = [System.Text.Encoding]::UTF8.GetBytes("pong")
             $response.StatusCode = 200
             $response.ContentType = "text/plain"
+            $response.OutputStream.Write($pong, 0, $pong.Length)
+            $response.Close()
+            continue
+        }
+
+        # ハートビート（生存信号：終了予約を即座キャンセル）
+        if ($path -eq "/api/heartbeat") {
+            $closeRequestedAt = $null
+            $lastAccessTime = Get-Date
+            $pong = [System.Text.Encoding]::UTF8.GetBytes('{"ok":true}')
+            $response.StatusCode = 200
+            $response.ContentType = "application/json; charset=utf-8"
+            $response.OutputStream.Write($pong, 0, $pong.Length)
+            $response.Close()
+            continue
+        }
+
+        # タブ閉鎖通知（4秒猶予の終了予約：遷移や他タブがあればハートビートで自動キャンセル）
+        if ($path -eq "/api/tab_close") {
+            $closeRequestedAt = Get-Date
+            $pong = [System.Text.Encoding]::UTF8.GetBytes('{"ok":true}')
+            $response.StatusCode = 200
+            $response.ContentType = "application/json; charset=utf-8"
             $response.OutputStream.Write($pong, 0, $pong.Length)
             $response.Close()
             continue

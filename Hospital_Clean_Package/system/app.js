@@ -12203,6 +12203,101 @@ function renderMasterIntegrationView() {
     window.addEventListener('pagehide', flushCloudSync);
     window.addEventListener('beforeunload', flushCloudSync);
 
+    // ★ ユーザー指示 (ver.36.6): 院内ローカル環境（127.0.0.1 / localhost）専用
+    // 1) ブラウザを「×」で閉じた際にサーバーを自動安全終了（画面遷移・リロード・他タブ稼働時は自動キャンセル）
+    // 2) 長時間スリープ等でサーバーとの接続が切れた場合、画面中央に目立つ警告ポップアップを表示して誤作業を物理防止
+    (function initLocalServerHeartbeat() {
+        if (typeof window === 'undefined' || !window.location) return;
+        const host = window.location.hostname;
+        if (host !== '127.0.0.1' && host !== 'localhost') return;
+
+        let consecutiveFails = 0;
+
+        function showServerDisconnectModal() {
+            let modal = document.getElementById('serverDisconnectModal');
+            if (!modal) {
+                modal = document.createElement('div');
+                modal.id = 'serverDisconnectModal';
+                modal.style.cssText = 'position:fixed; inset:0; z-index:999999; background:rgba(15,23,42,0.72); backdrop-filter:blur(4px); display:flex; align-items:center; justify-content:center; padding:16px;';
+                modal.innerHTML = `
+                    <div style="background:#ffffff; border-radius:14px; max-width:500px; width:100%; box-shadow:0 24px 60px rgba(0,0,0,0.4); overflow:hidden; border:2px solid #dc2626; font-family:inherit;">
+                        <div style="background:linear-gradient(135deg,#dc2626,#b91c1c); color:#ffffff; padding:18px 22px; display:flex; align-items:center; gap:10px;">
+                            <span style="font-size:1.7rem; line-height:1;">⚠️</span>
+                            <div>
+                                <div style="font-size:1.12rem; font-weight:800; letter-spacing:0.02em;">院内データサーバーとの接続が切れました</div>
+                                <div style="font-size:0.78rem; opacity:0.92; margin-top:2px;">このままでは共有フォルダへ保存されません</div>
+                            </div>
+                        </div>
+                        <div style="padding:20px 22px; color:#1e293b; font-size:0.92rem; line-height:1.65;">
+                            <p style="margin:0 0 12px 0;">PCの長時間スリープ、またはデータサーバーの停止により通信が切断されました。</p>
+                            <div style="background:#fef2f2; border:1px solid #fecaca; border-radius:8px; padding:12px 14px; margin-bottom:16px;">
+                                <div style="font-weight:800; color:#991b1b; margin-bottom:6px;">📌 対処方法（必ず実施してください）</div>
+                                <ol style="margin:0; padding-left:20px; color:#7f1d1d; font-weight:600;">
+                                    <li style="margin-bottom:4px;">一度この画面を右上の <strong>「×」</strong> で閉じてください。</li>
+                                    <li>フォルダ内の <strong>起動アイコン（①1階病棟 〜 ⑦マスターテーブル）</strong> から開き直してください。</li>
+                                </ol>
+                            </div>
+                            <div style="display:flex; justify-content:flex-end; gap:10px;">
+                                <button type="button" id="retryServerReconnectBtn" style="background:#0284c7; color:#ffffff; border:none; border-radius:8px; padding:10px 18px; font-size:0.9rem; font-weight:700; cursor:pointer; box-shadow:0 2px 6px rgba(2,132,199,0.3);">🔄 再接続・画面を更新する</button>
+                            </div>
+                        </div>
+                    </div>
+                `;
+                document.body.appendChild(modal);
+                const retryBtn = document.getElementById('retryServerReconnectBtn');
+                if (retryBtn) {
+                    retryBtn.addEventListener('click', () => {
+                        window.location.reload();
+                    });
+                }
+            }
+            modal.style.display = 'flex';
+        }
+
+        function hideServerDisconnectModal() {
+            const modal = document.getElementById('serverDisconnectModal');
+            if (modal) modal.style.display = 'none';
+        }
+
+        async function sendHeartbeat() {
+            try {
+                const ctrl = (typeof AbortController !== 'undefined') ? new AbortController() : null;
+                const tId = ctrl ? setTimeout(() => ctrl.abort(), 2500) : null;
+                const resp = await fetch(`/api/heartbeat?t=${Date.now()}`, {
+                    method: 'GET',
+                    cache: 'no-store',
+                    signal: ctrl ? ctrl.signal : undefined
+                });
+                if (tId) clearTimeout(tId);
+                if (resp && resp.ok) {
+                    consecutiveFails = 0;
+                    hideServerDisconnectModal();
+                } else {
+                    consecutiveFails++;
+                    if (consecutiveFails >= 2) showServerDisconnectModal();
+                }
+            } catch (e) {
+                consecutiveFails++;
+                if (consecutiveFails >= 2) showServerDisconnectModal();
+            }
+        }
+
+        // 初回送信および3秒間隔ハートビート
+        sendHeartbeat();
+        setInterval(sendHeartbeat, 3000);
+
+        // タブ閉鎖時に終了予約を送信（画面遷移・他タブ稼働時は次のハートビートで自動キャンセル）
+        const notifyTabClose = () => {
+            try {
+                if (navigator.sendBeacon) {
+                    navigator.sendBeacon('/api/tab_close');
+                }
+            } catch (e) {}
+        };
+        window.addEventListener('pagehide', notifyTabClose);
+        window.addEventListener('beforeunload', notifyTabClose);
+    })();
+
 
 // ★ ユーザー指示: コピペモード（セル選択 Ctrl+C / Ctrl+V またはクリック貼付、全テーブルでデフォルトON）
     const syncInitialCopyModeBtns = () => {
