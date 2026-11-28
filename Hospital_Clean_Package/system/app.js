@@ -12230,26 +12230,17 @@ function renderMasterIntegrationView() {
                         </div>
                         <div style="padding:20px 22px; color:#1e293b; font-size:0.92rem; line-height:1.65;">
                             <p style="margin:0 0 12px 0;">PCの長時間スリープ、またはデータサーバーの停止により通信が切断されました。</p>
-                            <div style="background:#fef2f2; border:1px solid #fecaca; border-radius:8px; padding:12px 14px; margin-bottom:16px;">
+                            <div style="background:#fef2f2; border:1px solid #fecaca; border-radius:8px; padding:14px 16px;">
                                 <div style="font-weight:800; color:#991b1b; margin-bottom:6px;">📌 対処方法（必ず実施してください）</div>
                                 <ol style="margin:0; padding-left:20px; color:#7f1d1d; font-weight:600;">
                                     <li style="margin-bottom:4px;">一度この画面を右上の <strong>「×」</strong> で閉じてください。</li>
                                     <li>フォルダ内の <strong>起動アイコン（①1階病棟 〜 ⑦マスターテーブル）</strong> から開き直してください。</li>
                                 </ol>
                             </div>
-                            <div style="display:flex; justify-content:flex-end; gap:10px;">
-                                <button type="button" id="retryServerReconnectBtn" style="background:#0284c7; color:#ffffff; border:none; border-radius:8px; padding:10px 18px; font-size:0.9rem; font-weight:700; cursor:pointer; box-shadow:0 2px 6px rgba(2,132,199,0.3);">🔄 再接続・画面を更新する</button>
-                            </div>
                         </div>
                     </div>
                 `;
                 document.body.appendChild(modal);
-                const retryBtn = document.getElementById('retryServerReconnectBtn');
-                if (retryBtn) {
-                    retryBtn.addEventListener('click', () => {
-                        window.location.reload();
-                    });
-                }
             }
             modal.style.display = 'flex';
         }
