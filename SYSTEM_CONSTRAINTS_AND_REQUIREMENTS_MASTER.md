@@ -18,6 +18,12 @@
     2. **クライアント側（`app.js`、ローカル環境 `127.0.0.1` / `localhost` 専用）**:
        * 3秒間隔で `/api/heartbeat` を送信し、`pagehide` / `beforeunload` 時に `navigator.sendBeacon('/api/tab_close')` を送信。
        * 生存信号が2回連続で失敗（サーバー停止・切断）した場合、画面全体を半透明ダークオーバーレイで覆い、画面中央に警告ポップアップ（`#serverDisconnectModal`）を自動表示して「一度この画面を右上の『×』で閉じ、起動アイコンから開き直す」手順のみをシンプルに提示（誤操作で白いエラー画面へ遷移するのを防ぐためリロードボタンは配置しない）。接続復帰時は自動で非表示化。
+  * **Playwright実機ブラウザ一貫検証（全項目 PASS 確認）**:
+    * マスター ⇔ 1階病棟遷移時にサーバーが誤終了せず `/api/heartbeat` HTTP 200 で継続稼働（ポップアップ非表示）を確認 PASS。
+    * `/shutdown` によるサーバー停止後、約6秒で `#serverDisconnectModal` が画面中央へ自動表示され、ボタン要素 0件・対処手順のみのシンプル表示を確認 PASS。
+  * **Google Drive 配布パッケージ・本番デプロイ更新**:
+    * 最新パッケージ **`23_病院共有フォルダ最新一式.zip`**（ID: `1CrlAK3tPN9NnMel-DN5LurJUdg7Wm73d`、`data/` 除外・二重ZIPゼロ検査済み）を配置完了。
+    * GitHub / Vercel 本番環境へ反映完了。
 
 ---
 
