@@ -1409,6 +1409,29 @@ class ShiftScheduler {
             Math.floor((z2End + this.numDays) / 2)
         ];
 
+        const getTotalEarlyOnDay = (d, excludeS = -1) => {
+            let cnt = 0;
+            for (let oS = 0; oS < this.numStaff; oS++) {
+                if (oS !== excludeS && !this.staffList[oS].isUnused && this.grid[oS][d].symbol === SYMBOLS.EARLY) cnt++;
+            }
+            return cnt;
+        };
+
+        const getPreOffDays = (s) => {
+            const list = [];
+            for (let d = 0; d < this.numDays; d++) {
+                const cell = this.grid[s][d];
+                if (cell.isFixed) continue;
+                if (cell.symbol !== SYMBOLS.WORK && cell.symbol !== SYMBOLS.EARLY) continue;
+                if (d + 1 < this.numDays && isHolidaySymbol(this.grid[s][d + 1].symbol)) {
+                    list.push(d);
+                } else if (d === this.numDays - 1) {
+                    list.push(d);
+                }
+            }
+            return list;
+        };
+
         floors.forEach((fl) => {
             const floorStaff = [];
             for (let s = 0; s < this.numStaff; s++) {
@@ -1418,113 +1441,173 @@ class ShiftScheduler {
             }
             if (floorStaff.length === 0) return;
 
+            // 各スタッフの配置可能候補日（翌日休の出勤日）を事前抽出
+            const eligibleMap = new Map();
+            floorStaff.forEach(s => eligibleMap.set(s, getPreOffDays(s)));
+
+            // そのフロアの各日に既に早番が入っているスタッフ（-1 = 空き、重複禁止用）
+            const floorDayOwner = new Array(this.numDays).fill(-1);
             floorStaff.forEach(s => {
-                if (counts[s] >= 3) return;
-
-                // 翌日（d+1）が休日である出勤日 d をすべて抽出
-                const preOffDays = [];
                 for (let d = 0; d < this.numDays; d++) {
-                    if (this.grid[s][d].isFixed || this.grid[s][d].symbol !== SYMBOLS.WORK) continue;
-                    if (d + 1 < this.numDays && isHolidaySymbol(this.grid[s][d + 1].symbol)) {
-                        preOffDays.push(d);
-                    } else if (d === this.numDays - 1) {
-                        preOffDays.push(d); // 最終日
-                    }
-                }
-
-                if (preOffDays.length === 0) return;
-
-                // 既に早番が入っているゾーンを特定
-                const coveredZones = new Set(assignedDays[s].map(d => getZone(d)));
-
-                // 3つのゾーンそれぞれについて、まだ早番がないゾーンから順番に1回ずつ割り当て
-                for (let targetZone = 0; targetZone < 3; targetZone++) {
-                    if (counts[s] >= 3) break;
-                    if (coveredZones.has(targetZone)) continue;
-
-                    // 当該ゾーン内の preOffDays 候補
-                    const zoneDays = preOffDays.filter(d => getZone(d) === targetZone);
-                    if (zoneDays.length === 0) continue;
-
-                    // 候補スコア計算
-                    const cands = zoneDays.map(d => {
-                        let flEarly = 0;
-                        floorStaff.forEach(oS => {
-                            if (oS !== s && this.grid[oS][d].symbol === SYMBOLS.EARLY) flEarly++;
-                        });
-                        let totalEarly = 0;
-                        for (let oS = 0; oS < this.numStaff; oS++) {
-                            if (oS !== s && this.grid[oS][d].symbol === SYMBOLS.EARLY) totalEarly++;
-                        }
-                        // 既存の割り当て日との最小間隔
-                        let minGap = 999;
-                        assignedDays[s].forEach(ad => {
-                            const gap = Math.abs(d - ad);
-                            if (gap < minGap) minGap = gap;
-                        });
-                        // 理想日との距離
-                        const distFromIdeal = Math.abs(d - idealDays[targetZone]);
-
-                        return { d, flEarly, totalEarly, minGap, distFromIdeal };
-                    });
-
-                    // ソート: フロア内重複ゼロ > 既存早番と3日以上離れている > 全体早番最少 > 理想日に近い
-                    cands.sort((a, b) => {
-                        if (a.flEarly !== b.flEarly) return a.flEarly - b.flEarly;
-                        const aGoodGap = a.minGap >= 3 ? 1 : 0;
-                        const bGoodGap = b.minGap >= 3 ? 1 : 0;
-                        if (aGoodGap !== bGoodGap) return bGoodGap - aGoodGap;
-                        if (a.totalEarly !== b.totalEarly) return a.totalEarly - b.totalEarly;
-                        return a.distFromIdeal - b.distFromIdeal;
-                    });
-
-                    // 最適日を選択して配置
-                    const best = cands[0];
-                    if (best && this.grid[s][best.d].symbol === SYMBOLS.WORK) {
-                        this.setSymbol(s, best.d, SYMBOLS.EARLY, false);
-                        counts[s]++;
-                        assignedDays[s].push(best.d);
-                        coveredZones.add(targetZone);
-                    }
-                }
-
-                // まだ3回に達していない場合のフォールバック（ゾーン不問で最良日を補填）
-                if (counts[s] < 3) {
-                    const remainingCands = preOffDays.filter(d => this.grid[s][d].symbol === SYMBOLS.WORK).map(d => {
-                        let flEarly = 0;
-                        floorStaff.forEach(oS => {
-                            if (oS !== s && this.grid[oS][d].symbol === SYMBOLS.EARLY) flEarly++;
-                        });
-                        let totalEarly = 0;
-                        for (let oS = 0; oS < this.numStaff; oS++) {
-                            if (oS !== s && this.grid[oS][d].symbol === SYMBOLS.EARLY) totalEarly++;
-                        }
-                        let minGap = 999;
-                        assignedDays[s].forEach(ad => {
-                            const gap = Math.abs(d - ad);
-                            if (gap < minGap) minGap = gap;
-                        });
-                        return { d, flEarly, totalEarly, minGap };
-                    });
-
-                    remainingCands.sort((a, b) => {
-                        if (a.flEarly !== b.flEarly) return a.flEarly - b.flEarly;
-                        const aGoodGap = a.minGap >= 3 ? 1 : 0;
-                        const bGoodGap = b.minGap >= 3 ? 1 : 0;
-                        if (aGoodGap !== bGoodGap) return bGoodGap - aGoodGap;
-                        return a.totalEarly - b.totalEarly;
-                    });
-
-                    for (const cand of remainingCands) {
-                        if (counts[s] >= 3) break;
-                        if (this.grid[s][cand.d].symbol === SYMBOLS.WORK) {
-                            this.setSymbol(s, cand.d, SYMBOLS.EARLY, false);
-                            counts[s]++;
-                            assignedDays[s].push(cand.d);
-                        }
+                    if (this.grid[s][d].symbol === SYMBOLS.EARLY) {
+                        floorDayOwner[d] = s;
                     }
                 }
             });
+
+            // 候補日が少ないスタッフから優先配置（空き枠の奪い合いを最小化）
+            const orderedStaff = [...floorStaff].sort((a, b) => eligibleMap.get(a).length - eligibleMap.get(b).length);
+
+            const placeEarly = (s, d) => {
+                this.setSymbol(s, d, SYMBOLS.EARLY, false);
+                floorDayOwner[d] = s;
+                counts[s]++;
+                assignedDays[s].push(d);
+            };
+
+            const removeEarly = (s, d) => {
+                this.setSymbol(s, d, SYMBOLS.WORK, false);
+                if (floorDayOwner[d] === s) floorDayOwner[d] = -1;
+                counts[s]--;
+                const idx = assignedDays[s].indexOf(d);
+                if (idx >= 0) assignedDays[s].splice(idx, 1);
+            };
+
+            // 増強パス探索（BFS）：同階重複ゼロを守りつつ、既配置の同階スタッフを別の空き候補日へずらして枠を空ける
+            const tryAugmentForStaff = (targetS, preferredZone = -1) => {
+                const startDays = eligibleMap.get(targetS).filter(d => this.grid[targetS][d].symbol === SYMBOLS.WORK);
+                if (startDays.length === 0) return false;
+
+                // 優先ゾーン・間隔3日以上・全体早番最少の順で探索開始日を並べる
+                const scoredStarts = startDays.map(d => {
+                    let minGap = 999;
+                    assignedDays[targetS].forEach(ad => { const g = Math.abs(d - ad); if (g < minGap) minGap = g; });
+                    return {
+                        d,
+                        zoneMatch: (preferredZone >= 0 && getZone(d) === preferredZone) ? 1 : 0,
+                        goodGap: minGap >= 3 ? 1 : 0,
+                        totalEarly: getTotalEarlyOnDay(d, targetS),
+                        dist: preferredZone >= 0 ? Math.abs(d - idealDays[preferredZone]) : 0
+                    };
+                }).sort((a, b) => {
+                    if (b.zoneMatch !== a.zoneMatch) return b.zoneMatch - a.zoneMatch;
+                    if (b.goodGap !== a.goodGap) return b.goodGap - a.goodGap;
+                    if (a.totalEarly !== b.totalEarly) return a.totalEarly - b.totalEarly;
+                    return a.dist - b.dist;
+                });
+
+                // まず空き日（floorDayOwner[d] === -1）があれば即配置
+                for (const cand of scoredStarts) {
+                    if (floorDayOwner[cand.d] === -1) {
+                        placeEarly(targetS, cand.d);
+                        return true;
+                    }
+                }
+
+                // 空き日がない場合、増強パス（ずらし入れ替え）で空き日へ到達する最短経路をBFS探索
+                const parentDay = new Map(); // day -> { prevDay, staffMoved }
+                const queue = [];
+                const visitedDays = new Set();
+
+                for (const cand of scoredStarts) {
+                    const d = cand.d;
+                    if (visitedDays.has(d)) continue;
+                    visitedDays.add(d);
+                    parentDay.set(d, { prevDay: -1, staffMoved: targetS });
+                    queue.push(d);
+                }
+
+                let foundFreeDay = -1;
+                while (queue.length > 0) {
+                    const curD = queue.shift();
+                    const owner = floorDayOwner[curD];
+                    if (owner === -1) {
+                        foundFreeDay = curD;
+                        break;
+                    }
+                    // 事前固定の早番は動かせない
+                    if (this.grid[owner][curD].isFixed) continue;
+
+                    // owner が移れる別の候補日を全体早番最少順で探索
+                    const ownerCands = eligibleMap.get(owner)
+                        .filter(nd => nd !== curD && this.grid[owner][nd].symbol === SYMBOLS.WORK && !visitedDays.has(nd))
+                        .sort((a, b) => getTotalEarlyOnDay(a, owner) - getTotalEarlyOnDay(b, owner));
+
+                    for (const nextD of ownerCands) {
+                        visitedDays.add(nextD);
+                        parentDay.set(nextD, { prevDay: curD, staffMoved: owner });
+                        if (floorDayOwner[nextD] === -1) {
+                            foundFreeDay = nextD;
+                            break;
+                        }
+                        queue.push(nextD);
+                    }
+                    if (foundFreeDay !== -1) break;
+                }
+
+                if (foundFreeDay === -1) return false;
+
+                // 経路を逆順にたどって連鎖的に早番をずらす（公休は1マスも動かさず、同階重複ゼロを100%維持！）
+                const moves = [];
+                let traceD = foundFreeDay;
+                while (traceD !== -1) {
+                    const info = parentDay.get(traceD);
+                    moves.push({ staff: info.staffMoved, toDay: traceD, fromDay: info.prevDay });
+                    traceD = info.prevDay;
+                }
+                for (const mv of moves) {
+                    if (mv.fromDay !== -1) {
+                        removeEarly(mv.staff, mv.fromDay);
+                    }
+                    placeEarly(mv.staff, mv.toDay);
+                }
+                return true;
+            };
+
+            // フェーズ1: 3ゾーン均等（序盤・中盤・終盤）で同階重複ゼロ配置
+            for (let targetZone = 0; targetZone < 3; targetZone++) {
+                for (const s of orderedStaff) {
+                    if (counts[s] >= 3) continue;
+                    const coveredZones = new Set(assignedDays[s].map(d => getZone(d)));
+                    if (coveredZones.has(targetZone)) continue;
+
+                    const zoneFreeDays = eligibleMap.get(s)
+                        .filter(d => this.grid[s][d].symbol === SYMBOLS.WORK && getZone(d) === targetZone && floorDayOwner[d] === -1);
+
+                    if (zoneFreeDays.length > 0) {
+                        const cands = zoneFreeDays.map(d => {
+                            let minGap = 999;
+                            assignedDays[s].forEach(ad => { const g = Math.abs(d - ad); if (g < minGap) minGap = g; });
+                            return {
+                                d,
+                                goodGap: minGap >= 3 ? 1 : 0,
+                                totalEarly: getTotalEarlyOnDay(d, s),
+                                dist: Math.abs(d - idealDays[targetZone])
+                            };
+                        }).sort((a, b) => {
+                            if (b.goodGap !== a.goodGap) return b.goodGap - a.goodGap;
+                            if (a.totalEarly !== b.totalEarly) return a.totalEarly - b.totalEarly;
+                            return a.dist - b.dist;
+                        });
+                        placeEarly(s, cands[0].d);
+                    }
+                }
+            }
+
+            // フェーズ2: まだ3回に達していないスタッフを増強パス探索（ずらし入れ替え）で同階重複ゼロのまま3回まで補填
+            for (const s of orderedStaff) {
+                let guard = 0;
+                while (counts[s] < 3 && guard < 5) {
+                    guard++;
+                    const coveredZones = new Set(assignedDays[s].map(d => getZone(d)));
+                    let missingZone = -1;
+                    for (let z = 0; z < 3; z++) {
+                        if (!coveredZones.has(z)) { missingZone = z; break; }
+                    }
+                    const ok = tryAugmentForStaff(s, missingZone);
+                    if (!ok) break;
+                }
+            }
         });
     }
 

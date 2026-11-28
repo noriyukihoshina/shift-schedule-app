@@ -129,10 +129,10 @@ try {
         $signaled = $asyncResult.AsyncWaitHandle.WaitOne(1000)
 
         if (-not $signaled) {
-            # ★ ブラウザの「×」で最後のタブが閉じられてから4秒間ハートビートがなければ自動安全終了
+            # ★ ブラウザの「×」で最後のタブが閉じられてから10秒間ハートビートがなければ自動安全終了
             if ($null -ne $closeRequestedAt) {
                 $sinceClose = ((Get-Date) - $closeRequestedAt).TotalSeconds
-                if ($sinceClose -ge 4) {
+                if ($sinceClose -ge 10) {
                     Write-Host "ブラウザが閉じられたため、データサーバーを自動終了します。" -ForegroundColor Yellow
                     break
                 }
