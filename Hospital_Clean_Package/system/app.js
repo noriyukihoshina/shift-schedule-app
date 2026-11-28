@@ -2728,6 +2728,18 @@ document.addEventListener('DOMContentLoaded', () => {
                             <span class="toggle-slider"></span>
                         </label>
                     </td>
+                    <td class="flag-col" style="background:#eff6ff;">
+                        <label class="toggle-switch" title="土日休（事前希望がない限り土日休み固定）">
+                            <input type="checkbox" ${staff.isSatSunOff ? 'checked' : ''} data-off-type="satSun" data-s="${sIdx}">
+                            <span class="toggle-slider"></span>
+                        </label>
+                    </td>
+                    <td class="flag-col" style="background:#fefce8;">
+                        <label class="toggle-switch" title="日休（日曜日固定公休＋平日分散配置）">
+                            <input type="checkbox" ${staff.isSunOff ? 'checked' : ''} data-off-type="sunOnly" data-s="${sIdx}">
+                            <span class="toggle-slider"></span>
+                        </label>
+                    </td>
                     <td class="flag-col" style="background:#fef2e2;">
                         <label class="toggle-switch" title="6連勤可">
                             <input type="checkbox" ${staff.allow6Consec ? 'checked' : ''} data-flag="allow6Consec" data-s="${sIdx}">
