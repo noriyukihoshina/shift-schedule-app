@@ -191,6 +191,8 @@ function getSunToSatWeekSpans(dates, numDays = 28) {
  * 解なしとなる物理的矛盾を事前に検知し、具体的理由と原因セル(conflictCells)を返す
  */
 function validateInitialState(staffList, options = {}) {
+    // ★ 休暇トグル（育休・産休・傷病休暇）ONのスタッフは事前制約チェック・人数カウントから完全除外
+    staffList = (staffList || []).map(s => (s && s.isLongLeave) ? Object.assign({}, s, { isUnused: true }) : s);
     const errors = [];
     const conflictCells = []; // { staffIndex, dayIndex, reason }
     const isST = !!options.isST;
@@ -635,7 +637,14 @@ function validateInitialState(staffList, options = {}) {
  */
 class ShiftScheduler {
     constructor(staffList, options = {}) {
-        this.staffList = JSON.parse(JSON.stringify(staffList));
+        this.staffList = JSON.parse(JSON.stringify(staffList)).map(s => {
+            if (s && s.isLongLeave) {
+                // ★ 休暇（育休・産休・傷病休暇）スタッフはソルバー内部の公休割当・役職・制約・集計から100%除外（initGridで全日「ー」固定）
+                s.isUnused = true;
+                s.isLongLeave = true;
+            }
+            return s;
+        });
         this.numStaff = this.staffList.length;
         this.numDays = options.numDays || (options.dates ? options.dates.length : (this.staffList[0]?.days?.length || 28));
         this.options = Object.assign({
@@ -825,6 +834,15 @@ class ShiftScheduler {
             const row = [];
             const staff = this.staffList[s];
             for (let d = 0; d < this.numDays; d++) {
+                if (staff.isLongLeave) {
+                    row.push({
+                        symbol: SYMBOLS.EXCLUDE, // 'ー'
+                        isFixed: true,
+                        isExcluded: true,
+                        locked: true
+                    });
+                    continue;
+                }
                 if (staff.isUnused) {
                     row.push({
                         symbol: '',
@@ -2608,6 +2626,15 @@ class ShiftScheduler {
      */
     assignSpecialDutiesToGrid(options = {}) {
         if (this.isST) {
+            if (options && options.preserveGrid === true) {
+                // ★ ユーザー指示: ST基本勤務表の公休・出勤配置を1マスも変更せず、既存の日勤「○」（翌日休）の中からのみ早番を昇格配置！
+                this.assignEarlyDutiesForST();
+                return {
+                    success: true,
+                    grid: this.grid,
+                    stats: this.calculateStats()
+                };
+            }
             return this.solveST(Object.assign({}, options, { assignSpecial: true }));
         }
         if (this.isLife) {
@@ -7239,6 +7266,8 @@ class ShiftScheduler {
  * @returns {Object} { errors: string[], conflictCells: Array<{ staffIndex, dayIndex, reason }>, isValid: boolean }
  */
 function validateScheduleGrid(grid, staffList, options = {}) {
+    // ★ 休暇トグル（育休・産休・傷病休暇）ONのスタッフは公休不足・連勤・役職制約チェックから完全除外
+    staffList = (staffList || []).map(s => (s && s.isLongLeave) ? Object.assign({}, s, { isUnused: true }) : s);
     const numStaff = staffList.length;
     const dates = options.dates || null;
     const numDays = options.numDays || (dates ? dates.length : (grid && grid[0] ? grid[0].length : 28));

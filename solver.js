@@ -191,6 +191,8 @@ function getSunToSatWeekSpans(dates, numDays = 28) {
  * 解なしとなる物理的矛盾を事前に検知し、具体的理由と原因セル(conflictCells)を返す
  */
 function validateInitialState(staffList, options = {}) {
+    // ★ 休暇トグル（育休・産休・傷病休暇）ONのスタッフは事前制約チェック・人数カウントから完全除外
+    staffList = (staffList || []).map(s => (s && s.isLongLeave) ? Object.assign({}, s, { isUnused: true }) : s);
     const errors = [];
     const conflictCells = []; // { staffIndex, dayIndex, reason }
     const isST = !!options.isST;
@@ -635,7 +637,14 @@ function validateInitialState(staffList, options = {}) {
  */
 class ShiftScheduler {
     constructor(staffList, options = {}) {
-        this.staffList = JSON.parse(JSON.stringify(staffList));
+        this.staffList = JSON.parse(JSON.stringify(staffList)).map(s => {
+            if (s && s.isLongLeave) {
+                // ★ 休暇（育休・産休・傷病休暇）スタッフはソルバー内部の公休割当・役職・制約・集計から100%除外（initGridで全日「ー」固定）
+                s.isUnused = true;
+                s.isLongLeave = true;
+            }
+            return s;
+        });
         this.numStaff = this.staffList.length;
         this.numDays = options.numDays || (options.dates ? options.dates.length : (this.staffList[0]?.days?.length || 28));
         this.options = Object.assign({
@@ -825,6 +834,15 @@ class ShiftScheduler {
             const row = [];
             const staff = this.staffList[s];
             for (let d = 0; d < this.numDays; d++) {
+                if (staff.isLongLeave) {
+                    row.push({
+                        symbol: SYMBOLS.EXCLUDE, // 'ー'
+                        isFixed: true,
+                        isExcluded: true,
+                        locked: true
+                    });
+                    continue;
+                }
                 if (staff.isUnused) {
                     row.push({
                         symbol: '',
@@ -1346,26 +1364,40 @@ class ShiftScheduler {
 
     /**
      * ST用特殊勤務割当：特殊勤務は「早」のみで、各スタッフに3回ずつ割り振る（翌日休）
-     * - 各スタッフには公休日が8日あるため、その直前日（計8箇所）の中から3日を選定して「早」に設定
-     * - 各フロア内で早番が同日に重ならないよう分散し、全スタッフ確実に3回配置
+     * - 28日間（ターム全体）を序盤・中盤・終盤の3ゾーンに均等分割し、各ゾーンから1回ずつ配置
+     * - 前半偏り（3分の2で終了）を完全に防止し、ターム全体を通して美しく平準化
      */
     assignEarlyDutiesForST() {
         const floors = ['1F', '2F', '3F', '南'];
         const counts = new Array(this.numStaff).fill(0);
-        const lastAssigned = new Array(this.numStaff).fill(-10);
+        const assignedDays = Array.from({ length: this.numStaff }, () => []);
 
-        // 事前入力された早番をカウント
+        // 事前入力された早番をカウント＆記録
         for (let s = 0; s < this.numStaff; s++) {
             if (this.staffList[s].isUnused) continue;
             for (let d = 0; d < this.numDays; d++) {
                 if (this.grid[s][d].symbol === SYMBOLS.EARLY || this.grid[s][d].symbol === SYMBOLS.NO_ALLOW_EARLY) {
                     counts[s]++;
-                    lastAssigned[s] = Math.max(lastAssigned[s], d);
+                    assignedDays[s].push(d);
                 }
             }
         }
 
-        floors.forEach((fl, fIdx) => {
+        // 3ゾーンの定義（序盤・中盤・終盤）
+        const z1End = Math.floor(this.numDays / 3);       // 例: 9 (0〜8日目)
+        const z2End = Math.floor((this.numDays * 2) / 3); // 例: 18 (9〜17日目)
+        const getZone = (d) => {
+            if (d < z1End) return 0;
+            if (d < z2End) return 1;
+            return 2;
+        };
+        const idealDays = [
+            Math.floor(z1End / 2),
+            Math.floor((z1End + z2End) / 2),
+            Math.floor((z2End + this.numDays) / 2)
+        ];
+
+        floors.forEach((fl) => {
             const floorStaff = [];
             for (let s = 0; s < this.numStaff; s++) {
                 if (!this.staffList[s].isUnused && this.staffList[s].floor === fl && !this.staffList[s].noEarly) {
@@ -1375,8 +1407,7 @@ class ShiftScheduler {
             if (floorStaff.length === 0) return;
 
             floorStaff.forEach(s => {
-                const needed = 3 - counts[s];
-                if (needed <= 0) return;
+                if (counts[s] >= 3) return;
 
                 // 翌日（d+1）が休日である出勤日 d をすべて抽出
                 const preOffDays = [];
@@ -1389,42 +1420,95 @@ class ShiftScheduler {
                     }
                 }
 
-                // preOffDays の中から、フロア内の他の早番と重ならず、均等に分散する3日を選択
-                const candidates = preOffDays.map(d => {
-                    let flEarly = 0;
-                    floorStaff.forEach(oS => {
-                        if (oS !== s && this.grid[oS][d].symbol === SYMBOLS.EARLY) flEarly++;
-                    });
-                    let totalEarly = 0;
-                    for (let oS = 0; oS < this.numStaff; oS++) {
-                        if (oS !== s && this.grid[oS][d].symbol === SYMBOLS.EARLY) totalEarly++;
-                    }
-                    return { d, flEarly, totalEarly };
-                });
+                if (preOffDays.length === 0) return;
 
-                // フロア内早番重複なし（flEarly === 0）を最優先、次に全体早番が少ない日
-                candidates.sort((a, b) => {
-                    if (a.flEarly !== b.flEarly) return a.flEarly - b.flEarly;
-                    return a.totalEarly - b.totalEarly;
-                });
+                // 既に早番が入っているゾーンを特定
+                const coveredZones = new Set(assignedDays[s].map(d => getZone(d)));
 
-                for (const cand of candidates) {
+                // 3つのゾーンそれぞれについて、まだ早番がないゾーンから順番に1回ずつ割り当て
+                for (let targetZone = 0; targetZone < 3; targetZone++) {
                     if (counts[s] >= 3) break;
-                    if (Math.abs(cand.d - lastAssigned[s]) >= 4) {
-                        this.setSymbol(s, cand.d, SYMBOLS.EARLY, false);
+                    if (coveredZones.has(targetZone)) continue;
+
+                    // 当該ゾーン内の preOffDays 候補
+                    const zoneDays = preOffDays.filter(d => getZone(d) === targetZone);
+                    if (zoneDays.length === 0) continue;
+
+                    // 候補スコア計算
+                    const cands = zoneDays.map(d => {
+                        let flEarly = 0;
+                        floorStaff.forEach(oS => {
+                            if (oS !== s && this.grid[oS][d].symbol === SYMBOLS.EARLY) flEarly++;
+                        });
+                        let totalEarly = 0;
+                        for (let oS = 0; oS < this.numStaff; oS++) {
+                            if (oS !== s && this.grid[oS][d].symbol === SYMBOLS.EARLY) totalEarly++;
+                        }
+                        // 既存の割り当て日との最小間隔
+                        let minGap = 999;
+                        assignedDays[s].forEach(ad => {
+                            const gap = Math.abs(d - ad);
+                            if (gap < minGap) minGap = gap;
+                        });
+                        // 理想日との距離
+                        const distFromIdeal = Math.abs(d - idealDays[targetZone]);
+
+                        return { d, flEarly, totalEarly, minGap, distFromIdeal };
+                    });
+
+                    // ソート: フロア内重複ゼロ > 既存早番と3日以上離れている > 全体早番最少 > 理想日に近い
+                    cands.sort((a, b) => {
+                        if (a.flEarly !== b.flEarly) return a.flEarly - b.flEarly;
+                        const aGoodGap = a.minGap >= 3 ? 1 : 0;
+                        const bGoodGap = b.minGap >= 3 ? 1 : 0;
+                        if (aGoodGap !== bGoodGap) return bGoodGap - aGoodGap;
+                        if (a.totalEarly !== b.totalEarly) return a.totalEarly - b.totalEarly;
+                        return a.distFromIdeal - b.distFromIdeal;
+                    });
+
+                    // 最適日を選択して配置
+                    const best = cands[0];
+                    if (best && this.grid[s][best.d].symbol === SYMBOLS.WORK) {
+                        this.setSymbol(s, best.d, SYMBOLS.EARLY, false);
                         counts[s]++;
-                        lastAssigned[s] = cand.d;
+                        assignedDays[s].push(best.d);
+                        coveredZones.add(targetZone);
                     }
                 }
 
-                // まだ足りない場合は間隔制約を緩和して割り当て
+                // まだ3回に達していない場合のフォールバック（ゾーン不問で最良日を補填）
                 if (counts[s] < 3) {
-                    for (const cand of candidates) {
+                    const remainingCands = preOffDays.filter(d => this.grid[s][d].symbol === SYMBOLS.WORK).map(d => {
+                        let flEarly = 0;
+                        floorStaff.forEach(oS => {
+                            if (oS !== s && this.grid[oS][d].symbol === SYMBOLS.EARLY) flEarly++;
+                        });
+                        let totalEarly = 0;
+                        for (let oS = 0; oS < this.numStaff; oS++) {
+                            if (oS !== s && this.grid[oS][d].symbol === SYMBOLS.EARLY) totalEarly++;
+                        }
+                        let minGap = 999;
+                        assignedDays[s].forEach(ad => {
+                            const gap = Math.abs(d - ad);
+                            if (gap < minGap) minGap = gap;
+                        });
+                        return { d, flEarly, totalEarly, minGap };
+                    });
+
+                    remainingCands.sort((a, b) => {
+                        if (a.flEarly !== b.flEarly) return a.flEarly - b.flEarly;
+                        const aGoodGap = a.minGap >= 3 ? 1 : 0;
+                        const bGoodGap = b.minGap >= 3 ? 1 : 0;
+                        if (aGoodGap !== bGoodGap) return bGoodGap - aGoodGap;
+                        return a.totalEarly - b.totalEarly;
+                    });
+
+                    for (const cand of remainingCands) {
                         if (counts[s] >= 3) break;
                         if (this.grid[s][cand.d].symbol === SYMBOLS.WORK) {
                             this.setSymbol(s, cand.d, SYMBOLS.EARLY, false);
                             counts[s]++;
-                            lastAssigned[s] = cand.d;
+                            assignedDays[s].push(cand.d);
                         }
                     }
                 }
@@ -2542,6 +2626,15 @@ class ShiftScheduler {
      */
     assignSpecialDutiesToGrid(options = {}) {
         if (this.isST) {
+            if (options && options.preserveGrid === true) {
+                // ★ ユーザー指示: ST基本勤務表の公休・出勤配置を1マスも変更せず、既存の日勤「○」（翌日休）の中からのみ早番を昇格配置！
+                this.assignEarlyDutiesForST();
+                return {
+                    success: true,
+                    grid: this.grid,
+                    stats: this.calculateStats()
+                };
+            }
             return this.solveST(Object.assign({}, options, { assignSpecial: true }));
         }
         if (this.isLife) {
@@ -7173,6 +7266,8 @@ class ShiftScheduler {
  * @returns {Object} { errors: string[], conflictCells: Array<{ staffIndex, dayIndex, reason }>, isValid: boolean }
  */
 function validateScheduleGrid(grid, staffList, options = {}) {
+    // ★ 休暇トグル（育休・産休・傷病休暇）ONのスタッフは公休不足・連勤・役職制約チェックから完全除外
+    staffList = (staffList || []).map(s => (s && s.isLongLeave) ? Object.assign({}, s, { isUnused: true }) : s);
     const numStaff = staffList.length;
     const dates = options.dates || null;
     const numDays = options.numDays || (dates ? dates.length : (grid && grid[0] ? grid[0].length : 28));

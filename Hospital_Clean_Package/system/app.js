@@ -19,6 +19,24 @@
         });
     }
 
+    // ★ ユーザー指示: ターム切替直後の非同期タイミングでも100%確実に選択中タームで他テーブルへ遷移させるクリック時リアルタイム補正
+    if (typeof document !== 'undefined') {
+        document.addEventListener('click', (e) => {
+            const link = e.target && e.target.closest ? e.target.closest('.dept-nav-container a, a.dept-nav-btn, a[title*="病棟テーブル"], a.master-dept-link') : null;
+            if (!link) return;
+            const href = link.getAttribute('href');
+            if (!href || href.includes('javascript:')) return;
+            const sel = document.getElementById('masterTermSelect') || document.getElementById('termSelect');
+            const curTerm = (sel && sel.value) || (document.getElementById('termStartDate') && document.getElementById('termStartDate').value) || '2026-04-01';
+            const baseUrl = href.split('?')[0];
+            if (baseUrl.includes('index.html') || baseUrl.includes('master') || baseUrl.includes('マスター')) {
+                link.setAttribute('href', `${baseUrl}?term=${encodeURIComponent(curTerm)}`);
+            } else {
+                link.setAttribute('href', `${baseUrl}?from=master&term=${encodeURIComponent(curTerm)}`);
+            }
+        }, true);
+    }
+
 // ★ 出勤記号判定（全病棟・全職種共通）
 function isWorkSymbol(sym) {
     if (!sym || typeof sym !== 'string') return false;
@@ -383,6 +401,7 @@ document.addEventListener('DOMContentLoaded', () => {
                     jobTitle: s.jobTitle || '',
                     isFullTime: !!s.isFullTime,
                     allow6Consec: !!s.allow6Consec,
+                    isLongLeave: !!s.isLongLeave,
                 isSatSunOff: !!s.isSatSunOff,
                 isSunOff: !!s.isSunOff,
                     prevName: cleanTextValue(s.prevName || '')
@@ -423,6 +442,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 staffList[idx].isFirstYear = !!ms.isFirstYear;
                 staffList[idx].isFullTime = ms.isFullTime !== undefined ? !!ms.isFullTime : staffList[idx].isFullTime;
                 staffList[idx].allow6Consec = !!ms.allow6Consec;
+                staffList[idx].isLongLeave = ms.isLongLeave !== undefined ? !!ms.isLongLeave : !!staffList[idx].isLongLeave;
                 staffList[idx].prevName = cleanTextValue(ms.prevName || '');
                 // ※ remarks（備考）はターム固有のためマスターから上書きしない
                 enforceRoleExclusivity(staffList[idx]);
@@ -1326,6 +1346,7 @@ document.addEventListener('DOMContentLoaded', () => {
                     prevName: s.prevName || '',
                     remarks: s.remarks || '',
                     allow6Consec: !!s.allow6Consec,
+                    isLongLeave: !!s.isLongLeave,
                 isSatSunOff: !!s.isSatSunOff,
                 isSunOff: !!s.isSunOff,
                     prevDays: [...s.prevDays],
@@ -1419,6 +1440,7 @@ document.addEventListener('DOMContentLoaded', () => {
                     staffList[idx].prevName = cleanTextValue(s.prevName || '');
                     staffList[idx].remarks = cleanTextValue(s.remarks || '');
                     staffList[idx].allow6Consec = !!s.allow6Consec;
+                    staffList[idx].isLongLeave = s.isLongLeave !== undefined ? !!s.isLongLeave : !!staffList[idx].isLongLeave;
                     enforceRoleExclusivity(staffList[idx]);
 
                     let pDays = Array.isArray(s.prevDays) ? s.prevDays.map(v => extractCellSymbol(v)) : [];
@@ -2066,6 +2088,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 jobTitle: s.jobTitle || '',
                 isFullTime: !!s.isFullTime,
                 allow6Consec: !!s.allow6Consec,
+                isLongLeave: !!s.isLongLeave,
                 isSatSunOff: !!s.isSatSunOff,
                 isSunOff: !!s.isSunOff,
                 prevName: s.prevName || '',
@@ -2198,6 +2221,7 @@ document.addEventListener('DOMContentLoaded', () => {
                     staffList[idx].jobTitle = s.jobTitle || '';
                     staffList[idx].isFullTime = !!s.isFullTime;
                     staffList[idx].allow6Consec = !!s.allow6Consec;
+                    staffList[idx].isLongLeave = !!s.isLongLeave;
                     staffList[idx].prevName = cleanTextValue(s.prevName || '');
                     staffList[idx].remarks = cleanTextValue(s.remarks || '');
                     enforceRoleExclusivity(staffList[idx]);
@@ -2499,6 +2523,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 <th class="flag-col" rowspan="2" title="土日休（事前希望がない限り土日休み固定）" style="background:#dbeafe; color:#1e40af; font-weight:800;">土日休</th>
                 <th class="flag-col" rowspan="2" title="日休（日曜日固定公休＋平日分散配置）" style="background:#fef3c7; color:#92400e; font-weight:800;">日休</th>
                 <th class="flag-col" rowspan="2" title="6連勤例外許可" style="background:#fee2e2; color:#991b1b;">6連勤<br>可</th>
+                <th class="flag-col" rowspan="2" title="休暇（育休・産休・傷病休暇：自動作成で全日『ー』入力、出勤人数・実数から除外）" style="background:#e2e8f0; color:#334155; font-weight:800;">休暇</th>
                 <th class="flag-col" rowspan="2" title="改姓・旧姓（前タームの氏名）" style="background:#f1f5f9; color:#475569; min-width:80px;">旧姓</th>
                 <th class="remarks-col" rowspan="2" title="委員会等のメモ（ExcelのAG列と自動連携）" style="background:#f8fafc; color:#1e293b; min-width:220px; max-width:320px;">備考（メモ）</th>
             `;
@@ -2526,6 +2551,7 @@ document.addEventListener('DOMContentLoaded', () => {
                                 <th class="flag-col" rowspan="2" title="土日休（土日固定休み）" style="background:#dbeafe; color:#1e40af; font-weight:800;">土日休</th>
                 <th class="flag-col" rowspan="2" title="日休（日曜日固定公休＋平日分散配置）" style="background:#fef3c7; color:#92400e; font-weight:800;">日休</th>
                 <th class="flag-col" rowspan="2" title="6連勤例外許可" style="background:#fee2e2; color:#991b1b;">6連勤<br>可</th>
+                <th class="flag-col" rowspan="2" title="休暇（育休・産休・傷病休暇：自動作成で全日『ー』入力、出勤人数・実数から除外）" style="background:#e2e8f0; color:#334155; font-weight:800;">休暇</th>
                 <th class="flag-col" rowspan="2" title="改姓・旧姓（前タームの氏名）" style="background:#f1f5f9; color:#475569; min-width:80px;">旧姓</th>
                 <th class="remarks-col" rowspan="2" title="メモ" style="background:#f8fafc; color:#1e293b; min-width:220px; max-width:320px;">備考（メモ）</th>
             `;
@@ -2549,6 +2575,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 <th class="flag-col" rowspan="2" title="1年目スタッフ" style="background:#fef08a; color:#854d0e; font-weight:800;">1年目</th>
                 <th class="flag-col" rowspan="2" title="専従（PT・OT・ST専従でその階3名以上出勤）" style="background:#dcfce7; color:#166534;">専従</th>
                 <th class="flag-col" rowspan="2" title="6連勤例外許可（週6勤務＆6連勤を許容）" style="background:#fee2e2; color:#991b1b;">6連勤<br>可</th>
+                <th class="flag-col" rowspan="2" title="休暇（育休・産休・傷病休暇：自動作成で全日『ー』入力、出勤人数・実数から除外）" style="background:#e2e8f0; color:#334155; font-weight:800;">休暇</th>
                 <th class="flag-col" rowspan="2" title="改姓・旧姓（前タームの氏名）" style="background:#f1f5f9; color:#475569; min-width:80px;">旧姓</th>
                 <th class="remarks-col" rowspan="2" title="委員会等のメモ（ExcelのAG列と自動連携）" style="background:#f8fafc; color:#1e293b; min-width:220px; max-width:320px;">備考（メモ）</th>
             `;
@@ -2707,6 +2734,12 @@ document.addEventListener('DOMContentLoaded', () => {
                             <span class="toggle-slider danger-slider"></span>
                         </label>
                     </td>
+                    <td class="flag-col" style="background:#f1f5f9;">
+                        <label class="toggle-switch" title="休暇（育休・産休・傷病休暇：自動作成で全日『ー』、人数・実数から除外）">
+                            <input type="checkbox" ${staff.isLongLeave ? 'checked' : ''} data-flag="isLongLeave" data-s="${sIdx}">
+                            <span class="toggle-slider"></span>
+                        </label>
+                    </td>
                     <td class="flag-col" style="background:#f8fafc; padding:2px;">
                         <input type="text" class="staff-prevname-input" data-s="${sIdx}" value="${escapeHtmlText(staff.prevName || '')}" placeholder="旧姓" title="改姓前の前ターム氏名を入力すると過去履歴が引き継がれます" style="width:100%; border:1px solid #cbd5e1; border-radius:3px; padding:2px 4px; font-size:0.75rem; text-align:center;">
                     </td>
@@ -2818,6 +2851,12 @@ document.addEventListener('DOMContentLoaded', () => {
                             <span class="toggle-slider danger-slider"></span>
                         </label>
                     </td>
+                    <td class="flag-col" style="background:#f1f5f9;">
+                        <label class="toggle-switch" title="休暇（育休・産休・傷病休暇：自動作成で全日『ー』、人数・実数から除外）">
+                            <input type="checkbox" ${staff.isLongLeave ? 'checked' : ''} data-flag="isLongLeave" data-s="${sIdx}">
+                            <span class="toggle-slider"></span>
+                        </label>
+                    </td>
                     <td class="flag-col" style="background:#f8fafc; padding:2px;">
                         <input type="text" class="staff-prevname-input" data-s="${sIdx}" value="${escapeHtmlText(staff.prevName || '')}" placeholder="旧姓" style="width:100%; border:1px solid #cbd5e1; border-radius:3px; padding:2px 4px; font-size:0.75rem; text-align:center;">
                     </td>
@@ -2927,6 +2966,12 @@ document.addEventListener('DOMContentLoaded', () => {
                         <label class="toggle-switch" title="6連勤可">
                             <input type="checkbox" ${staff.allow6Consec ? 'checked' : ''} data-flag="allow6Consec" data-s="${sIdx}">
                             <span class="toggle-slider danger-slider"></span>
+                        </label>
+                    </td>
+                    <td class="flag-col" style="background:#f1f5f9;">
+                        <label class="toggle-switch" title="休暇（育休・産休・傷病休暇：自動作成で全日『ー』、人数・実数から除外）">
+                            <input type="checkbox" ${staff.isLongLeave ? 'checked' : ''} data-flag="isLongLeave" data-s="${sIdx}">
+                            <span class="toggle-slider"></span>
                         </label>
                     </td>
                     <td class="flag-col" style="background:#f8fafc; padding:2px;">
@@ -4616,7 +4661,7 @@ document.addEventListener('DOMContentLoaded', () => {
         const { pastHistory, currentHistory, futureHistory } = getObtainedRefreshHistory(curStartDate);
 
         const refSymbols = ['上1', '上2', '上3', '上4', '上5', '下1', '下2', '下3'];
-        const activeStaff = staffList.filter(s => !s.isUnused);
+        const activeStaff = staffList.filter(s => !s.isUnused && !s.isLongLeave);
 
         let html = `
             <table class="sheet-table" style="width: 100%; font-size: 0.8rem; border-collapse: collapse;">
@@ -5736,7 +5781,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
                     bodyHtml += `
                         <td class="stat-cell" data-s="${s}" data-stat="work" style="font-weight:700; color:#1e293b; background:transparent; ${rowBorderB}">${staffStat.workDays}</td>
-                        <td class="stat-cell ${(!staff.isUnused && staffStat.offDays !== 8) ? 'holiday-alert-cell' : ''}" data-s="${s}" data-stat="off" title="${staffStat.offDays !== 8 ? '公休が8日ではありません（現在:' + staffStat.offDays + '日）' : '公休8日'}" style="font-weight:700; color:#1e293b; ${rowBorderB}">${staffStat.offDays}</td>
+                        <td class="stat-cell ${(!staff.isUnused && !staff.isLongLeave && staffStat.offDays !== 8) ? 'holiday-alert-cell' : ''}" data-s="${s}" data-stat="off" title="${staff.isLongLeave ? '休暇（育休・産休・傷病休暇）' : (staffStat.offDays !== 8 ? '公休が8日ではありません（現在:' + staffStat.offDays + '日）' : '公休8日')}" style="font-weight:700; color:#1e293b; ${rowBorderB}">${staffStat.offDays}</td>
                         <td class="stat-cell" data-s="${s}" data-stat="paid" style="font-weight:800; color:#1e293b; background:transparent; ${rowBorderB}">${staffStat.paidDays}</td>
                         <td class="stat-cell" data-s="${s}" data-stat="ref" style="font-weight:600; color:#1e293b; background:transparent; ${rowBorderB}">${staffStat.refDays}</td>
                         <td class="stat-cell" data-s="${s}" data-stat="early" style="font-weight:600; color:#c2410c; background:transparent; ${rowBorderB}">${staffStat.early}</td>
@@ -5774,7 +5819,7 @@ document.addEventListener('DOMContentLoaded', () => {
                     }
                     bodyHtml += `
                         <td class="stat-cell" data-s="${s}" data-stat="work">${staffStat.workDays}</td>
-                        <td class="stat-cell ${(!staff.isUnused && staffStat.offDays !== 8) ? 'holiday-alert-cell' : ''}" data-s="${s}" data-stat="off" title="${staffStat.offDays !== 8 ? '公休が8日ではありません（現在:' + staffStat.offDays + '日）' : '公休8日'}">${staffStat.offDays}</td>
+                        <td class="stat-cell ${(!staff.isUnused && !staff.isLongLeave && staffStat.offDays !== 8) ? 'holiday-alert-cell' : ''}" data-s="${s}" data-stat="off" title="${staff.isLongLeave ? '休暇（育休・産休・傷病休暇）' : (staffStat.offDays !== 8 ? '公休が8日ではありません（現在:' + staffStat.offDays + '日）' : '公休8日')}">${staffStat.offDays}</td>
                         <td class="stat-cell" data-s="${s}" data-stat="paid">${staffStat.paidDays}</td>
                         <td class="stat-cell" data-s="${s}" data-stat="ref">${staffStat.refDays}</td>
                         <td class="stat-cell" data-s="${s}" data-stat="early">${staffStat.early}</td>
@@ -5815,7 +5860,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
                 bodyHtml += `
                     <td class="stat-cell ${rowBottomCls}" data-s="${s}" data-stat="work" style="font-weight:700; color:#1e293b; background:transparent;">${staffStat.workDays}</td>
-                    <td class="stat-cell ${rowBottomCls} ${(!staff.isUnused && staffStat.offDays !== 8) ? 'holiday-alert-cell' : ''}" data-s="${s}" data-stat="off" title="${staffStat.offDays !== 8 ? '公休が8日ではありません（現在:' + staffStat.offDays + '日）' : '公休8日'}" style="font-weight:700; color:#1e293b;">${staffStat.offDays}</td>
+                    <td class="stat-cell ${rowBottomCls} ${(!staff.isUnused && !staff.isLongLeave && staffStat.offDays !== 8) ? 'holiday-alert-cell' : ''}" data-s="${s}" data-stat="off" title="${staff.isLongLeave ? '休暇（育休・産休・傷病休暇）' : (staffStat.offDays !== 8 ? '公休が8日ではありません（現在:' + staffStat.offDays + '日）' : '公休8日')}" style="font-weight:700; color:#1e293b;">${staffStat.offDays}</td>
                     <td class="stat-cell ${rowBottomCls}" data-s="${s}" data-stat="paid" style="font-weight:800; color:#1e293b; background:transparent;">${staffStat.paidDays}</td>
                     <td class="stat-cell ${rowBottomCls}" data-s="${s}" data-stat="ref" style="font-weight:600; color:#1e293b; background:transparent;">${staffStat.refDays}</td>
                     <td class="stat-cell ${rowBottomCls}" data-s="${s}" data-stat="early" style="font-weight:600; color:#334155; background:transparent;">${staffStat.early}</td>
@@ -7674,7 +7719,7 @@ document.addEventListener('DOMContentLoaded', () => {
         const numDays = rowDays.length;
         const dayConflicts = {}; // d -> Array<string>
         const errors = [];
-        if (!staff || staff.isUnused || staff.isZeroCount || staff.lifeSection === '管理' || staff.lifeSection === 'Cl1') {
+        if (!staff || staff.isUnused || staff.isLongLeave || staff.isZeroCount || staff.lifeSection === '管理' || staff.lifeSection === 'Cl1') {
             return { dayConflicts, errors };
         }
 
@@ -8170,7 +8215,7 @@ function renderMasterIntegrationView() {
 
                 orderedStaffList.forEach(item => {
                     const s = item.staff;
-                    if (s.isUnused || s.isZeroCount) return;
+                    if (s.isUnused || s.isZeroCount || s.isLongLeave) return;
                     const c = item.gridRow ? item.gridRow[d] : null;
                     const sym = (c && typeof c === 'object') ? (c.symbol || '') : (c || '');
                     if (!sym) return;
@@ -8398,7 +8443,7 @@ function renderMasterIntegrationView() {
 
                 // ★ 勤務の右端に「出勤・公休などのスタッフ毎の集計」を計算
                 let sWork = 0, sOff = 0, sPaid = 0, sRef = 0, sEarly = 0, sLate = 0, sEve = 0, sH8 = 0;
-                const isZero = !!(s.isZeroCount || s.lifeSection === '管理' || s.lifeSection === 'Cl1');
+                const isZero = !!(s.isZeroCount || s.isLongLeave || s.lifeSection === '管理' || s.lifeSection === 'Cl1');
                 const isHalf = !!s.isHalf;
 
                 // ★ ユーザー指示: マスターテーブルリアルタイム制約チェック実行
@@ -8876,7 +8921,7 @@ function renderMasterIntegrationView() {
                 <td class="sticky-col-2" style="background:#ffffff; font-weight:600; text-align:left; border-right:2px solid #475569; padding-left:8px;">${escapeHtmlText(s.name)}</td>`;
 
             let sWork = 0, sOff = 0, sPaid = 0, sRef = 0, sEarly = 0, sLate = 0, sEve = 0, sH8 = 0;
-            const isZero = !!(s.isZeroCount || s.lifeSection === '管理' || s.lifeSection === 'Cl1');
+            const isZero = !!(s.isZeroCount || s.isLongLeave || s.lifeSection === '管理' || s.lifeSection === 'Cl1');
 
             // ★ ユーザー指示: マスターテーブルリアルタイム制約チェック実行（生活期スタッフ）
             const sRowSyms = [];
@@ -12401,6 +12446,14 @@ function renderMasterIntegrationView() {
             localStorage.setItem(STORAGE_KEY_GLOBAL_CURRENT_TERM, newStart);
             localStorage.setItem('shift_schedule_current_start_date', newStart);
             localStorage.setItem(STORAGE_KEY_LAST_ACTIVE, newStart);
+            try {
+                const u = new URL(window.location.href);
+                u.searchParams.set('term', newStart);
+                window.history.replaceState({}, '', u.toString());
+            } catch (e) {}
+            if (typeof updateMasterNavLinks === 'function') {
+                updateMasterNavLinks(newStart);
+            }
 
             // hidden input も更新
             const dateInput = document.getElementById('termStartDate');
