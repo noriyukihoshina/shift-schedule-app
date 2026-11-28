@@ -1,13 +1,20 @@
 
     function updateMasterNavLinks(targetTerm) {
-        const curTerm = targetTerm || currentWorkingStartDate || '2026-04-01';
+        const curTerm = targetTerm
+            || (document.getElementById('masterTermSelect') && document.getElementById('masterTermSelect').value)
+            || (document.getElementById('termSelect') && document.getElementById('termSelect').value)
+            || (document.getElementById('termStartDate') && document.getElementById('termStartDate').value)
+            || '2026-04-01';
         document.querySelectorAll('.dept-nav-container a, a.dept-nav-btn, a[title*="病棟テーブル"], a.master-dept-link').forEach(btn => {
             let href = btn.getAttribute('href');
-            if (href && !href.includes('index.html') && !href.includes('master') && !href.includes('javascript:')) {
-                const baseUrl = href.split('?')[0];
-                const newHref = `${baseUrl}?from=master&term=${curTerm}`;
+            if (!href || href.includes('javascript:')) return;
+            const baseUrl = href.split('?')[0];
+            if (baseUrl.includes('index.html') || baseUrl.includes('master') || baseUrl.includes('マスター')) {
+                const newHref = `${baseUrl}?term=${encodeURIComponent(curTerm)}`;
                 btn.setAttribute('href', newHref);
-                btn.href = newHref;
+            } else {
+                const newHref = `${baseUrl}?from=master&term=${encodeURIComponent(curTerm)}`;
+                btn.setAttribute('href', newHref);
             }
         });
     }
@@ -243,6 +250,11 @@ document.addEventListener('DOMContentLoaded', () => {
                 localStorage.setItem(STORAGE_KEY_LAST_ACTIVE, newDate);
                 localStorage.setItem(STORAGE_KEY_GLOBAL_CURRENT_TERM, newDate);
                 localStorage.setItem('shift_schedule_current_start_date', newDate);
+                try {
+                    const u = new URL(window.location.href);
+                    u.searchParams.set('term', newDate);
+                    window.history.replaceState({}, '', u.toString());
+                } catch (e) {}
                 if (typeof updateMasterNavLinks === 'function') {
                     updateMasterNavLinks(newDate); // ★ ターム変更時に他病棟へのリンクURLを即座に新しいタームに更新！
                 }
@@ -314,6 +326,16 @@ document.addEventListener('DOMContentLoaded', () => {
             if (shouldSyncGlobalTerm) {
                 localStorage.setItem(STORAGE_KEY_GLOBAL_CURRENT_TERM, newDate);
                 localStorage.setItem('shift_schedule_current_start_date', newDate);
+            }
+            try {
+                const u = new URL(window.location.href);
+                if (u.searchParams.has('term') || u.searchParams.get('from') === 'master') {
+                    u.searchParams.set('term', newDate);
+                    window.history.replaceState({}, '', u.toString());
+                }
+            } catch (e) {}
+            if (typeof updateMasterNavLinks === 'function') {
+                updateMasterNavLinks(newDate);
             }
             renderSavedTermsSelect();
 
@@ -941,47 +963,34 @@ document.addEventListener('DOMContentLoaded', () => {
                         // オフラインまたは通信失敗時はローカルキャッシュをそのまま維持
                     }
                 }));
-            } else if (!isST && currentFloor) {
-                // ★ 各病棟テーブル（1F, 2F, 3F, 南）の場合:
-                // 1) ST専用テーブルの最新クラウドデータを自動取得してLocalStorageを同期！
-                try {
-                    const r = await fetch(`/api/cloud_sync?deptId=st&t=${Date.now()}`, { cache: 'no-store' });
-                    if (r.ok) {
+            } else {
+                // ★ 各病棟・ST・生活期テーブルの場合:
+                // リフ消化一覧の全館横断（病棟異動者カウント）および前ターム直近7日実績のマスター最終修正参照のため、
+                // 他部署の最新サーバーデータも並列でローカルキャッシュへ最新化！
+                const otherDepts = ['1f', '2f', '3f', 'south', 'st', 'life'].filter(id => id !== deptId);
+                await Promise.allSettled(otherDepts.map(async subId => {
+                    try {
+                        const r = await fetch(`/api/cloud_sync?deptId=${encodeURIComponent(subId)}&t=${Date.now()}`, { cache: 'no-store' });
+                        if (!r.ok) return;
                         const j = await r.json();
-                        const stCloud = j && (j.cloudState || j.data);
-                        if (stCloud) {
-                            if (stCloud.staffMaster) {
-                                try { window.localStorage.setItem('shift_schedule_st_staff_master', JSON.stringify(stCloud.staffMaster)); } catch (e) {}
-                            }
-                            if (stCloud.terms && typeof stCloud.terms === 'object') {
-                                Object.keys(stCloud.terms).forEach(tDate => {
-                                    if (stCloud.terms[tDate]) {
-                                        window.localStorage.setItem(`shift_schedule_st_term_${tDate}`, JSON.stringify(stCloud.terms[tDate]));
-                                    }
-                                });
-                            }
-                            loadLinkedSTData(currentWorkingStartDate);
+                        const subCloud = j && (j.cloudState || j.data);
+                        if (!subCloud) return;
+                        if (subCloud.staffMaster && Array.isArray(subCloud.staffMaster) && subCloud.staffMaster.length > 0) {
+                            try { window.localStorage.setItem(`shift_schedule_${subId}_staff_master`, JSON.stringify(subCloud.staffMaster)); } catch (e) {}
                         }
-                    }
-                } catch (e) {}
-                try {
-                    const rLife = await fetch(`/api/cloud_sync?deptId=life&t=${Date.now()}`, { cache: 'no-store' });
-                    if (rLife.ok) {
-                        const jLife = await rLife.json();
-                        const lifeCloud = jLife && (jLife.cloudState || jLife.data);
-                        if (lifeCloud && lifeCloud.terms && typeof lifeCloud.terms === 'object') {
-                            Object.keys(lifeCloud.terms).forEach(tDate => {
-                                if (lifeCloud.terms[tDate]) {
-                                    window.localStorage.setItem(`shift_schedule_life_term_${tDate}`, JSON.stringify(lifeCloud.terms[tDate]));
+                        if (subCloud.terms && typeof subCloud.terms === 'object') {
+                            Object.keys(subCloud.terms).forEach(tDate => {
+                                if (subCloud.terms[tDate]) {
+                                    window.localStorage.setItem(`shift_schedule_${subId}_term_${tDate}`, JSON.stringify(subCloud.terms[tDate]));
                                 }
                             });
-                            loadLinkedLifeData(currentWorkingStartDate);
                         }
-                    }
-                } catch (e) {}
-
-                // 2) 全体マスター(master)のマスタ同期は病棟テーブルの個別マスタ保護のためスキップ（各病棟は固有のdeptIdマスタを使用）
-
+                    } catch (e) {}
+                }));
+                if (!isST && currentFloor) {
+                    loadLinkedSTData(currentWorkingStartDate);
+                    loadLinkedLifeData(currentWorkingStartDate);
+                }
             }
 
             const resp = await fetch(`/api/cloud_sync?deptId=${encodeURIComponent(deptId)}&t=${Date.now()}`, {
@@ -1161,6 +1170,9 @@ document.addEventListener('DOMContentLoaded', () => {
                     initNewTerm(finalDate);
                 }
                 renderSavedTermsSelect();
+                if (typeof updateMasterNavLinks === 'function') {
+                    updateMasterNavLinks(finalDate);
+                }
                 // トグル状態および入力テーブルを画面へ確実に反映
                 renderInputTable();
             } finally {
@@ -1865,47 +1877,53 @@ document.addEventListener('DOMContentLoaded', () => {
                 }
             }
 
-            // 2. マスター確定データがない場合のフォールバック（フロアの保存データ）
-            if (prevStaffByName.size === 0) {
-                const raw = localStorage.getItem(`${STORAGE_KEY_PREFIX}${prevStartDateStr}`);
-                if (raw) {
-                    try {
-                        const prevData = JSON.parse(raw);
-                        if (prevData && Array.isArray(prevData.staffList)) {
-                            prevData.staffList.forEach((pst, pIdx) => {
-                                const normName = (pst.name || '').trim();
-                                if (!normName) return;
-                                let last7 = new Array(7).fill('');
-                                if (prevData.outputGrid && prevData.outputGrid[pIdx] && prevData.outputGrid[pIdx].length >= 7) {
-                                    const row = prevData.outputGrid[pIdx];
-                                    const rLen = row.length;
-                                    last7 = [
-                                        extractCellSymbol(row[rLen - 7]),
-                                        extractCellSymbol(row[rLen - 6]),
-                                        extractCellSymbol(row[rLen - 5]),
-                                        extractCellSymbol(row[rLen - 4]),
-                                        extractCellSymbol(row[rLen - 3]),
-                                        extractCellSymbol(row[rLen - 2]),
-                                        extractCellSymbol(row[rLen - 1])
-                                    ];
-                                } else if (Array.isArray(pst.days) && pst.days.length >= 7) {
-                                    const dLen = pst.days.length;
-                                    last7 = [
-                                        extractCellSymbol(pst.days[dLen - 7]),
-                                        extractCellSymbol(pst.days[dLen - 6]),
-                                        extractCellSymbol(pst.days[dLen - 5]),
-                                        extractCellSymbol(pst.days[dLen - 4]),
-                                        extractCellSymbol(pst.days[dLen - 3]),
-                                        extractCellSymbol(pst.days[dLen - 2]),
-                                        extractCellSymbol(pst.days[dLen - 1])
-                                    ];
-                                }
+            // 2. 全病棟（1f, 2f, 3f, south, st, life）の最新確定データ（マスター修正が即時書き戻される実体）を全館横断で氏名照合！
+            //    ※ 病棟異動者（前ターム1階 → 今ターム2階）および別PC環境でも100%マスター最新確定実績を引き継ぐ
+            const allDeptIdsForPrev = ['1f', '2f', '3f', 'south', 'st', 'life'];
+            allDeptIdsForPrev.forEach(dId => {
+                const raw = localStorage.getItem(`shift_schedule_${dId}_term_${prevStartDateStr}`);
+                if (!raw) return;
+                try {
+                    const prevData = JSON.parse(raw);
+                    if (prevData && Array.isArray(prevData.staffList)) {
+                        prevData.staffList.forEach((pst, pIdx) => {
+                            const normName = (pst.name || '').trim();
+                            if (!normName || prevStaffByName.has(normName)) return;
+                            let last7 = new Array(7).fill('');
+                            if (prevData.outputGrid && prevData.outputGrid[pIdx] && prevData.outputGrid[pIdx].length >= 7) {
+                                const row = prevData.outputGrid[pIdx];
+                                const rLen = row.length;
+                                last7 = [
+                                    extractCellSymbol(row[rLen - 7]),
+                                    extractCellSymbol(row[rLen - 6]),
+                                    extractCellSymbol(row[rLen - 5]),
+                                    extractCellSymbol(row[rLen - 4]),
+                                    extractCellSymbol(row[rLen - 3]),
+                                    extractCellSymbol(row[rLen - 2]),
+                                    extractCellSymbol(row[rLen - 1])
+                                ];
+                            } else if (Array.isArray(pst.days) && pst.days.length >= 7) {
+                                const dLen = pst.days.length;
+                                last7 = [
+                                    extractCellSymbol(pst.days[dLen - 7]),
+                                    extractCellSymbol(pst.days[dLen - 6]),
+                                    extractCellSymbol(pst.days[dLen - 5]),
+                                    extractCellSymbol(pst.days[dLen - 4]),
+                                    extractCellSymbol(pst.days[dLen - 3]),
+                                    extractCellSymbol(pst.days[dLen - 2]),
+                                    extractCellSymbol(pst.days[dLen - 1])
+                                ];
+                            }
+                            if (last7.some(v => v !== '')) {
                                 prevStaffByName.set(normName, last7);
-                            });
-                        }
-                    } catch (e) {}
-                }
-            }
+                                if (usedSource === 'フロア保存データ') {
+                                    usedSource = '👑 マスター統合・全館確定データ';
+                                }
+                            }
+                        });
+                    }
+                } catch (e) {}
+            });
 
             for (let s = 0; s < NUM_STAFF; s++) {
                 if (!staffList[s]) continue;
@@ -4355,8 +4373,7 @@ document.addEventListener('DOMContentLoaded', () => {
         });
 
         try {
-            // ★ ユーザー指示: 病棟異動者（例: 6月まで1階、7月から2階）の過去データを全館横断で集約カウント！
-            const terms = getSavedTerms();
+            // ★ ユーザー指示: 病棟異動者（例: 6月まで1階、7月から2階）の過去データを全館・全ターム横断で集約カウント！
             const allDeptPrefixes = [
                 'shift_schedule_1f_term_',
                 'shift_schedule_2f_term_',
@@ -4367,6 +4384,23 @@ document.addEventListener('DOMContentLoaded', () => {
                 'shift_schedule_master_term_',
                 'shift_schedule_term_' // 旧バージョン互換
             ];
+
+            // 自病棟の保存済みタームだけでなく、全病棟の全保存タームキーを網羅収集！
+            const allTermDateSet = new Set(getSavedTerms());
+            for (let i = 0; i < localStorage.length; i++) {
+                const k = localStorage.key(i);
+                if (!k) continue;
+                for (const pfx of allDeptPrefixes) {
+                    if (k.startsWith(pfx)) {
+                        const dPart = k.slice(pfx.length);
+                        if (/^\d{4}-\d{2}-\d{2}$/.test(dPart) && dPart >= '2026-04-01') {
+                            allTermDateSet.add(dPart);
+                        }
+                        break;
+                    }
+                }
+            }
+            const terms = Array.from(allTermDateSet).sort();
 
             const checkedKeys = new Set();
             allDeptPrefixes.forEach(prefix => {
@@ -8143,13 +8177,13 @@ function renderMasterIntegrationView() {
 
                     if (item.isHa) {
                         if (isWorkSymbol(sym) && sym !== '研' && sym !== '張') {
-                            dailyHaWork[d] = 0.5;
+                            dailyHaWork[d] += 0.5;
                             dailyFloorRealWork[d] += 0.5;
-                            dailyFloorHeadCount[d] += 0.5;
+                            dailyFloorHeadCount[d] += 1;
                         } else if (isHalfDuty(sym)) {
-                            dailyHaWork[d] = 0.25;
+                            dailyHaWork[d] += 0.25;
                             dailyFloorRealWork[d] += 0.25;
-                            dailyFloorHeadCount[d] += 0.25;
+                            dailyFloorHeadCount[d] += 0.5;
                         }
                     } else {
                         const isHalfStaff = !!s.isHalf;
@@ -8158,25 +8192,25 @@ function renderMasterIntegrationView() {
                         if (sym === '早') {
                             dailyEarly[d]++;
                             dailyFloorRealWork[d] += wVal;
-                            dailyFloorHeadCount[d] += wVal;
+                            dailyFloorHeadCount[d] += 1;
                         } else if (sym === '遅') {
                             dailyLate[d]++;
                             dailyFloorRealWork[d] += wVal;
-                            dailyFloorHeadCount[d] += wVal;
+                            dailyFloorHeadCount[d] += 1;
                         } else if (sym === 'E') {
                             dailyEve[d]++;
                             dailyFloorRealWork[d] += wVal;
-                            dailyFloorHeadCount[d] += wVal;
+                            dailyFloorHeadCount[d] += 1;
                         } else if (sym === '8時') {
                             dailyH8[d]++;
                             dailyFloorRealWork[d] += wVal;
-                            dailyFloorHeadCount[d] += wVal;
+                            dailyFloorHeadCount[d] += 1;
                         } else if (isWorkSymbol(sym) && sym !== '研' && sym !== '張') {
                             dailyFloorRealWork[d] += wVal;
-                            dailyFloorHeadCount[d] += wVal;
+                            dailyFloorHeadCount[d] += 1;
                         } else if (isHalfDuty(sym)) {
                             dailyFloorRealWork[d] += (isHalfStaff ? 0.25 : 0.5);
-                            dailyFloorHeadCount[d] += (isHalfStaff ? 0.25 : 0.5);
+                            dailyFloorHeadCount[d] += 0.5;
                         }
 
                         if (isWorkSymbol(sym) && sym !== '研' && sym !== '張') {
@@ -12079,13 +12113,9 @@ function renderMasterIntegrationView() {
             deptNavContainer.classList.remove('hidden-nav');
             deptNavContainer.style.setProperty('display', 'flex', 'important');
             // ★ 内部リンクにも ?from=master と選択中ターム(&term=)を維持して相互往来可能にする
-            deptNavContainer.querySelectorAll('a.dept-nav-btn').forEach(btn => {
-                let href = btn.getAttribute('href');
-                if (href && !href.includes('index.html') && !href.includes('master')) {
-                    const baseUrl = href.split('?')[0];
-                    btn.setAttribute('href', `${baseUrl}?from=master&term=${currentWorkingStartDate || '2026-04-01'}`);
-                }
-            });
+            if (typeof updateMasterNavLinks === 'function') {
+                updateMasterNavLinks(currentWorkingStartDate);
+            }
         } else {
             deptNavContainer.classList.add('hidden-nav');
             deptNavContainer.style.setProperty('display', 'none', 'important');
